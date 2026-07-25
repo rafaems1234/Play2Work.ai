@@ -330,7 +330,7 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
             placeholder={carregando ? 'Aguarde a IA...' : 'Digite sua resposta aqui...'}
             className="sim-input"
             value={mensagem}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={(e) => setMensagem(e.target.value)}
             disabled={carregando}
             onKeyDown={(e) => e.key === 'Enter' && enviarMensagem()}
           />

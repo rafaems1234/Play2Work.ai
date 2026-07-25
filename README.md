@@ -34,21 +34,88 @@ O projeto foi construído seguindo rigorosos padrões de mercado de governança 
 
 ```text
 Play2Work.ai/
-├── app/                      # CORE DO BACK-END (FastAPI)
-│   ├── database.py           # Configuração de engine, pooling do Postgres e SessionLocal
-│   ├── models.py             # Modelagem relacional (Estudante, Vaga, HistoricoEntrevista, Curriculo)
-│   ├── schemas.py            # Contratos Pydantic e Schemas JSON estritos p/ IA do Gemini
-│   ├── services.py           # Core de Negócio, lógica de Gamificação e SDK do Gemini 2.5 Flash
-│   ├── routes.py             # Endpoints REST, tratamento de CORS e barramentos corporativos
-│   └── main.py               # Ponto de entrada da API, middlewares e inicialização do Uvicorn
-├── test/                     # SUITE DE TESTES
-│   └── test_main.py          # Testes unitários e de integração mockados (Garante CI/CD estável)
-├── seed.py                   # Script automatizado de população/sincronização do PostgreSQL
 ├── requirements.txt          # Dependências do ecossistema Python (.venv)
-│
-└── frontend/                 # CORE DO FRONT-END (React.js)
-    ├── src/
-    │   ├── components/       # Componentes: JobMatchBoard, InterviewSimulator, ResumeBuilder, Leaderboard
-    │   ├── App.jsx           # Hub central de estados, navegação e controle global de abas
-    │   ├── index.css         # Variáveis de design token (:root), fontes e Reset CSS gamer
-    │   └── main.jsx          # Ponto de inicialização do Virtual DOM do React
+└── app/                      # CORE DO BACK-END (FastAPI)
+    ├── database.py           # Configuração de engine, pooling do Postgres e SessionLocal
+    ├── models.py             # Modelagem relacional (Estudante, Vaga, HistoricoEntrevista, Curriculo)
+    ├── schemas.py            # Contratos Pydantic e Schemas JSON estritos p/ IA do Gemini
+    ├── services.py           # Core de Negócio, lógica de Gamificação e SDK do Gemini 2.5 Flash
+    ├── routes.py             # Endpoints REST, tratamento de CORS e barramentos corporativos
+    ├── main.py                # Ponto de entrada da API, middlewares e inicialização do Uvicorn
+    ├── seed.py                # Script automatizado de população/sincronização do PostgreSQL
+    ├── test_main.py           # Testes de integração mockados (FastAPI TestClient + dependency_overrides)
+    ├── .env                   # DATABASE_URL e GEMINI_API_KEY locais (não versionado)
+    │
+    └── frontend/              # CORE DO FRONT-END (React.js + Vite)
+        └── src/
+            ├── components/    # JobMatchBoard, InterviewSimulator, ResumeBuilder, WeeklyLeaderboard
+            ├── App.jsx        # Hub central de estados, navegação e controle global de abas
+            ├── index.css      # Variáveis de design token (:root), fontes e Reset CSS gamer
+            └── main.jsx       # Ponto de inicialização do Virtual DOM do React
+```
+
+---
+
+## 🚀 Como Rodar Localmente
+
+### Pré-requisitos
+
+- **Python 3.10+**
+- **PostgreSQL** rodando localmente (porta padrão `5432`)
+- **Node.js 18+** (para o front-end com Vite)
+
+### 1. Back-end (FastAPI)
+
+```bash
+# Criar e ativar o ambiente virtual (uma vez só)
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Linux/Mac
+
+# Instalar dependências
+pip install -r requirements.txt
+```
+
+Crie o arquivo `app/.env` com as credenciais do seu Postgres local e (opcionalmente) a chave do Gemini:
+
+```env
+DATABASE_URL=postgresql://usuario:senha@localhost:5432/nome_do_banco
+GEMINI_API_KEY=
+```
+
+> Sem `GEMINI_API_KEY`, o app funciona normalmente — `services.py` cai automaticamente em respostas de fallback pré-definidas em vez de chamar a IA. Para ativar a IA de verdade, gere uma chave gratuita em [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (free tier: ~1.500 requisições/dia, sem cartão) e cole nessa variável.
+
+Popule o banco (cria as tabelas e insere dados de teste — pode rodar de novo a qualquer momento, ele limpa e recria):
+
+```bash
+cd app
+python seed.py
+```
+
+Suba a API:
+
+```bash
+# de dentro da pasta app/
+python -m uvicorn main:app --reload --port 8000
+```
+
+A API sobe em `http://127.0.0.1:8000` (docs interativos em `/docs`).
+
+### 2. Front-end (React + Vite)
+
+```bash
+cd app/frontend
+npm install
+npm run dev
+```
+
+O front-end sobe em `http://localhost:5173` e já aponta para o back-end em `http://127.0.0.1:8000`.
+
+### 3. Rodando os testes
+
+```bash
+cd app
+pytest -q
+```
+
+Os testes usam `app.dependency_overrides` para trocar a sessão do banco por um mock — não tocam no Postgres real nem fazem chamadas de API.

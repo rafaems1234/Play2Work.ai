@@ -3,6 +3,11 @@ import os
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
+# Evita UnicodeEncodeError ao imprimir emojis no console padrão do Windows (cp1252)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
 # Garante o mapeamento correto dos caminhos locais
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 

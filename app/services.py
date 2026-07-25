@@ -2,11 +2,16 @@ import os
 import json
 import requests
 from datetime import date, timedelta
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from google import genai
 from models import Estudante, Vaga
 from schemas import CurriculoIaSchema, AvaliacaoEntrevistaSchema
+
+# Garante que GEMINI_API_KEY esteja carregada mesmo se este módulo for
+# importado antes de database.py (que também carrega o .env)
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 try:
     client = genai.Client()
@@ -86,7 +91,7 @@ class AIService:
         # Fallback estruturado caso a API falhe
         return {
             "nome_candidato": nome_estudante,
-            "objetivo_professional": "Busco minha primeira oportunidade como Jovem Aprendiz para aplicar minha dedicação e competências digitais.",
+            "objetivo_profissional": "Busco minha primeira oportunidade como Jovem Aprendiz para aplicar minha dedicação e competências digitais.",
             "hard_skills": ["Informática Básica", "Navegação Web"],
             "soft_skills": ["Trabalho em Equipe", "Adaptabilidade"],
             "sugestao_areas_atuacao": ["Atendimento ao Cliente", "Suporte Operacional"]

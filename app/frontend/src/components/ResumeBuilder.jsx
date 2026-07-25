@@ -1,5 +1,21 @@
 import React, { useState } from 'react';
 
+const formatarCurriculo = (dados) => {
+  const listar = (itens) => (Array.isArray(itens) && itens.length ? itens.join(', ') : '—');
+
+  return [
+    `Nome: ${dados.nome_candidato || '—'}`,
+    '',
+    `Objetivo profissional:`,
+    dados.objetivo_profissional || dados.objetivo_professional || '—',
+    '',
+    `Hard skills: ${listar(dados.hard_skills)}`,
+    `Soft skills: ${listar(dados.soft_skills)}`,
+    '',
+    `Áreas de atuação sugeridas: ${listar(dados.sugestao_areas_atuacao)}`,
+  ].join('\n');
+};
+
 const ResumeBuilder = ({ estudanteId = 1 }) => {
   const [habilidades, setHabilidades] = useState('');
   const [curriculoGerado, setCurriculoGerado] = useState('');
@@ -24,7 +40,7 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
 
       const dados = await response.json();
       if (dados.sucesso) {
-        setCurriculoGerado(dados.curriculo);
+        setCurriculoGerado(formatarCurriculo(dados.curriculo));
       } else {
         throw new Error(dados.erro || 'Erro desconhecido ao gerar o currículo.');
       }
