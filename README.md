@@ -10,10 +10,10 @@ Através de uma abordagem de **gamificação comportamental** (inspirada em mec�
 ## ⚙️ Funcionalidades Core (MVP Implementado)
 
 1. **Mural de Vagas com Match Inteligente:** Algoritmo matemático baseado em intersecção de conjuntos relacionais que cruza as competências do aluno com os requisitos das vagas, calculando o percentual exato de aderência.
-2. **Validação de Dados Corporativos:** Integração assíncrona com APIs externas (BrasilAPI) para buscar e validar a Razão Social real das empresas parceiras a partir do CNPJ, garantindo um mural antifraude e verificado.
+2. **Validação de Dados Corporativos:** Integração assíncrona (via `httpx.AsyncClient`, com as consultas rodando em paralelo) com APIs externas (BrasilAPI) para buscar e validar a Razão Social real das empresas parceiras a partir do CNPJ, garantindo um mural antifraude e verificado sem bloquear o event loop da API.
 3. **Simulador de Entrevista Interativo com IA:** Chatbot síncrono que atua como o Recrutador Chefe da Vivo. A IA avalia as respostas do jovem, gera feedbacks construtivos e distribui XP de forma dinâmica (penalizando inputs aleatórios ou vazios com 0 XP para evitar abusos).
 4. **Gerador Estrito de Currículo Profissional:** Transforma descrições informais de jovens em currículos estruturados utilizando IA Generativa com tipagem estrita de dados.
-5. **Sistema de Retenção e Liga Dinâmica (Leaderboard):** Controle de ofensivas diárias (*streaks*), cálculo automático de categorias de status ("Na Jornada" até "CONTRATADO!") e ranking global em tempo real (Top 10).
+5. **Sistema de Retenção e Liga Dinâmica (Leaderboard):** Controle de ofensivas diárias (*streaks*), cálculo automático de categorias de status ("Na Jornada" até "CONTRATADO!") e ranking global em tempo real (Top 10), com o XP semanal zerado automaticamente a cada nova semana.
 
 ---
 

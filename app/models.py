@@ -22,7 +22,8 @@ class Estudante(Base):
     ofensiva_dias = Column(Integer, default=0)              # Streak / Dias seguidos praticando
     ultimo_treino = Column(Date, nullable=True)             # Guarda a data do último treino para validar ofensivas
     missoes_diarias_concluidas = Column(Integer, default=0)  # Contador de quests cumpridas
-    xp_semanal = Column(Integer, default=0)                 # XP acumulado na semana (reseta a cada 7 dias)
+    xp_semanal = Column(Integer, default=0)                 # XP acumulado na semana corrente
+    semana_referencia = Column(Date, nullable=True)         # Segunda-feira da semana em que xp_semanal foi contabilizado
     categoria_status = Column(String(50), default="🌌 Na Jornada") # Categoria/Liga do usuário
     
     # ARRAY do PostgreSQL para guardar as habilidades

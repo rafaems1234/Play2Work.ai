@@ -1,4 +1,5 @@
 import json
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -38,12 +39,17 @@ class MetaEmpresaRequest(BaseModel):
 
 # --- Rota 1: Mural de Oportunidades ---
 @router.get("/jobs/match/{estudante_id}")
-def get_job_matches(estudante_id: int, db: Session = Depends(get_db)):
+async def get_job_matches(
+    estudante_id: int,
+    pagina: int = 1,
+    tamanho_pagina: int = 20,
+    db: Session = Depends(get_db),
+):
     estudante = db.query(Estudante).filter(Estudante.id == estudante_id).first()
     if not estudante:
         raise HTTPException(status_code=404, detail="Estudante não encontrado")
 
-    resultado = AIService.calcular_match_vagas(estudante_id, db)
+    resultado = await AIService.calcular_match_vagas(estudante_id, db, pagina, tamanho_pagina)
     return resultado
 
 
@@ -112,6 +118,7 @@ def chat_interview(data: ChatMessageRequest, db: Session = Depends(get_db)):
         db.add(msg_ia)
 
         AIService.atualizar_ofensiva_duolingo(estudante, db)
+        AIService.resetar_xp_semanal_se_necessario(estudante)
 
         # 🌟 CORRIGIDO: Modificado de '.pontos' para '.xp_total' para bater com o models.py
         estudante.xp_total += xp_concedido
@@ -142,11 +149,20 @@ def chat_interview(data: ChatMessageRequest, db: Session = Depends(get_db)):
 
 
 # --- Rota Nova: Leaderboard / Ranking Semanal ---
-# --- Rota Nova: Leaderboard / Ranking Semanal ---
 @router.get("/ranking")
 def get_weekly_ranking(db: Session = Depends(get_db)):
-    ranking = db.query(Estudante).order_by(Estudante.xp_semanal.desc()).limit(10).all()
-    
+    inicio_semana_atual = date.today() - timedelta(days=date.today().weekday())
+
+    # Estudantes sem interação na semana atual ainda não passaram pelo reset
+    # lazy (disparado em /chat/message); tratamos o xp deles como 0 aqui para
+    # o ranking não exibir pontuação de semanas anteriores.
+    candidatos = db.query(Estudante).filter(Estudante.xp_semanal > 0).all()
+    candidatos_semana_atual = [
+        est for est in candidatos if est.semana_referencia == inicio_semana_atual
+    ]
+    candidatos_semana_atual.sort(key=lambda est: est.xp_semanal, reverse=True)
+    ranking = candidatos_semana_atual[:10]
+
     return [
         {
             "posicao": idx + 1,
@@ -154,7 +170,7 @@ def get_weekly_ranking(db: Session = Depends(get_db)):
             "xp_semanal": est.xp_semanal,
             "categoria": est.categoria_status or "🌌 Na Jornada"
         }
-        for idx, est in enumerate(ranking)  # 🌟 Adicionado de volta para corrigir o aviso amarelo
+        for idx, est in enumerate(ranking)
     ]
 
 

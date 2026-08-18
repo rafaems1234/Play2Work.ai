@@ -1,6 +1,8 @@
 import os
 import json
-import requests
+import logging
+import asyncio
+import httpx
 from datetime import date, timedelta
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
@@ -12,6 +14,8 @@ from schemas import CurriculoIaSchema, AvaliacaoEntrevistaSchema
 # Garante que GEMINI_API_KEY esteja carregada mesmo se este módulo for
 # importado antes de database.py (que também carrega o .env)
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
+logger = logging.getLogger(__name__)
 
 try:
     client = genai.Client()
@@ -25,42 +29,58 @@ class AIService:
     """
 
     @staticmethod
-    def calcular_match_vagas(estudante_id: int, db: Session) -> list:
+    async def _buscar_razao_social(http_client: httpx.AsyncClient, cnpj: str) -> str | None:
+        try:
+            response = await http_client.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}", timeout=2)
+            if response.status_code == 200:
+                return response.json().get("razao_social")
+        except Exception as e:
+            logger.warning("Falha ao consultar BrasilAPI para o CNPJ %s: %s", cnpj, e)
+        return None
+
+    @staticmethod
+    async def calcular_match_vagas(estudante_id: int, db: Session, pagina: int = 1, tamanho_pagina: int = 20) -> dict:
         estudante = db.query(Estudante).filter(Estudante.id == estudante_id).first()
         if not estudante or not estudante.habilidades:
-            return []
+            return {"vagas": [], "pagina": pagina, "tamanho_pagina": tamanho_pagina, "total": 0}
 
         vagas = db.query(Vaga).all()
-        resultado_matches = []
+        hab_estudante = set(estudante.habilidades)
 
+        matches_brutos = []
         for vaga in vagas:
-            hab_estudante = set(estudante.habilidades)
             hab_vaga = set(vaga.habilidades_exigidas)
-            
             hab_em_comum = hab_estudante.intersection(hab_vaga)
             total_exigido = len(hab_vaga)
             percentual = round((len(hab_em_comum) / max(total_exigido, 1)) * 100)
+            matches_brutos.append((vaga, percentual))
 
-            razao_social_real = None
-            if vaga.cnpj_empresa:
-                try:
-                    response = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{vaga.cnpj_empresa}", timeout=2)
-                    if response.status_code == 200:
-                        razao_social_real = response.json().get("razao_social")
-                except Exception:
-                    pass
+        matches_brutos.sort(key=lambda item: item[1], reverse=True)
 
-            resultado_matches.append({
+        total = len(matches_brutos)
+        inicio = max(pagina - 1, 0) * tamanho_pagina
+        pagina_atual = matches_brutos[inicio:inicio + tamanho_pagina]
+
+        # Consulta as razões sociais em paralelo apenas para as vagas da página atual
+        async with httpx.AsyncClient() as http_client:
+            razoes_sociais = await asyncio.gather(*[
+                AIService._buscar_razao_social(http_client, vaga.cnpj_empresa) if vaga.cnpj_empresa else asyncio.sleep(0)
+                for vaga, _ in pagina_atual
+            ])
+
+        resultado_matches = [
+            {
                 "id": vaga.id,
                 "titulo_vaga": vaga.titulo_vaga,
                 "empresa": vaga.empresa,
                 "razao_social_real": razao_social_real or "Parceiro Verificado VIVO",
                 "tipo_modalidade": vaga.tipo_modalidade,
-                "percentual_match": percentual
-            })
+                "percentual_match": percentual,
+            }
+            for (vaga, percentual), razao_social_real in zip(pagina_atual, razoes_sociais)
+        ]
 
-        resultado_matches.sort(key=lambda x: x["percentual_match"], reverse=True)
-        return resultado_matches
+        return {"vagas": resultado_matches, "pagina": pagina, "tamanho_pagina": tamanho_pagina, "total": total}
 
     @staticmethod
     def gerar_curriculo_ia(habilidades_texto: str, nome_estudante: str) -> dict:
@@ -85,9 +105,9 @@ class AIService:
                     },
                 )
                 return json.loads(response.text)
-            except Exception:
-                pass
-        
+            except Exception as e:
+                logger.warning("Falha ao gerar currículo via Gemini, usando fallback: %s", e)
+
         # Fallback estruturado caso a API falhe
         return {
             "nome_candidato": nome_estudante,
@@ -126,8 +146,8 @@ class AIService:
                     },
                 )
                 return json.loads(response.text)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Falha ao avaliar resposta via Gemini, usando fallback: %s", e)
 
         # Fallback inteligente se estiver sem internet/chave
         if len(mensagem_usuario.strip()) < 5 or "gh" in mensagem_usuario:
@@ -174,3 +194,14 @@ class AIService:
             estudante.missoes_diarias_concluidas = 1
         
         estudante.ultimo_treino = hoje
+
+    @staticmethod
+    def resetar_xp_semanal_se_necessario(estudante: Estudante) -> None:
+        """
+        Zera o xp_semanal quando o estudante entra em uma nova semana (segunda-feira),
+        mantendo o ranking em '/api/ranking' de fato semanal.
+        """
+        inicio_semana_atual = date.today() - timedelta(days=date.today().weekday())
+        if estudante.semana_referencia != inicio_semana_atual:
+            estudante.xp_semanal = 0
+            estudante.semana_referencia = inicio_semana_atual

@@ -1,8 +1,9 @@
 import sys
 import os
+from datetime import date, timedelta
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 # Garante o mapeamento correto das pastas
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
@@ -35,13 +36,18 @@ def test_buscar_vagas_match(mock_db):
     mock_estudante.habilidades = ["Python", "FastAPI"]
     mock_db.query().filter().first.return_value = mock_estudante
 
-    # Mocka o retorno do serviço de IA para o match
-    with patch("routes.AIService.calcular_match_vagas") as mock_match:
-        mock_match.return_value = [{"id": 1, "titulo_vaga": "Dev Backend", "percentual_match": 100}]
+    # Mocka o retorno assíncrono do serviço de IA para o match (paginado)
+    with patch("routes.AIService.calcular_match_vagas", new_callable=AsyncMock) as mock_match:
+        mock_match.return_value = {
+            "vagas": [{"id": 1, "titulo_vaga": "Dev Backend", "percentual_match": 100}],
+            "pagina": 1,
+            "tamanho_pagina": 20,
+            "total": 1,
+        }
 
         response = client.get("/api/jobs/match/1")
         assert response.status_code == 200
-        assert "percentual_match" in response.json()[0]
+        assert "percentual_match" in response.json()["vagas"][0]
 
 
 def test_aplicar_para_vaga(mock_db):
@@ -89,11 +95,33 @@ def test_gerar_curriculo_ia(mock_gerar_ia, mock_db):
 
 
 def test_obter_ranking_semanal(mock_db):
-    # Simula uma lista de estudantes retornada do banco
-    mock_estudante = MagicMock(nome="Rafael", xp_semanal=150, categoria_status="🌌 Na Jornada")
-    mock_db.query().order_by().limit().all.return_value = [mock_estudante]
+    # Simula um estudante com XP contabilizado na semana corrente
+    inicio_semana_atual = date.today() - timedelta(days=date.today().weekday())
+    mock_estudante = MagicMock(
+        nome="Rafael",
+        xp_semanal=150,
+        categoria_status="🌌 Na Jornada",
+        semana_referencia=inicio_semana_atual,
+    )
+    mock_db.query().filter().all.return_value = [mock_estudante]
 
     response = client.get("/api/ranking")
     assert response.status_code == 200
     assert len(response.json()) > 0
     assert response.json()[0]["nome"] == "Rafael"
+
+
+def test_ranking_ignora_xp_de_semana_anterior(mock_db):
+    # Estudante com xp_semanal > 0 mas de uma semana passada não deve aparecer
+    semana_passada = date.today() - timedelta(days=date.today().weekday() + 14)
+    mock_estudante = MagicMock(
+        nome="Estudante Antigo",
+        xp_semanal=999,
+        categoria_status="🌌 Na Jornada",
+        semana_referencia=semana_passada,
+    )
+    mock_db.query().filter().all.return_value = [mock_estudante]
+
+    response = client.get("/api/ranking")
+    assert response.status_code == 200
+    assert response.json() == []

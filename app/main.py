@@ -1,11 +1,14 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import models
 from database import engine
 from routes import router  # Garanta que o arquivo routes.py exista nesta mesma pasta
 
-
-
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 
 app = FastAPI(title="Play2Work AI API")
