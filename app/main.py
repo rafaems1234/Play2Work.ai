@@ -46,4 +46,5 @@ def read_root():
 if __name__ == "__main__":
     import uvicorn
     # Mudamos de "main:app" para o próprio objeto app para evitar erros de importação pelo Uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # host 127.0.0.1: a API não tem autenticação, então não deve ficar exposta na rede local por padrão
+    uvicorn.run(app, host="127.0.0.1", port=8000)

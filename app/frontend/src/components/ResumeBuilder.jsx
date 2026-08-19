@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { IconSparkle, IconWand, IconWarning, IconDocument, IconClipboard, IconLinkedIn } from './icons';
+import { API_BASE_URL } from '../api';
 
 const formatarCurriculo = (dados) => {
   const listar = (itens) => (Array.isArray(itens) && itens.length ? itens.join(', ') : '—');
@@ -30,7 +32,7 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
       setCarregando(true);
       setErro(null);
 
-      const response = await fetch('http://127.0.0.1:8000/api/resume/generate', {
+      const response = await fetch(`${API_BASE_URL}/api/resume/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estudante_id: estudanteId, habilidades_texto: habilidades }),
@@ -57,7 +59,7 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
 
     try {
       setSincronizando(true);
-      const response = await fetch('http://127.0.0.1:8000/api/resume/export-linkedin', {
+      const response = await fetch(`${API_BASE_URL}/api/resume/export-linkedin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estudante_id: estudanteId, texto_curriculo: curriculoGerado }),
@@ -70,6 +72,7 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
       const secoes = dados.secoes_atualizadas ? dados.secoes_atualizadas.join(', ') : 'Summary, Skills, TargetJobs';
       alert(`💼 Perfil Sincronizado!\n\n${dados.mensagem || 'Dados integrados com o sandbox.'}\n\nCampos atualizados: ${secoes}`);
     } catch (err) {
+      console.error(err);
       alert('⚠️ Falha ao conectar com o sandbox da API do LinkedIn.');
     } finally {
       setSincronizando(false);
@@ -87,6 +90,13 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
           width: 100%;
           max-width: 680px;
           box-shadow: 0 0 80px rgba(124,58,237,0.06);
+          transition: all 0.3s ease;
+        }
+
+        .resume-card:hover {
+          border-color: rgba(167,139,250,0.28);
+          box-shadow: 0 0 90px rgba(103,232,249,0.08), 0 0 80px rgba(124,58,237,0.08);
+          transform: scale(1.005);
         }
 
         .resume-textarea {
@@ -236,7 +246,7 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
         {/* Header */}
         <div style={{ marginBottom: '32px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '99px', padding: '5px 14px', marginBottom: '16px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '1px' }}> ✨ IA Generativa</span>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '1px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><IconSparkle /> IA Generativa</span>
           </div>
           <h2 style={{ fontSize: '28px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.6px', marginBottom: '10px' }}>
             Gerador de{' '}
@@ -275,13 +285,13 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
               Estruturando seu currículo...
             </>
           ) : (
-            '🪄 Gerar currículo perfeito'
+            <><IconWand /> Gerar currículo perfeito</>
           )}
         </button>
 
         {erro && (
-          <div className="error-msg">
-            ⚠️ {erro} (Garanta que seu back-end está rodando!)
+          <div className="error-msg" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <IconWarning /> {erro} (Garanta que seu back-end está rodando!)
           </div>
         )}
 
@@ -294,20 +304,22 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
         {curriculoGerado && (
           <div className="result-container">
             <div className="result-header">
-              <span style={{ fontSize: '13px', fontWeight: '700', color: '#a78bfa' }}>📄 Currículo gerado</span>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#a78bfa', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><IconDocument /> Currículo gerado</span>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   onClick={() => navigator.clipboard.writeText(curriculoGerado)}
                   className="result-action-btn copy"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  📋 Copiar
+                  <IconClipboard /> Copiar
                 </button>
                 <button
                   onClick={handleExportarLinkedIn}
                   disabled={sincronizando}
                   className="result-action-btn linkedin"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  {sincronizando ? 'Sincronizando...' : '💼 Atualizar LinkedIn'}
+                  {sincronizando ? 'Sincronizando...' : <><IconLinkedIn /> Atualizar LinkedIn</>}
                 </button>
               </div>
             </div>

@@ -1,22 +1,22 @@
 import React, { useState, useEffect } from 'react';
+import { IconTarget, IconPin, IconBuilding, IconWarning } from './icons';
+import { API_BASE_URL } from '../api';
 
-const JobMatchBoard = () => {
+const JobMatchBoard = ({ estudanteId = 1 }) => {
   const [oportunidades, setOportunidades] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
   const [aplicandoId, setAplicandoId] = useState(null);
-
-  const ESTUDANTE_ID = 1;
 
   useEffect(() => {
     const buscarVagas = async () => {
       try {
         setCarregando(true);
         setErro(null); // Reseta o estado de erro antes de tentar conectar
-        const response = await fetch(`http://127.0.0.1:8000/api/jobs/match/${ESTUDANTE_ID}`);
+        const response = await fetch(`${API_BASE_URL}/api/jobs/match/${estudanteId}`);
         if (!response.ok) throw new Error('Não foi possível carregar o mural de oportunidades.');
         const dados = await response.json();
-        
+
         // Garante que o estado seja um array plano mesmo se o back encapsular a resposta
         setOportunidades(Array.isArray(dados) ? dados : dados.vagas || []);
       } catch (err) {
@@ -27,15 +27,15 @@ const JobMatchBoard = () => {
       }
     };
     buscarVagas();
-  }, []);
+  }, [estudanteId]);
 
   const aplicarParaVaga = async (vagaId, nomeEmpresa) => {
     try {
       setAplicandoId(vagaId);
-      const response = await fetch('http://127.0.0.1:8000/api/jobs/apply-meta', {
+      const response = await fetch(`${API_BASE_URL}/api/jobs/apply-meta`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estudante_id: ESTUDANTE_ID, vaga_id: vagaId }),
+        body: JSON.stringify({ estudante_id: estudanteId, vaga_id: vagaId }),
       });
       if (!response.ok) throw new Error();
       const dados = await response.json();
@@ -44,6 +44,7 @@ const JobMatchBoard = () => {
       const webhookId = dados.transacao_id || dados.id_webhook || 'OK-2026';
       alert(`🎯 Meta Batida! O Play2Work.AI enviou seu perfil com sucesso para o banco de talentos da ${nomeEmpresa}.\n\nID do Webhook: ${webhookId}`);
     } catch (err) {
+      console.error(err);
       alert('⚠️ Ops, falha ao conectar com o barramento da empresa parceira.');
     } finally {
       setAplicandoId(null);
@@ -139,7 +140,7 @@ const JobMatchBoard = () => {
       <div style={{ maxWidth: '1060px', margin: '0 auto' }}>
         <header style={{ marginBottom: '48px', textAlign: 'center' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '99px', padding: '6px 16px', marginBottom: '20px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '1px' }}>🎯 Match Inteligente</span>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '1px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><IconTarget /> Match Inteligente</span>
           </div>
           <h1 style={{ fontSize: '36px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.8px', marginBottom: '12px' }}>
             Seu Mural de{' '}
@@ -161,7 +162,7 @@ const JobMatchBoard = () => {
 
         {erro && (
           <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '16px', padding: '20px 24px', textAlign: 'center', color: '#f87171' }}>
-            <div style={{ fontSize: '16px', marginBottom: '6px' }}>⚠️ Não foi possível conectar ao servidor</div>
+            <div style={{ fontSize: '16px', marginBottom: '6px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}><IconWarning /> Não foi possível conectar ao servidor</div>
             <div style={{ fontSize: '13px', color: '#64748b' }}>Verifique se o seu Back-end (main.py) está rodando no terminal!</div>
           </div>
         )}
@@ -208,10 +209,10 @@ const JobMatchBoard = () => {
 
                       <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
                         <div style={{ fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                          <span>📍</span> {vaga.localizacao || 'Remoto / São Paulo'}
+                          <IconPin /> {vaga.localizacao || 'Remoto / São Paulo'}
                         </div>
                         <div style={{ fontSize: '13px', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                          <span>🏢</span> {vaga.tipo_modalidade || vaga.modalidade || 'Híbrido'}
+                          <IconBuilding /> {vaga.tipo_modalidade || vaga.modalidade || 'Híbrido'}
                         </div>
                       </div>
                     </div>

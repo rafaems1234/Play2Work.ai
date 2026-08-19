@@ -6,13 +6,16 @@
   --border: rgba(167, 139, 250, 0.12); /* Bordas roxas discretas do seu front */
   --code-bg: #1f2028;
   --accent: #a78bfa;          /* O roxo neon das suas telas */
+  --accent-2: #67e8f9;
   --accent-bg: rgba(167, 139, 250, 0.1);
   --accent-border: rgba(167, 139, 250, 0.45);
   --social-bg: rgba(255, 255, 255, 0.03);
   --shadow: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+  --gradient: linear-gradient(135deg, #7c3aed 0%, #0e7490 100%);
+  --gradient-soft: linear-gradient(135deg, #a78bfa, #67e8f9);
 
   --sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --heading: 'Inter', system-ui, -apple-system, sans-serif;
+  --heading: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 18px/145% var(--sans);

@@ -1,6 +1,7 @@
 import json
+import logging
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -9,6 +10,8 @@ from typing import Optional
 from models import Estudante, Vaga, HistoricoEntrevista, Curriculo
 from database import get_db
 from services import AIService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["Play2Work.AI - Endpoints"]
@@ -41,8 +44,8 @@ class MetaEmpresaRequest(BaseModel):
 @router.get("/jobs/match/{estudante_id}")
 async def get_job_matches(
     estudante_id: int,
-    pagina: int = 1,
-    tamanho_pagina: int = 20,
+    pagina: int = Query(1, ge=1),
+    tamanho_pagina: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     estudante = db.query(Estudante).filter(Estudante.id == estudante_id).first()
@@ -74,9 +77,10 @@ def generate_resume(data: ResumeRequest, db: Session = Depends(get_db)):
         db.add(novo_curriculo)
         db.commit()
         return {"sucesso": True, "curriculo": curriculo_ia_dados}
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erro ao salvar currículo: {str(e)}")
+        logger.exception("Erro ao salvar currículo do estudante %s", data.estudante_id)
+        raise HTTPException(status_code=500, detail="Erro ao salvar currículo. Tente novamente mais tarde.")
 
 
 # --- Rota 3: Simulador de Entrevistas Inteligente ---
@@ -143,9 +147,10 @@ def chat_interview(data: ChatMessageRequest, db: Session = Depends(get_db)):
             "categoria_status": estudante.categoria_status,
             "missoes_diarias": estudante.missoes_diarias_concluidas
         }
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erro no processamento do Chat: {str(e)}")
+        logger.exception("Erro no processamento do chat do estudante %s", data.estudante_id)
+        raise HTTPException(status_code=500, detail="Erro no processamento do chat. Tente novamente mais tarde.")
 
 
 # --- Rota Nova: Leaderboard / Ranking Semanal ---

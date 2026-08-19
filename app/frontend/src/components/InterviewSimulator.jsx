@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { IconRobot, IconFire, IconTarget, IconSparkle } from './icons';
+import { API_BASE_URL } from '../api';
 
 const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
   const [mensagem, setMensagem] = useState('');
@@ -33,7 +35,7 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
     ]);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/chat/message', {
+      const response = await fetch(`${API_BASE_URL}/api/chat/message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estudante_id: estudanteId, mensagem_usuario: mensagemUsuario }),
@@ -227,7 +229,7 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
 
         <div style={{ display: 'flex', gap: '12px' }}>
           <div className="sim-stat-card" title="Dias seguidos praticando!">
-            <span style={{ fontSize: '20px' }}>🔥</span>
+            <span style={{ fontSize: '20px', color: '#f97316', display: 'inline-flex' }}><IconFire /></span>
             <div>
               <div style={{ fontSize: '16px', fontWeight: '800', color: '#f97316', lineHeight: 1 }}>{ofensiva}</div>
               <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>dias</div>
@@ -235,7 +237,7 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
           </div>
 
           <div className="sim-stat-card" title="Quests cumpridas hoje">
-            <span style={{ fontSize: '20px' }}>🎯</span>
+            <span style={{ fontSize: '20px', color: '#34d399', display: 'inline-flex' }}><IconTarget /></span>
             <div>
               <div style={{ fontSize: '16px', fontWeight: '800', color: '#34d399', lineHeight: 1 }}>{missoes}</div>
               <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>diárias</div>
@@ -267,7 +269,7 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
         }}>
           <div>
             <div style={{ fontSize: '18px', fontWeight: '800', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '-0.3px' }}>
-              <span>🤖</span> IA Recrutadora
+              <IconRobot /> IA Recrutadora
             </div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Simulador de Entrevista · Vaga Jovem Aprendiz</div>
           </div>
@@ -293,8 +295,8 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
             <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', justifyContent: msg.remetente === 'user' ? 'flex-end' : 'flex-start' }}>
                 {msg.remetente === 'ai' && (
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg,#7c3aed,#0e7490)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', marginRight: '8px', flexShrink: 0, alignSelf: 'flex-end' }}>
-                    🤖
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg,#7c3aed,#0e7490)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', marginRight: '8px', flexShrink: 0, alignSelf: 'flex-end' }}>
+                    <IconRobot />
                   </div>
                 )}
                 <div className={msg.remetente === 'user' ? 'sim-msg-user' : 'sim-msg-ai'}>
@@ -305,8 +307,8 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
               {msg.remetente === 'ai' && msg.feedback && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start', paddingLeft: '36px' }}>
                   <div className="sim-feedback-card">
-                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#34d399', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      ✨ Feedback em tempo real {msg.xp_ganho !== null ? `· +${msg.xp_ganho} XP` : ''}
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#34d399', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <IconSparkle /> Feedback em tempo real {msg.xp_ganho !== null ? `· +${msg.xp_ganho} XP` : ''}
                     </div>
                     {msg.feedback}
                   </div>
@@ -317,7 +319,7 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
 
           {carregando && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg,#7c3aed,#0e7490)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>🤖</div>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg,#7c3aed,#0e7490)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', flexShrink: 0 }}><IconRobot /></div>
               <p className="sim-typing">A IA está analisando sua resposta...</p>
             </div>
           )}
