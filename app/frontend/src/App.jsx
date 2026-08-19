@@ -3,7 +3,7 @@ import InterviewSimulator from './components/InterviewSimulator';
 import JobMatchBoard from './components/JobMatchBoard';
 import ResumeBuilder from './components/ResumeBuilder';
 import WeeklyLeaderboard from './components/WeeklyLeaderboard';
-import { IconGamepad, IconBriefcase, IconRobot, IconSparkle, IconFire, IconTrophy } from './components/icons';
+import { IconBriefcase, IconRobot, IconSparkle, IconFire, IconTrophy } from './components/icons';
 
 function App() {
   const [abaAtiva, setAbaAtiva] = useState('vagas');
@@ -46,9 +46,7 @@ function App() {
 
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '9px', background: 'linear-gradient(135deg, #7c3aed 0%, #0e7490 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '17px' }}>
-              <IconGamepad />
-            </div>
+            <img src="/logo-icon.png" alt="Play2Work.AI" style={{ width: '32px', height: '32px', borderRadius: '9px', display: 'block' }} />
             <span style={{ fontSize: '20px', fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: '800', background: 'linear-gradient(135deg, #a78bfa, #67e8f9)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Play2Work.ai</span>
           </div>
 
