@@ -32,6 +32,7 @@ class Estudante(Base):
     proxima_vida_em = Column(DateTime, nullable=True)        # Quando a próxima vida perdida regenera (None = vidas cheias)
     moedas = Column(Integer, default=0)                      # Moeda virtual, dá pra trocar por vida
     congelamentos_disponiveis = Column(Integer, default=0)   # "Congelamentos de ofensiva" acumulados, gastos automaticamente quando falta um dia
+    quizzes_perfeitos_seguidos = Column(Integer, default=0)  # Contador de quizzes com 100% de acerto em sequência (reseta a cada erro)
 
     # ARRAY do PostgreSQL para guardar as habilidades
     # Nota: Se usar SQLite para testes, substitua por JSON ou Text se der erro de tipo.

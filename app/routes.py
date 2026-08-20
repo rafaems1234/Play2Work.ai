@@ -9,7 +9,7 @@ from typing import Optional
 # Importações do ecossistema do projeto
 from models import Estudante, Vaga, HistoricoEntrevista, Curriculo
 from database import get_db
-from services import AIService, ITINERARIOS_QUIZ, VIDAS_MAXIMAS
+from services import AIService, ITINERARIOS_QUIZ, VIDAS_MAXIMAS, QUIZZES_PERFEITOS_PARA_VIDA_BONUS
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ class QuizSubmitRequest(BaseModel):
     tema: str
     acertos: int
     total: int
+    pulos: int = 0
 
 # ----------------------------------------------------------------------
 # ENDPOINTS / ROTAS
@@ -177,10 +178,32 @@ def get_weekly_ranking(db: Session = Depends(get_db)):
     ]
 
 
-# --- Rota Nova: Itinerários formativos disponíveis ---
+# --- Rota Nova: Itinerários formativos disponíveis (funcionam como "cursos") ---
 @router.get("/quiz/itinerarios")
 def get_itinerarios():
-    return {"itinerarios": list(ITINERARIOS_QUIZ.keys())}
+    return {
+        "itinerarios": [
+            {"nome": nome, "descricao": dados["descricao"]}
+            for nome, dados in ITINERARIOS_QUIZ.items()
+        ]
+    }
+
+
+# --- Rota Nova: Escolher (ou trocar de) itinerário formativo ---
+@router.post("/itinerario/escolher")
+def escolher_itinerario(data: QuizGenerateRequest, db: Session = Depends(get_db)):
+    if not data.itinerario:
+        raise HTTPException(status_code=400, detail="Informe um itinerário")
+    if data.itinerario not in ITINERARIOS_QUIZ:
+        raise HTTPException(status_code=400, detail="Itinerário inválido")
+
+    estudante = db.query(Estudante).filter(Estudante.id == data.estudante_id).first()
+    if not estudante:
+        raise HTTPException(status_code=404, detail="Estudante não encontrado")
+
+    estudante.itinerario = data.itinerario
+    db.commit()
+    return {"itinerario": estudante.itinerario}
 
 
 # --- Rota Nova: Gerar o Quiz do Dia ---
@@ -223,14 +246,16 @@ def submit_quiz(data: QuizSubmitRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Estudante não encontrado")
 
     acertos = max(0, min(data.acertos, data.total))
-    erros = data.total - acertos
+    pulos = max(0, min(data.pulos, data.total - acertos))
+    errados = max(0, data.total - acertos - pulos)  # pular não conta como erro nem custa vida
     xp_concedido = acertos * 8  # 8 XP por acerto, mesma ordem de grandeza do simulador
 
     try:
         AIService.regenerar_vidas(estudante)
-        for _ in range(erros):
+        for _ in range(errados):
             AIService.perder_vida(estudante)
 
+        vida_bonus_ganha = AIService.avaliar_bonus_por_desempenho(estudante, acertos, data.total)
         AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
         db.commit()
 
@@ -246,6 +271,8 @@ def submit_quiz(data: QuizSubmitRequest, db: Session = Depends(get_db)):
             "vidas": estudante.vidas,
             "moedas": estudante.moedas,
             "congelamentos_disponiveis": estudante.congelamentos_disponiveis,
+            "quizzes_perfeitos_seguidos": estudante.quizzes_perfeitos_seguidos,
+            "vida_bonus_ganha": vida_bonus_ganha,
         }
     except Exception:
         db.rollback()
@@ -269,6 +296,8 @@ def get_status_gamificacao(estudante_id: int, db: Session = Depends(get_db)):
         "proxima_vida_em": estudante.proxima_vida_em.isoformat() if estudante.proxima_vida_em else None,
         "moedas": estudante.moedas,
         "congelamentos_disponiveis": estudante.congelamentos_disponiveis,
+        "quizzes_perfeitos_seguidos": estudante.quizzes_perfeitos_seguidos,
+        "quizzes_perfeitos_para_bonus": QUIZZES_PERFEITOS_PARA_VIDA_BONUS,
         "ofensiva_dias": estudante.ofensiva_dias,
         "itinerario": estudante.itinerario,
     }

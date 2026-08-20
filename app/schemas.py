@@ -35,7 +35,7 @@ class QuizPerguntaSchema(BaseModel):
 # Esquema para o Gemini gerar o Quiz do dia completo
 class QuizSchema(BaseModel):
     tema: str = Field(description="Tema geral do quiz, igual ao informado")
-    perguntas: List[QuizPerguntaSchema] = Field(description="Lista com exatamente 5 perguntas sobre o tema")
+    perguntas: List[QuizPerguntaSchema] = Field(description="Lista com exatamente 10 perguntas sobre o tema")
 
 # Corpo da requisição para gerar o quiz
 class QuizGenerateRequest(BaseModel):

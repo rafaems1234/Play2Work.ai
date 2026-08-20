@@ -50,6 +50,7 @@ def criar_mock_estudante(**overrides):
         proxima_vida_em=None,
         moedas=0,
         congelamentos_disponiveis=0,
+        quizzes_perfeitos_seguidos=0,
     )
     padrao.update(overrides)
     return MagicMock(**padrao)
@@ -140,7 +141,8 @@ def test_obter_ranking_semanal(mock_db):
 def test_listar_itinerarios():
     response = client.get("/api/quiz/itinerarios")
     assert response.status_code == 200
-    assert "Tecnologia e Dados" in response.json()["itinerarios"]
+    nomes = [it["nome"] for it in response.json()["itinerarios"]]
+    assert "Tecnologia e Ciência de Dados" in nomes
 
 
 @patch("routes.AIService.gerar_quiz_ia")
@@ -149,17 +151,17 @@ def test_gerar_quiz(mock_gerar_quiz, mock_db):
     mock_db.query().filter().first.return_value = mock_estudante
 
     mock_gerar_quiz.return_value = {
-        "tema": "Lógica de programação para iniciantes",
+        "tema": "Fundamentos de Python e lógica de programação",
         "perguntas": [
             {"pergunta": "P1?", "opcoes": ["a", "b", "c", "d"], "resposta_correta_index": 0, "explicacao": "..."},
         ],
     }
 
-    payload = {"estudante_id": 1, "itinerario": "Tecnologia e Dados"}
+    payload = {"estudante_id": 1, "itinerario": "Tecnologia e Ciência de Dados"}
     response = client.post("/api/quiz/generate", json=payload)
 
     assert response.status_code == 200
-    assert response.json()["itinerario"] == "Tecnologia e Dados"
+    assert response.json()["itinerario"] == "Tecnologia e Ciência de Dados"
     assert len(response.json()["perguntas"]) == 1
 
 
@@ -183,6 +185,27 @@ def test_submeter_quiz(mock_db):
     assert response.status_code == 200
     assert response.json()["xp_concedido"] == 32  # 4 acertos * 8 XP
     assert response.json()["acertos"] == 4
+
+
+def test_escolher_itinerario(mock_db):
+    mock_estudante = criar_mock_estudante(itinerario=None)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    payload = {"estudante_id": 1, "itinerario": "Robótica e Automação"}
+    response = client.post("/api/itinerario/escolher", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["itinerario"] == "Robótica e Automação"
+
+
+def test_escolher_itinerario_invalido(mock_db):
+    mock_estudante = criar_mock_estudante(itinerario=None)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    payload = {"estudante_id": 1, "itinerario": "Curso Inexistente"}
+    response = client.post("/api/itinerario/escolher", json=payload)
+
+    assert response.status_code == 400
 
 
 def test_status_gamificacao(mock_db):
@@ -225,6 +248,46 @@ def test_comprar_vida_sem_moedas_suficientes(mock_db):
     response = client.post("/api/vidas/comprar", json={"estudante_id": 1})
 
     assert response.status_code == 400
+
+
+def test_quiz_pular_nao_custa_vida(mock_db):
+    mock_estudante = criar_mock_estudante(vidas=5)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    # 10 perguntas: 6 acertos, 2 pulos, 2 erros reais -> só os 2 erros custam vida
+    payload = {"estudante_id": 1, "tema": "teste", "acertos": 6, "total": 10, "pulos": 2}
+    response = client.post("/api/quiz/submit", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["vidas"] == 3
+
+
+    assert response.json()["xp_concedido"] == 48  # 6 acertos * 8 XP
+
+
+def test_quiz_perfeito_5_vezes_seguidas_da_vida_bonus(mock_db):
+    mock_estudante = criar_mock_estudante(vidas=3, quizzes_perfeitos_seguidos=4)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    payload = {"estudante_id": 1, "tema": "teste", "acertos": 5, "total": 5}
+    response = client.post("/api/quiz/submit", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["vida_bonus_ganha"] is True
+    assert response.json()["vidas"] == 4
+    assert response.json()["quizzes_perfeitos_seguidos"] == 0
+
+
+def test_quiz_imperfeito_reseta_sequencia_de_perfeitos(mock_db):
+    mock_estudante = criar_mock_estudante(vidas=3, quizzes_perfeitos_seguidos=4)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    payload = {"estudante_id": 1, "tema": "teste", "acertos": 3, "total": 5}
+    response = client.post("/api/quiz/submit", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["vida_bonus_ganha"] is False
+    assert response.json()["quizzes_perfeitos_seguidos"] == 0
 
 
 def test_ranking_ignora_xp_de_semana_anterior(mock_db):

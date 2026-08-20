@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { IconTarget, IconTrophy, IconWarning, IconSparkle, IconHeart, IconCoins, IconSnowflake } from './icons';
+import { IconTarget, IconTrophy, IconWarning, IconSparkle, IconHeart, IconCoins, IconSnowflake, IconGraduationCap } from './icons';
 import { API_BASE_URL } from '../api';
 import { SkeletonStyles, Skeleton } from './Skeleton';
-import StreakCalendar from './StreakCalendar';
+
+const DICAS_POR_QUIZ = 2;
+const PULOS_POR_QUIZ = 2;
+const CUSTO_VIDA_MOEDAS = 50;
 
 const dispararConfete = () => {
   const cores = ['#a78bfa', '#67e8f9', '#7c3aed', '#34d399'];
@@ -20,40 +23,42 @@ const formatarEspera = (isoData) => {
   return horas > 0 ? `${horas}h ${minutos}min` : `${minutos}min`;
 };
 
-const CUSTO_VIDA_MOEDAS = 50;
+const formatarTempo = (segundos) => {
+  const m = Math.floor(segundos / 60);
+  const s = segundos % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
 
-const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
-  const [itinerarios, setItinerarios] = useState([]);
+const DailyQuiz = ({ estudanteId = 1, aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
   const [quiz, setQuiz] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
   const [semVidas, setSemVidas] = useState(false);
 
   const [status, setStatus] = useState(null);
-  const [calendario, setCalendario] = useState([]);
   const [comprando, setComprando] = useState(false);
 
   const [indiceAtual, setIndiceAtual] = useState(0);
   const [opcaoSelecionada, setOpcaoSelecionada] = useState(null);
+  const [opcoesEliminadas, setOpcoesEliminadas] = useState([]);
   const [acertos, setAcertos] = useState(0);
   const [resultado, setResultado] = useState(null);
 
-  const hoje = new Date();
+  const [dicasRestantes, setDicasRestantes] = useState(DICAS_POR_QUIZ);
+  const [pulosRestantes, setPulosRestantes] = useState(PULOS_POR_QUIZ);
+  const [pulosUsados, setPulosUsados] = useState(0);
+  const [combo, setCombo] = useState(0);
 
-  const buscarStatusECalendario = async () => {
+  const [inicioQuiz, setInicioQuiz] = useState(null);
+  const [tempoDecorrido, setTempoDecorrido] = useState(0);
+
+  const buscarStatus = async () => {
     try {
-      const [respStatus, respCal] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/estudante/${estudanteId}/status`),
-        fetch(`${API_BASE_URL}/api/estudante/${estudanteId}/calendario?ano=${hoje.getFullYear()}&mes=${hoje.getMonth() + 1}`),
-      ]);
+      const respStatus = await fetch(`${API_BASE_URL}/api/estudante/${estudanteId}/status`);
       if (respStatus.ok) {
         const dadosStatus = await respStatus.json();
         setStatus(dadosStatus);
         setSemVidas(dadosStatus.vidas <= 0);
-      }
-      if (respCal.ok) {
-        const dadosCal = await respCal.json();
-        setCalendario(dadosCal.dias || []);
       }
     } catch (err) {
       console.error(err);
@@ -61,20 +66,17 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
   };
 
   useEffect(() => {
-    const buscarItinerarios = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/quiz/itinerarios`);
-        if (!response.ok) throw new Error();
-        const dados = await response.json();
-        setItinerarios(dados.itinerarios || []);
-      } catch {
-        setItinerarios(['Tecnologia e Dados', 'Administrativo e Escritório', 'Atendimento e Vendas', 'Logística e Operações', 'Marketing e Comunicação']);
-      }
-    };
-    buscarItinerarios();
-    buscarStatusECalendario();
+    buscarStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estudanteId]);
+
+  useEffect(() => {
+    if (!quiz || resultado) return undefined;
+    const intervalo = setInterval(() => {
+      setTempoDecorrido(Math.floor((Date.now() - inicioQuiz) / 1000));
+    }, 1000);
+    return () => clearInterval(intervalo);
+  }, [quiz, resultado, inicioQuiz]);
 
   const comprarVida = async () => {
     try {
@@ -98,14 +100,14 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
     }
   };
 
-  const gerarQuiz = async (itinerario) => {
+  const gerarQuiz = async () => {
     try {
       setCarregando(true);
       setErro(null);
       const response = await fetch(`${API_BASE_URL}/api/quiz/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estudante_id: estudanteId, itinerario }),
+        body: JSON.stringify({ estudante_id: estudanteId }),
       });
       if (response.status === 403) {
         const dados = await response.json();
@@ -116,11 +118,18 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
       if (!response.ok) throw new Error('Não foi possível gerar o quiz.');
       const dados = await response.json();
       setQuiz(dados);
-      setStatus((prev) => ({ ...prev, vidas: dados.vidas }));
+      setStatus((prev) => ({ ...prev, vidas: dados.vidas, itinerario: dados.itinerario }));
       setIndiceAtual(0);
       setOpcaoSelecionada(null);
+      setOpcoesEliminadas([]);
       setAcertos(0);
       setResultado(null);
+      setDicasRestantes(DICAS_POR_QUIZ);
+      setPulosRestantes(PULOS_POR_QUIZ);
+      setPulosUsados(0);
+      setCombo(0);
+      setInicioQuiz(Date.now());
+      setTempoDecorrido(0);
     } catch (err) {
       console.error(err);
       setErro(err.message);
@@ -132,22 +141,7 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
   const perguntaAtual = quiz?.perguntas?.[indiceAtual];
   const ultimaPergunta = quiz && indiceAtual === quiz.perguntas.length - 1;
 
-  const escolherOpcao = (idx) => {
-    if (opcaoSelecionada !== null) return;
-    setOpcaoSelecionada(idx);
-    if (idx === perguntaAtual.resposta_correta_index) {
-      setAcertos((a) => a + 1);
-    }
-  };
-
-  const proximaPergunta = async () => {
-    if (!ultimaPergunta) {
-      setIndiceAtual((i) => i + 1);
-      setOpcaoSelecionada(null);
-      return;
-    }
-
-    // Última pergunta respondida: envia o resultado
+  const enviarResultado = async (pulosParaEnviar) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/quiz/submit`, {
         method: 'POST',
@@ -157,6 +151,7 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
           tema: quiz.tema,
           acertos,
           total: quiz.perguntas.length,
+          pulos: pulosParaEnviar,
         }),
       });
       const dados = await response.json();
@@ -175,14 +170,62 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
           vidas: dados.vidas,
           moedas: dados.moedas,
           congelamentos_disponiveis: dados.congelamentos_disponiveis,
+          quizzes_perfeitos_seguidos: dados.quizzes_perfeitos_seguidos,
         }));
         setSemVidas(dados.vidas <= 0);
-        buscarStatusECalendario();
       }
-      if (acertos === quiz.perguntas.length) dispararConfete();
+      if (acertos === quiz.perguntas.length || dados.vida_bonus_ganha) dispararConfete();
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const escolherOpcao = (idx) => {
+    if (opcaoSelecionada !== null) return;
+    setOpcaoSelecionada(idx);
+    if (idx === perguntaAtual.resposta_correta_index) {
+      setAcertos((a) => a + 1);
+      setCombo((c) => c + 1);
+    } else {
+      setCombo(0);
+    }
+  };
+
+  const usarDica = () => {
+    if (dicasRestantes <= 0 || opcaoSelecionada !== null) return;
+    const errados = perguntaAtual.opcoes
+      .map((_, i) => i)
+      .filter((i) => i !== perguntaAtual.resposta_correta_index && !opcoesEliminadas.includes(i));
+    if (errados.length === 0) return;
+    const escolhido = errados[Math.floor(Math.random() * errados.length)];
+    setOpcoesEliminadas((prev) => [...prev, escolhido]);
+    setDicasRestantes((d) => d - 1);
+  };
+
+  const proximaPergunta = () => {
+    if (!ultimaPergunta) {
+      setIndiceAtual((i) => i + 1);
+      setOpcaoSelecionada(null);
+      setOpcoesEliminadas([]);
+      return;
+    }
+    enviarResultado(pulosUsados);
+  };
+
+  const pularPergunta = () => {
+    if (opcaoSelecionada !== null || pulosRestantes <= 0) return;
+    const novosPulosUsados = pulosUsados + 1;
+    setPulosRestantes((p) => p - 1);
+    setPulosUsados(novosPulosUsados);
+    setCombo(0);
+
+    if (!ultimaPergunta) {
+      setIndiceAtual((i) => i + 1);
+      setOpcaoSelecionada(null);
+      setOpcoesEliminadas([]);
+      return;
+    }
+    enviarResultado(novosPulosUsados);
   };
 
   const reiniciar = () => {
@@ -203,6 +246,24 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
           border-radius: 24px;
           padding: 36px;
         }
+
+        .quiz-back-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: none;
+          border: none;
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          font-family: inherit;
+          padding: 0;
+          margin-bottom: 18px;
+          transition: color 0.2s;
+        }
+
+        .quiz-back-link:hover { color: #c4b5fd; }
 
         .quiz-itinerario-btn {
           text-align: left;
@@ -256,6 +317,11 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
           color: #fca5a5;
         }
 
+        .quiz-option-btn.eliminada {
+          opacity: 0.3;
+          text-decoration: line-through;
+        }
+
         .quiz-option-btn:disabled { cursor: default; }
 
         .quiz-next-btn {
@@ -297,10 +363,46 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
           font-weight: 700;
           color: #e2e8f0;
         }
+
+        .quiz-tool-btn {
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.1);
+          color: #cbd5e1;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 6px 12px;
+          border-radius: 10px;
+          cursor: pointer;
+          font-family: inherit;
+          transition: all 0.2s;
+        }
+
+        .quiz-tool-btn:hover:not(:disabled) {
+          border-color: rgba(167,139,250,0.4);
+          background: rgba(167,139,250,0.1);
+          color: #e2e8f0;
+        }
+
+        .quiz-tool-btn:disabled {
+          opacity: 0.35;
+          cursor: not-allowed;
+        }
+
+        .quiz-combo-badge {
+          font-size: 12px;
+          font-weight: 800;
+          color: #fbbf24;
+        }
       `}</style>
       <SkeletonStyles />
 
       <div className="quiz-card">
+        {aoVoltarMural && (
+          <button onClick={aoVoltarMural} className="quiz-back-link">
+            ← Voltar pro Mural
+          </button>
+        )}
+
         <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div>
             <div style={{ fontSize: '12px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>Quiz do Dia</div>
@@ -308,7 +410,7 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
               Teste o que <span className="gradient-text-live">você sabe</span>
             </h2>
             <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, marginTop: '8px', maxWidth: '440px' }}>
-              5 perguntas rápidas sobre o itinerário escolhido — o mesmo usado pela IA Recrutadora no Simulador. Errou, perde uma vida; acertou, ganha XP e moedas.
+              10 perguntas sobre o seu curso — o mesmo usado pela IA Recrutadora no Simulador. Errou, perde uma vida; acertou, ganha XP e moedas.
             </p>
           </div>
           <IconTarget style={{ fontSize: '24px', color: '#a78bfa', flexShrink: 0, marginTop: '4px' }} />
@@ -346,18 +448,35 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
           </div>
         )}
 
-        {!quiz && !carregando && !semVidas && (
-          <div>
-            <div style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Escolha seu itinerário
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
-              {itinerarios.map((it) => (
-                <button key={it} onClick={() => gerarQuiz(it)} className="quiz-itinerario-btn">
-                  {it}
+        {!quiz && !carregando && !semVidas && status?.itinerario && (
+          <div style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '16px', padding: '22px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Seu curso atual</div>
+            <div style={{ fontSize: '18px', fontWeight: '800', color: '#f1f5f9', marginBottom: '16px' }}>{status.itinerario}</div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button onClick={gerarQuiz} className="quiz-next-btn" style={{ margin: 0, flex: '1 1 200px' }}>
+                Começar quiz de hoje →
+              </button>
+              {aoAbrirCursos && (
+                <button onClick={aoAbrirCursos} className="quiz-itinerario-btn" style={{ flex: '0 0 auto' }}>
+                  Trocar curso
                 </button>
-              ))}
+              )}
             </div>
+          </div>
+        )}
+
+        {!quiz && !carregando && !semVidas && !status?.itinerario && (
+          <div style={{ background: 'rgba(167,139,250,0.06)', border: '1px dashed rgba(167,139,250,0.25)', borderRadius: '16px', padding: '28px', textAlign: 'center' }}>
+            <IconGraduationCap style={{ fontSize: '30px', color: '#a78bfa', marginBottom: '12px' }} />
+            <div style={{ color: '#e2e8f0', fontWeight: '700', marginBottom: '6px' }}>Você ainda não escolheu um curso</div>
+            <div style={{ color: '#64748b', fontSize: '13px', marginBottom: '18px' }}>
+              O curso define o tema do Quiz do Dia e das perguntas do Simulador de Entrevista.
+            </div>
+            {aoAbrirCursos && (
+              <button onClick={aoAbrirCursos} className="quiz-next-btn" style={{ maxWidth: '260px', margin: '0 auto' }}>
+                Escolher meu curso
+              </button>
+            )}
           </div>
         )}
 
@@ -379,9 +498,36 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
 
         {quiz && !resultado && perguntaAtual && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <span style={{ fontSize: '12px', color: '#a78bfa', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{quiz.tema}</span>
               <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>{indiceAtual + 1} / {quiz.perguntas.length}</span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace' }}>⏱ {formatarTempo(tempoDecorrido)}</span>
+                <AnimatePresence>
+                  {combo >= 2 && (
+                    <motion.span
+                      key={combo}
+                      initial={{ opacity: 0, scale: 0.6 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.6 }}
+                      className="quiz-combo-badge"
+                    >
+                      🔥 Combo x{combo}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={usarDica} disabled={dicasRestantes <= 0 || opcaoSelecionada !== null} className="quiz-tool-btn">
+                  💡 Dica ({dicasRestantes})
+                </button>
+                <button onClick={pularPergunta} disabled={pulosRestantes <= 0 || opcaoSelecionada !== null} className="quiz-tool-btn">
+                  ⏭ Pular ({pulosRestantes})
+                </button>
+              </div>
             </div>
 
             <AnimatePresence mode="wait">
@@ -402,12 +548,14 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
                     if (opcaoSelecionada !== null) {
                       if (idx === perguntaAtual.resposta_correta_index) classe = 'correct';
                       else if (idx === opcaoSelecionada) classe = 'wrong';
+                    } else if (opcoesEliminadas.includes(idx)) {
+                      classe = 'eliminada';
                     }
                     return (
                       <button
                         key={idx}
                         onClick={() => escolherOpcao(idx)}
-                        disabled={opcaoSelecionada !== null}
+                        disabled={opcaoSelecionada !== null || opcoesEliminadas.includes(idx)}
                         className={`quiz-option-btn ${classe}`}
                       >
                         {opcao}
@@ -447,19 +595,27 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
             <h3 style={{ fontSize: '22px', fontWeight: '800', color: '#f1f5f9', marginBottom: '8px' }}>
               Você acertou {resultado.acertos} de {resultado.total}!
             </h3>
-            <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '20px' }}>
+            <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '8px' }}>
+              Tempo: {formatarTempo(tempoDecorrido)} · Pulos usados: {pulosUsados}
+            </p>
+            <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '8px' }}>
               +{resultado.xp_concedido} XP · Nível {resultado.nivel_atual} · {resultado.categoria_status}
             </p>
+            {resultado.vida_bonus_ganha ? (
+              <p style={{ color: '#f43f5e', fontSize: '13px', fontWeight: '700', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                <IconHeart /> 5 quizzes perfeitos seguidos! Ganhou 1 vida de bônus
+              </p>
+            ) : (
+              acertos === resultado.total && (
+                <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '20px' }}>
+                  {resultado.quizzes_perfeitos_seguidos}/5 quizzes perfeitos seguidos pra ganhar vida de bônus
+                </p>
+              )
+            )}
             <button onClick={reiniciar} className="quiz-next-btn" style={{ maxWidth: '260px', margin: '0 auto' }}>
               Fazer outro quiz
             </button>
           </motion.div>
-        )}
-
-        {!quiz && (
-          <div style={{ marginTop: '32px', paddingTop: '28px', borderTop: '1px solid rgba(167,139,250,0.1)' }}>
-            <StreakCalendar ano={hoje.getFullYear()} mes={hoje.getMonth() + 1} dias={calendario} />
-          </div>
         )}
       </div>
     </div>

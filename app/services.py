@@ -14,10 +14,11 @@ from schemas import CurriculoIaSchema, AvaliacaoEntrevistaSchema, QuizSchema
 
 # ❤️ Configuração do sistema de vidas/moedas/congelamento de ofensiva
 VIDAS_MAXIMAS = 5
-HORAS_PARA_REGENERAR_VIDA = 4
+HORAS_PARA_REGENERAR_VIDA = 2
 CUSTO_MOEDAS_POR_VIDA = 50
 MOEDAS_POR_XP = 0.1              # 1 moeda a cada 10 XP ganho
 DIAS_OFENSIVA_POR_CONGELAMENTO = 7  # a cada 7 dias seguidos, ganha 1 congelamento de graça
+QUIZZES_PERFEITOS_PARA_VIDA_BONUS = 5  # 5 quizzes seguidos com 100% de acerto = 1 vida de bônus
 
 # Temas genéricos do Quiz do Dia — usados quando o estudante ainda não
 # escolheu um itinerário. Giram automaticamente por data (mesmo tema pra
@@ -31,40 +32,52 @@ TEMAS_QUIZ = [
     "Ética e postura no ambiente de trabalho",
 ]
 
-# Itinerários formativos disponíveis. Cada um tem seus próprios sub-temas de
-# quiz, girando por data do mesmo jeito — assim quem escolhe uma trilha vê
-# conteúdo relevante pra ela em vez de temas genéricos aleatórios.
+# Itinerários formativos disponíveis — funcionam como "cursos" (no espírito
+# de escolher inglês/espanhol no Duolingo): o estudante escolhe UM e tanto o
+# Quiz do Dia quanto o Simulador de Entrevista passam a girar em torno dele.
+# Cada um tem descrição (pra UI) e sub-temas de quiz, girando por data do
+# mesmo jeito — mesmo tema pra todo mundo no mesmo dia, sem guardar estado.
 ITINERARIOS_QUIZ = {
-    "Tecnologia e Dados": [
-        "Lógica de programação para iniciantes",
-        "Fundamentos de banco de dados e planilhas",
-        "Segurança digital básica no trabalho",
-        "Como explicar um projeto técnico pra quem não é da área",
-    ],
-    "Administrativo e Escritório": [
-        "Organização, produtividade e gestão do tempo",
-        "Comunicação profissional (e-mail, chat, reuniões)",
-        "Rotinas administrativas e arquivamento de documentos",
-        "Etiqueta profissional no escritório",
-    ],
-    "Atendimento e Vendas": [
-        "Comunicação profissional com clientes",
-        "Como lidar com reclamações e clientes difíceis",
-        "Técnicas básicas de venda e negociação",
-        "Postura e escuta ativa no atendimento",
-    ],
-    "Logística e Operações": [
-        "Organização, produtividade e gestão do tempo",
-        "Segurança e boas práticas em ambientes operacionais",
-        "Trabalho em equipe em processos operacionais",
-        "Noções básicas de estoque e conferência",
-    ],
-    "Marketing e Comunicação": [
-        "Comunicação profissional (e-mail, chat, reuniões)",
-        "Noções básicas de redes sociais para marcas",
-        "Como dar e receber feedback criativo",
-        "Ética e postura no ambiente de trabalho",
-    ],
+    "Tecnologia e Ciência de Dados": {
+        "descricao": "Análise estatística, Big Data, Python e SQL, visualização de dados e IA aplicadas ao mercado de trabalho.",
+        "temas": [
+            "Fundamentos de Python e lógica de programação",
+            "SQL e organização de dados em tabelas",
+            "Conceitos básicos de Big Data e como empresas usam dados",
+            "Visualização de dados: gráficos que contam uma história",
+            "Inteligência Artificial aplicada ao mercado de trabalho",
+        ],
+    },
+    "Robótica e Automação": {
+        "descricao": "Desenvolvimento de protótipos, projetos em Arduino, automação e integração entre programação e hardware.",
+        "temas": [
+            "Lógica de programação aplicada a hardware (Arduino)",
+            "Sensores, atuadores e como um protótipo funciona",
+            "Automação industrial: conceitos básicos",
+            "Segurança e boas práticas em projetos de automação",
+            "Como apresentar um projeto de robótica pra uma banca",
+        ],
+    },
+    "Ciências Jurídicas / Serviços Jurídicos": {
+        "descricao": "Fundamentos do Direito, Direito Digital, LGPD, ética na era digital e rotinas administrativas/jurídicas.",
+        "temas": [
+            "Fundamentos básicos do Direito",
+            "LGPD: o que é e por que toda empresa precisa seguir",
+            "Direito Digital no dia a dia",
+            "Ética e postura profissional na era digital",
+            "Rotinas administrativas de um escritório jurídico",
+        ],
+    },
+    "Ciências da Natureza e Matemática": {
+        "descricao": "Aprofundamento em Biologia, Física, Química e Matemática, com foco prático e preparação para vestibulares e ENEM.",
+        "temas": [
+            "Matemática básica para o dia a dia e provas",
+            "Fundamentos de Física aplicados ao cotidiano",
+            "Química no cotidiano",
+            "Biologia e meio ambiente",
+            "Técnicas de estudo para vestibular e ENEM",
+        ],
+    },
 }
 
 # Garante que GEMINI_API_KEY esteja carregada mesmo se este módulo for
@@ -232,19 +245,19 @@ class AIService:
         inteiro pra todo mundo). Se o estudante tiver um itinerário
         escolhido, sorteia dentro dos sub-temas daquela trilha específica.
         """
-        temas = ITINERARIOS_QUIZ.get(itinerario, TEMAS_QUIZ)
+        temas = ITINERARIOS_QUIZ[itinerario]["temas"] if itinerario in ITINERARIOS_QUIZ else TEMAS_QUIZ
         return temas[date.today().toordinal() % len(temas)]
 
     @staticmethod
     def gerar_quiz_ia(tema: str, itinerario: str | None = None) -> dict:
         """
-        Gera um quiz de 5 perguntas de múltipla escolha sobre o tema do dia,
+        Gera um quiz de 10 perguntas de múltipla escolha sobre o tema do dia,
         no mesmo padrão de JSON estrito usado no currículo e na entrevista.
         """
         contexto_trilha = f' O estudante está seguindo o itinerário formativo "{itinerario}", então contextualize os exemplos para essa área.' if itinerario else ''
         prompt = f"""
         Atue como um instrutor de preparação para o primeiro emprego de jovens aprendizes.
-        Crie um quiz de exatamente 5 perguntas de múltipla escolha (4 alternativas cada,
+        Crie um quiz de exatamente 10 perguntas de múltipla escolha (4 alternativas cada,
         só uma correta) sobre o tema: "{tema}".{contexto_trilha}
         As perguntas devem ser objetivas, práticas e adequadas para jovens sem experiência
         prévia de mercado de trabalho. Evite pegadinhas — o objetivo é ensinar, não confundir.
@@ -317,6 +330,61 @@ class AIService:
                     ],
                     "resposta_correta_index": 1,
                     "explicacao": "Priorizar por urgência e importância é a base de uma boa gestão de tempo.",
+                },
+                {
+                    "pergunta": "Um colega te pede ajuda numa tarefa enquanto você está no meio de outra urgente. O que fazer?",
+                    "opcoes": [
+                        "Ignorar o pedido sem responder",
+                        "Parar tudo imediatamente pra ajudar",
+                        "Explicar a situação e combinar um horário pra ajudar depois",
+                        "Ajudar só parte do tempo, sem avisar nada",
+                    ],
+                    "resposta_correta_index": 2,
+                    "explicacao": "Comunicar a situação com transparência e negociar um horário mostra organização sem deixar o colega no vácuo.",
+                },
+                {
+                    "pergunta": "Qual desses é um exemplo de escuta ativa numa reunião?",
+                    "opcoes": [
+                        "Mexer no celular enquanto o outro fala",
+                        "Interromper pra dar sua opinião",
+                        "Fazer perguntas e resumir o que entendeu",
+                        "Ficar calado sem demonstrar reação",
+                    ],
+                    "resposta_correta_index": 2,
+                    "explicacao": "Escuta ativa envolve confirmar entendimento — perguntar e resumir mostra que você realmente está prestando atenção.",
+                },
+                {
+                    "pergunta": "Você cometeu um erro num relatório que já foi enviado. Qual a melhor atitude?",
+                    "opcoes": [
+                        "Esperar alguém perceber",
+                        "Avisar o responsável e propor a correção",
+                        "Corrigir sem falar nada pra ninguém notar",
+                        "Culpar quem revisou antes de você",
+                    ],
+                    "resposta_correta_index": 1,
+                    "explicacao": "Assumir o erro e propor solução rapidamente é o que constrói confiança profissional — esconder só piora.",
+                },
+                {
+                    "pergunta": "Numa entrevista de emprego, o que passa mais credibilidade?",
+                    "opcoes": [
+                        "Dizer que não tem nenhum ponto fraco",
+                        "Dar exemplos concretos de situações reais",
+                        "Falar mal do emprego anterior",
+                        "Responder tudo de forma genérica",
+                    ],
+                    "resposta_correta_index": 1,
+                    "explicacao": "Exemplos concretos e reais são muito mais convincentes do que respostas genéricas ou decoradas.",
+                },
+                {
+                    "pergunta": "O que caracteriza um bom trabalho em equipe?",
+                    "opcoes": [
+                        "Cada um cuidar só da própria parte, sem se comunicar",
+                        "Compartilhar informações e ajudar quando possível",
+                        "Competir pra aparecer mais que os colegas",
+                        "Esperar que o líder resolva tudo sozinho",
+                    ],
+                    "resposta_correta_index": 1,
+                    "explicacao": "Comunicação e colaboração são a base de qualquer equipe que funciona bem de verdade.",
                 },
             ],
         }
@@ -409,6 +477,29 @@ class AIService:
 
         estudante.vidas = min(VIDAS_MAXIMAS, estudante.vidas + vidas_regeneradas)
         estudante.proxima_vida_em = None if estudante.vidas >= VIDAS_MAXIMAS else agora + intervalo
+
+    @staticmethod
+    def avaliar_bonus_por_desempenho(estudante: Estudante, acertos: int, total: int) -> bool:
+        """
+        Acompanha quizzes com 100% de acerto em sequência. Ao completar
+        QUIZZES_PERFEITOS_PARA_VIDA_BONUS seguidos, concede 1 vida de bônus
+        (respeitando o teto) e zera o contador. Qualquer erro reseta a
+        sequência. Retorna True se uma vida de bônus foi concedida agora.
+        """
+        if total > 0 and acertos == total:
+            estudante.quizzes_perfeitos_seguidos += 1
+        else:
+            estudante.quizzes_perfeitos_seguidos = 0
+            return False
+
+        if estudante.quizzes_perfeitos_seguidos >= QUIZZES_PERFEITOS_PARA_VIDA_BONUS:
+            estudante.quizzes_perfeitos_seguidos = 0
+            if estudante.vidas < VIDAS_MAXIMAS:
+                estudante.vidas += 1
+                if estudante.vidas >= VIDAS_MAXIMAS:
+                    estudante.proxima_vida_em = None
+                return True
+        return False
 
     @staticmethod
     def perder_vida(estudante: Estudante) -> None:
