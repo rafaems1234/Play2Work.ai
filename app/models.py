@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, Boolean, UniqueConstraint, func
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, Boolean, JSON, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship
 from database import Base
@@ -16,6 +16,8 @@ class Estudante(Base):
     linkedin = Column(String(255), nullable=True)            # URL do perfil do LinkedIn (opcional, coletado no cadastro)
     senha_hash = Column(String(255), nullable=True)          # Hash bcrypt da senha (nulo = conta antiga sem login)
     precisa_trocar_senha = Column(Boolean, default=False)    # True = está numa senha temporária de reset, força troca no próximo passo
+    pergunta_seguranca = Column(String(200), nullable=True)  # Pergunta definida no cadastro, exigida pra resetar a senha
+    resposta_seguranca_hash = Column(String(255), nullable=True)  # Hash bcrypt da resposta -- sem isso, e-mail sozinho não é suficiente pra derrubar a senha de qualquer um
     nivel_gamificacao = Column(Integer, default=1)
     
     # 🌟 CORRIGIDO: Alterado de 'pontos' para 'xp_total' para bater com as rotas e o React
@@ -125,6 +127,30 @@ class Candidatura(Base):
 
     estudante = relationship("Estudante", back_populates="candidaturas")
     vaga = relationship("Vaga", back_populates="candidaturas")
+
+
+class QuizSessao(Base):
+    """
+    Modelo que representa a tabela 'quiz_sessoes'.
+    Guarda o gabarito (resposta certa + explicação) gerado pela IA do lado
+    do servidor. É isso que permite validar o resultado no /quiz/submit sem
+    confiar em 'acertos'/'total' que o cliente mandasse -- o cliente nunca
+    recebe o índice correto antes de responder aquela pergunta específica
+    via /quiz/responder, e o servidor conta os acertos a partir do que ele
+    mesmo registrou em 'respostas', não do que o cliente afirma ter feito.
+    """
+    __tablename__ = 'quiz_sessoes'
+
+    id = Column(Integer, primary_key=True, index=True)
+    estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False)
+    tema = Column(String(120), nullable=False)
+    gabarito = Column(JSON, nullable=False)   # lista de {"resposta_correta_index": int, "explicacao": str}
+    respostas = Column(JSON, nullable=False, default=list)  # lista paralela de {"pulou": bool, "correta": bool}
+    dicas_usadas = Column(Integer, nullable=False, default=0)
+    concluido = Column(Boolean, nullable=False, default=False)
+    criado_em = Column(DateTime, server_default=func.now())
+
+    estudante = relationship("Estudante")
 
 
 class Curriculo(Base):

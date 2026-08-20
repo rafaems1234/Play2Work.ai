@@ -1,9 +1,12 @@
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 import models
 from database import engine
 from routes import router  # Garanta que o arquivo routes.py exista nesta mesma pasta
+from limiter import limiter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,6 +15,9 @@ logging.basicConfig(
 
 
 app = FastAPI(title="Play2Work AI API")
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configuração CRÍTICA do CORS
 # Adicionadas variações comuns para evitar bloqueios no navegador
@@ -46,5 +52,5 @@ def read_root():
 if __name__ == "__main__":
     import uvicorn
     # Mudamos de "main:app" para o próprio objeto app para evitar erros de importação pelo Uvicorn
-    # host 127.0.0.1: a API não tem autenticação, então não deve ficar exposta na rede local por padrão
+    # host 127.0.0.1 por padrão -- para expor na rede local, defina o host explicitamente ao rodar via uvicorn CLI
     uvicorn.run(app, host="127.0.0.1", port=8000)

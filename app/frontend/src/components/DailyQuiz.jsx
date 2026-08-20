@@ -96,6 +96,9 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
     }
   };
 
+  const [respondendo, setRespondendo] = useState(false);
+  const [feedback, setFeedback] = useState(null); // { correta, resposta_correta_index, explicacao }
+
   const gerarQuiz = async () => {
     try {
       setCarregando(true);
@@ -116,8 +119,9 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
       setOpcoesEliminadas([]);
       setAcertos(0);
       setResultado(null);
-      setDicasRestantes(DICAS_POR_QUIZ);
-      setPulosRestantes(PULOS_POR_QUIZ);
+      setFeedback(null);
+      setDicasRestantes(dados.dicas_disponiveis ?? DICAS_POR_QUIZ);
+      setPulosRestantes(dados.pulos_disponiveis ?? PULOS_POR_QUIZ);
       setPulosUsados(0);
       setCombo(0);
       setInicioQuiz(Date.now());
@@ -133,16 +137,14 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
   const perguntaAtual = quiz?.perguntas?.[indiceAtual];
   const ultimaPergunta = quiz && indiceAtual === quiz.perguntas.length - 1;
 
-  const enviarResultado = async (pulosParaEnviar) => {
+  // O resultado final é sempre contado pelo servidor a partir das respostas
+  // que ele mesmo registrou em /quiz/responder -- o cliente não manda mais
+  // "acertos"/"total" de forma autodeclarada.
+  const enviarResultado = async () => {
     try {
       const response = await apiFetch('/api/quiz/submit', {
         method: 'POST',
-        body: JSON.stringify({
-          tema: quiz.tema,
-          acertos,
-          total: quiz.perguntas.length,
-          pulos: pulosParaEnviar,
-        }),
+        body: JSON.stringify({ quiz_id: quiz.quiz_id }),
       });
       const dados = await response.json();
       setResultado(dados);
@@ -163,59 +165,91 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
           quizzes_perfeitos_seguidos: dados.quizzes_perfeitos_seguidos,
         }));
         setSemVidas(dados.vidas <= 0);
+        if (dados.acertos === dados.total || dados.vida_bonus_ganha) dispararConfete();
       }
-      if (acertos === quiz.perguntas.length || dados.vida_bonus_ganha) dispararConfete();
     } catch (err) {
       console.error(err);
     }
   };
 
-  const escolherOpcao = (idx) => {
-    if (opcaoSelecionada !== null) return;
+  const escolherOpcao = async (idx) => {
+    if (opcaoSelecionada !== null || respondendo) return;
     setOpcaoSelecionada(idx);
-    if (idx === perguntaAtual.resposta_correta_index) {
-      setAcertos((a) => a + 1);
-      setCombo((c) => c + 1);
-    } else {
-      setCombo(0);
+    setRespondendo(true);
+    try {
+      const response = await apiFetch('/api/quiz/responder', {
+        method: 'POST',
+        body: JSON.stringify({ quiz_id: quiz.quiz_id, indice_pergunta: indiceAtual, opcao_selecionada: idx }),
+      });
+      const dados = await response.json();
+      if (!response.ok) throw new Error();
+      setFeedback(dados);
+      if (dados.correta) {
+        setAcertos((a) => a + 1);
+        setCombo((c) => c + 1);
+      } else {
+        setCombo(0);
+      }
+    } catch (err) {
+      console.error(err);
+      setOpcaoSelecionada(null);
+    } finally {
+      setRespondendo(false);
     }
   };
 
-  const usarDica = () => {
-    if (dicasRestantes <= 0 || opcaoSelecionada !== null) return;
-    const errados = perguntaAtual.opcoes
-      .map((_, i) => i)
-      .filter((i) => i !== perguntaAtual.resposta_correta_index && !opcoesEliminadas.includes(i));
-    if (errados.length === 0) return;
-    const escolhido = errados[Math.floor(Math.random() * errados.length)];
-    setOpcoesEliminadas((prev) => [...prev, escolhido]);
-    setDicasRestantes((d) => d - 1);
+  const usarDica = async () => {
+    if (dicasRestantes <= 0 || opcaoSelecionada !== null || respondendo) return;
+    try {
+      const response = await apiFetch('/api/quiz/dica', {
+        method: 'POST',
+        body: JSON.stringify({ quiz_id: quiz.quiz_id, indice_pergunta: indiceAtual }),
+      });
+      if (!response.ok) return;
+      const dados = await response.json();
+      setOpcoesEliminadas((prev) => [...prev, dados.opcao_eliminada]);
+      setDicasRestantes((d) => d - 1);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const proximaPergunta = () => {
+    setFeedback(null);
     if (!ultimaPergunta) {
       setIndiceAtual((i) => i + 1);
       setOpcaoSelecionada(null);
       setOpcoesEliminadas([]);
       return;
     }
-    enviarResultado(pulosUsados);
+    enviarResultado();
   };
 
-  const pularPergunta = () => {
-    if (opcaoSelecionada !== null || pulosRestantes <= 0) return;
-    const novosPulosUsados = pulosUsados + 1;
-    setPulosRestantes((p) => p - 1);
-    setPulosUsados(novosPulosUsados);
-    setCombo(0);
+  const pularPergunta = async () => {
+    if (opcaoSelecionada !== null || pulosRestantes <= 0 || respondendo) return;
+    setRespondendo(true);
+    try {
+      const response = await apiFetch('/api/quiz/responder', {
+        method: 'POST',
+        body: JSON.stringify({ quiz_id: quiz.quiz_id, indice_pergunta: indiceAtual, opcao_selecionada: null }),
+      });
+      if (!response.ok) return;
+      setPulosRestantes((p) => p - 1);
+      setPulosUsados((p) => p + 1);
+      setCombo(0);
 
-    if (!ultimaPergunta) {
-      setIndiceAtual((i) => i + 1);
-      setOpcaoSelecionada(null);
-      setOpcoesEliminadas([]);
-      return;
+      if (!ultimaPergunta) {
+        setIndiceAtual((i) => i + 1);
+        setOpcaoSelecionada(null);
+        setOpcoesEliminadas([]);
+        return;
+      }
+      enviarResultado();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRespondendo(false);
     }
-    enviarResultado(novosPulosUsados);
   };
 
   const reiniciar = () => {
@@ -535,8 +569,8 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {perguntaAtual.opcoes.map((opcao, idx) => {
                     let classe = '';
-                    if (opcaoSelecionada !== null) {
-                      if (idx === perguntaAtual.resposta_correta_index) classe = 'correct';
+                    if (feedback) {
+                      if (idx === feedback.resposta_correta_index) classe = 'correct';
                       else if (idx === opcaoSelecionada) classe = 'wrong';
                     } else if (opcoesEliminadas.includes(idx)) {
                       classe = 'eliminada';
@@ -554,20 +588,20 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
                   })}
                 </div>
 
-                {opcaoSelecionada !== null && (
+                {feedback && (
                   <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     style={{ marginTop: '16px', padding: '14px 18px', background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: '14px', fontSize: '13px', color: '#94a3b8', lineHeight: 1.6, display: 'flex', gap: '8px' }}
                   >
                     <IconSparkle style={{ color: '#a78bfa', flexShrink: 0, marginTop: '2px' }} />
-                    <span>{perguntaAtual.explicacao}</span>
+                    <span>{feedback.explicacao}</span>
                   </motion.div>
                 )}
               </motion.div>
             </AnimatePresence>
 
-            {opcaoSelecionada !== null && (
+            {feedback && (
               <button onClick={proximaPergunta} className="quiz-next-btn">
                 {ultimaPergunta ? 'Ver resultado →' : 'Próxima pergunta →'}
               </button>

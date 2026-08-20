@@ -19,6 +19,8 @@ CUSTO_MOEDAS_POR_VIDA = 50
 MOEDAS_POR_XP = 0.1              # 1 moeda a cada 10 XP ganho
 DIAS_OFENSIVA_POR_CONGELAMENTO = 7  # a cada 7 dias seguidos, ganha 1 congelamento de graça
 QUIZZES_PERFEITOS_PARA_VIDA_BONUS = 5  # 5 quizzes seguidos com 100% de acerto = 1 vida de bônus
+DICAS_POR_QUIZ = 2               # limite de dicas (elimina 1 alternativa errada) por quiz, validado no servidor
+PULOS_POR_QUIZ = 2               # limite de perguntas puláveis por quiz, validado no servidor
 
 # Temas genéricos do Quiz do Dia — usados quando o estudante ainda não
 # escolheu um itinerário. Giram automaticamente por data (mesmo tema pra

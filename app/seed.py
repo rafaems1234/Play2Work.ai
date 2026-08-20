@@ -18,6 +18,7 @@ import models
 # Senha de demonstração do estudante de teste (id=1). Só pra facilitar login
 # local -- não use isso em produção.
 SENHA_DEMO = "play2work123"
+RESPOSTA_SEGURANCA_DEMO = "sozza"
 
 def popular_banco():
     # 1. Cria as tabelas se não existirem no PostgreSQL
@@ -26,6 +27,7 @@ def popular_banco():
     db = SessionLocal()
     try:
         print("🔄 Limpando registros antigos para evitar duplicidade...")
+        db.query(models.QuizSessao).delete()
         db.query(models.Candidatura).delete()
         db.query(models.HistoricoEntrevista).delete()
         db.query(models.Curriculo).delete()
@@ -44,6 +46,8 @@ def popular_banco():
             email="gabriel@escola.com",
             linkedin="https://linkedin.com/in/gabriel-sozza",
             senha_hash=hash_senha(SENHA_DEMO),
+            pergunta_seguranca="Qual o seu sobrenome?",
+            resposta_seguranca_hash=hash_senha(RESPOSTA_SEGURANCA_DEMO),
             nivel_gamificacao=1,
             xp_total=120,
             xp_semanal=120,
@@ -160,7 +164,7 @@ def popular_banco():
 
         db.add_all(vagas)
         db.commit()
-        print(f"🚀 Banco de dados populado com sucesso! (login demo: 'Gabriel Sozza' / {SENHA_DEMO})")
+        print(f"🚀 Banco de dados populado com sucesso! (login demo: 'Gabriel Sozza' / {SENHA_DEMO} | resposta de segurança: '{RESPOSTA_SEGURANCA_DEMO}')")
 
     except Exception as e:
         db.rollback()

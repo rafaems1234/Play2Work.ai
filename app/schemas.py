@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List
 
 # Esquema para o Gemini gerar o Currículo estruturado
 class CurriculoIaSchema(BaseModel):
@@ -15,16 +15,6 @@ class AvaliacaoEntrevistaSchema(BaseModel):
     xp_concedido: int = Field(description="XP entre 0 e 50 baseado na qualidade, realismo e interesse. Se for texto aleatório ou zoado, dê 0.")
     proxima_pergunta: str = Field(description="A próxima pergunta lógica da entrevista baseada no contexto ou uma nova pergunta realista de RH")
 
-# Corpo da requisição para geração de currículo
-class CurriculoRequest(BaseModel):
-    estudante_id: int
-    habilidades_texto: str
-
-# Corpo da requisição para o chat do simulador
-class ChatRequest(BaseModel):
-    estudante_id: int
-    mensagem_usuario: str
-
 # Esquema para o Gemini gerar uma pergunta de múltipla escolha do Quiz
 class QuizPerguntaSchema(BaseModel):
     pergunta: str = Field(description="Enunciado da pergunta de múltipla escolha")
@@ -36,14 +26,3 @@ class QuizPerguntaSchema(BaseModel):
 class QuizSchema(BaseModel):
     tema: str = Field(description="Tema geral do quiz, igual ao informado")
     perguntas: List[QuizPerguntaSchema] = Field(description="Lista com exatamente 10 perguntas sobre o tema")
-
-# Corpo da requisição para gerar o quiz
-class QuizGenerateRequest(BaseModel):
-    estudante_id: int
-
-# Corpo da requisição para enviar o resultado do quiz
-class QuizSubmitRequest(BaseModel):
-    estudante_id: int
-    tema: str
-    acertos: int
-    total: int

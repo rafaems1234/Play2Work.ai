@@ -1,16 +1,25 @@
 import json
 import logging
+import random
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
 # Importações do ecossistema do projeto
-from models import Estudante, Vaga, HistoricoEntrevista, Curriculo, Candidatura
+from models import Estudante, Vaga, HistoricoEntrevista, Curriculo, Candidatura, QuizSessao
 from database import get_db
-from services import AIService, ITINERARIOS_QUIZ, VIDAS_MAXIMAS, QUIZZES_PERFEITOS_PARA_VIDA_BONUS
+from services import (
+    AIService,
+    ITINERARIOS_QUIZ,
+    VIDAS_MAXIMAS,
+    QUIZZES_PERFEITOS_PARA_VIDA_BONUS,
+    DICAS_POR_QUIZ,
+    PULOS_POR_QUIZ,
+)
 from auth import hash_senha, verificar_senha, criar_token, get_estudante_atual, gerar_senha_temporaria
+from limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +35,19 @@ class RegistroRequest(BaseModel):
     email: EmailStr
     linkedin: Optional[str] = None
     senha: str = Field(min_length=6, max_length=100)
+    pergunta_seguranca: str = Field(min_length=4, max_length=200)
+    resposta_seguranca: str = Field(min_length=2, max_length=200)
 
 class LoginRequest(BaseModel):
     nome: str
     senha: str
 
+class PerguntaSegurancaRequest(BaseModel):
+    email: EmailStr
+
 class ResetarSenhaRequest(BaseModel):
     email: EmailStr
+    resposta_seguranca: str
 
 class TrocarSenhaRequest(BaseModel):
     senha_atual: str
@@ -56,18 +71,30 @@ class MetaEmpresaRequest(BaseModel):
 class EscolherItinerarioRequest(BaseModel):
     itinerario: str
 
+class ResponderQuizRequest(BaseModel):
+    quiz_id: int
+    indice_pergunta: int
+    opcao_selecionada: Optional[int] = None  # None = pulou a pergunta
+
+class DicaQuizRequest(BaseModel):
+    quiz_id: int
+    indice_pergunta: int
+
 class QuizSubmitRequest(BaseModel):
-    tema: str
-    acertos: int
-    total: int
-    pulos: int = 0
+    quiz_id: int
 
 # ----------------------------------------------------------------------
 # AUTENTICAÇÃO
 # ----------------------------------------------------------------------
 
+def _normalizar_resposta(resposta: str) -> str:
+    """Uniformiza a resposta de segurança (case/espaços) pra não travar por causa de maiúscula."""
+    return resposta.strip().lower()
+
+
 @router.post("/auth/registrar", status_code=status.HTTP_201_CREATED)
-def registrar(data: RegistroRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def registrar(request: Request, data: RegistroRequest, db: Session = Depends(get_db)):
     if db.query(Estudante).filter(Estudante.email == data.email).first():
         raise HTTPException(status_code=409, detail="Já existe uma conta com esse e-mail")
 
@@ -78,6 +105,8 @@ def registrar(data: RegistroRequest, db: Session = Depends(get_db)):
         email=data.email,
         linkedin=data.linkedin,
         senha_hash=hash_senha(data.senha),
+        pergunta_seguranca=data.pergunta_seguranca,
+        resposta_seguranca_hash=hash_senha(_normalizar_resposta(data.resposta_seguranca)),
         habilidades=[],
     )
     db.add(novo_estudante)
@@ -89,7 +118,8 @@ def registrar(data: RegistroRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/auth/login")
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("15/minute")
+def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
     # O nome de login não é único -- se houver mais de uma conta com o mesmo
     # nome, quem desempata é a senha: testamos contra cada uma até achar a
     # que bate.
@@ -120,18 +150,42 @@ def me(estudante: Estudante = Depends(get_estudante_atual)):
     }
 
 
+@router.post("/auth/pergunta-seguranca")
+@limiter.limit("10/minute")
+def buscar_pergunta_seguranca(request: Request, data: PerguntaSegurancaRequest, db: Session = Depends(get_db)):
+    """
+    Primeiro passo do reset: devolve a pergunta de segurança cadastrada pra
+    esse e-mail, pra o front poder perguntar a resposta antes de liberar a
+    senha temporária. Sem isso, resetar a senha de qualquer conta bastaria
+    saber o e-mail (que não é segredo nenhum) -- essa era exatamente a
+    falha que esse fluxo corrige.
+    """
+    estudante = db.query(Estudante).filter(Estudante.email == data.email).first()
+    if not estudante or not estudante.pergunta_seguranca:
+        raise HTTPException(status_code=404, detail="E-mail não encontrado ou sem pergunta de segurança cadastrada.")
+    return {"pergunta": estudante.pergunta_seguranca}
+
+
 @router.post("/auth/resetar-senha")
-def resetar_senha(data: ResetarSenhaRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def resetar_senha(request: Request, data: ResetarSenhaRequest, db: Session = Depends(get_db)):
     """
     Sem servidor de e-mail configurado, a senha temporária é devolvida
     direto na resposta (mostrada uma única vez na tela) em vez de enviada
     por e-mail. No próximo login com ela, o front força a troca por uma
     senha definitiva antes de liberar o resto do app.
+
+    A resposta de segurança é exigida aqui porque e-mail sozinho não é
+    segredo -- sem essa checagem, qualquer pessoa que soubesse o e-mail de
+    alguém conseguiria derrubar a senha da conta na hora.
     """
     estudante = db.query(Estudante).filter(Estudante.email == data.email).first()
-    if not estudante:
+    if not estudante or not estudante.resposta_seguranca_hash:
         # Não revela se o e-mail existe ou não, pra não ajudar enumeração de contas
-        return {"mensagem": "Se esse e-mail existir, uma senha temporária foi gerada."}
+        return {"mensagem": "Se esse e-mail existir e a resposta estiver correta, uma senha temporária foi gerada."}
+
+    if not verificar_senha(_normalizar_resposta(data.resposta_seguranca), estudante.resposta_seguranca_hash):
+        raise HTTPException(status_code=401, detail="Resposta de segurança incorreta.")
 
     senha_temp = gerar_senha_temporaria()
     estudante.senha_hash = hash_senha(senha_temp)
@@ -351,6 +405,11 @@ def escolher_itinerario(data: EscolherItinerarioRequest, estudante: Estudante = 
 
 
 # --- Rota Nova: Gerar o Quiz do Dia ---
+# O gabarito (resposta_correta_index/explicacao) fica só no servidor, guardado
+# na QuizSessao -- o cliente recebe apenas pergunta+opcoes, nunca a resposta
+# certa antecipadamente. Isso é o que torna /quiz/responder e /quiz/submit
+# verificáveis: o resultado final é contado a partir do que o servidor
+# registrou, não do que o cliente afirma ter acertado.
 @router.post("/quiz/generate")
 def generate_quiz(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     AIService.regenerar_vidas(estudante)
@@ -368,29 +427,134 @@ def generate_quiz(estudante: Estudante = Depends(get_estudante_atual), db: Sessi
     tema = AIService.tema_quiz_do_dia(estudante.itinerario)
     quiz = AIService.gerar_quiz_ia(tema, estudante.itinerario)
 
-    return {"itinerario": estudante.itinerario, "vidas": estudante.vidas, **quiz}
+    sessao = QuizSessao(
+        estudante_id=estudante.id,
+        tema=quiz["tema"],
+        gabarito=[
+            {
+                "resposta_correta_index": p["resposta_correta_index"],
+                "explicacao": p.get("explicacao", ""),
+            }
+            for p in quiz["perguntas"]
+        ],
+        respostas=[],
+    )
+    db.add(sessao)
+    db.commit()
+    db.refresh(sessao)
+
+    perguntas_publicas = [{"pergunta": p["pergunta"], "opcoes": p["opcoes"]} for p in quiz["perguntas"]]
+
+    return {
+        "quiz_id": sessao.id,
+        "itinerario": estudante.itinerario,
+        "vidas": estudante.vidas,
+        "tema": quiz["tema"],
+        "perguntas": perguntas_publicas,
+        "dicas_disponiveis": DICAS_POR_QUIZ,
+        "pulos_disponiveis": PULOS_POR_QUIZ,
+    }
+
+
+def _buscar_sessao_quiz_ativa(quiz_id: int, estudante: Estudante, db: Session) -> QuizSessao:
+    sessao = db.query(QuizSessao).filter(
+        QuizSessao.id == quiz_id,
+        QuizSessao.estudante_id == estudante.id,
+    ).first()
+    if not sessao:
+        raise HTTPException(status_code=404, detail="Quiz não encontrado.")
+    if sessao.concluido:
+        raise HTTPException(status_code=400, detail="Esse quiz já foi finalizado.")
+    return sessao
+
+
+# --- Rota Nova: Responder (ou pular) uma pergunta do Quiz do Dia ---
+# Cada resposta é validada e registrada aqui, no servidor -- é o que
+# impede o cliente de simplesmente declarar "acertei tudo" no /submit.
+@router.post("/quiz/responder")
+def responder_quiz(data: ResponderQuizRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    sessao = _buscar_sessao_quiz_ativa(data.quiz_id, estudante, db)
+    total = len(sessao.gabarito)
+
+    if data.indice_pergunta != len(sessao.respostas):
+        raise HTTPException(status_code=400, detail="Pergunta fora de ordem.")
+    if data.indice_pergunta < 0 or data.indice_pergunta >= total:
+        raise HTTPException(status_code=400, detail="Índice de pergunta inválido.")
+
+    if data.opcao_selecionada is None:
+        pulos_usados = sum(1 for r in sessao.respostas if r["pulou"])
+        if pulos_usados >= PULOS_POR_QUIZ:
+            raise HTTPException(status_code=403, detail="Limite de pulos por quiz atingido.")
+        registro = {"pulou": True, "correta": False}
+    else:
+        gabarito_pergunta = sessao.gabarito[data.indice_pergunta]
+        correta = data.opcao_selecionada == gabarito_pergunta["resposta_correta_index"]
+        registro = {"pulou": False, "correta": correta}
+
+    sessao.respostas = sessao.respostas + [registro]
+    db.commit()
+
+    gabarito_pergunta = sessao.gabarito[data.indice_pergunta]
+    return {
+        "correta": None if registro["pulou"] else registro["correta"],
+        "resposta_correta_index": gabarito_pergunta["resposta_correta_index"],
+        "explicacao": gabarito_pergunta["explicacao"],
+    }
+
+
+# --- Rota Nova: Pedir dica numa pergunta do Quiz do Dia ---
+# O servidor é quem sabe a resposta certa, então é ele quem sorteia qual
+# alternativa errada eliminar -- o cliente nunca precisa (nem consegue)
+# calcular isso sozinho.
+@router.post("/quiz/dica")
+def pedir_dica_quiz(data: DicaQuizRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    sessao = _buscar_sessao_quiz_ativa(data.quiz_id, estudante, db)
+    total = len(sessao.gabarito)
+
+    if data.indice_pergunta < 0 or data.indice_pergunta >= total:
+        raise HTTPException(status_code=400, detail="Índice de pergunta inválido.")
+    if sessao.dicas_usadas >= DICAS_POR_QUIZ:
+        raise HTTPException(status_code=403, detail="Limite de dicas por quiz atingido.")
+
+    correta_idx = sessao.gabarito[data.indice_pergunta]["resposta_correta_index"]
+    opcoes_erradas = [i for i in range(4) if i != correta_idx]
+    opcao_eliminada = random.choice(opcoes_erradas)
+
+    sessao.dicas_usadas += 1
+    db.commit()
+
+    return {"opcao_eliminada": opcao_eliminada, "dicas_usadas": sessao.dicas_usadas}
 
 
 # --- Rota Nova: Submeter resultado do Quiz do Dia ---
+# 'acertos'/'total'/'pulos' não vêm mais do cliente -- são contados aqui a
+# partir das respostas que o próprio servidor registrou em /quiz/responder.
 @router.post("/quiz/submit")
 def submit_quiz(data: QuizSubmitRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
-    acertos = max(0, min(data.acertos, data.total))
-    pulos = max(0, min(data.pulos, data.total - acertos))
-    errados = max(0, data.total - acertos - pulos)  # pular não conta como erro nem custa vida
+    sessao = _buscar_sessao_quiz_ativa(data.quiz_id, estudante, db)
+    total = len(sessao.gabarito)
+
+    if len(sessao.respostas) != total:
+        raise HTTPException(status_code=400, detail="Ainda faltam perguntas para responder.")
+
+    acertos = sum(1 for r in sessao.respostas if r["correta"])
+    pulos = sum(1 for r in sessao.respostas if r["pulou"])
+    errados = max(0, total - acertos - pulos)  # pular não conta como erro nem custa vida
     xp_concedido = acertos * 8  # 8 XP por acerto, mesma ordem de grandeza do simulador
 
     try:
+        sessao.concluido = True
         AIService.regenerar_vidas(estudante)
         for _ in range(errados):
             AIService.perder_vida(estudante)
 
-        vida_bonus_ganha = AIService.avaliar_bonus_por_desempenho(estudante, acertos, data.total)
+        vida_bonus_ganha = AIService.avaliar_bonus_por_desempenho(estudante, acertos, total)
         AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
         db.commit()
 
         return {
             "acertos": acertos,
-            "total": data.total,
+            "total": total,
             "xp_concedido": xp_concedido,
             "novos_pontos_totais": estudante.xp_total,
             "nivel_atual": estudante.nivel_gamificacao,

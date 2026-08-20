@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRA_HORAS = 24 * 7  # token válido por 7 dias
 
-JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
-if not JWT_SECRET_KEY:
-    JWT_SECRET_KEY = secrets.token_hex(32)
-    logger.warning(
-        "JWT_SECRET_KEY não configurada no .env — usando um segredo temporário gerado "
-        "agora. Todos os tokens serão invalidados quando o servidor reiniciar."
-    )
+# Mesmo padrão de DATABASE_URL em database.py: falha explicitamente no
+# import se não estiver configurada, em vez de gerar um segredo aleatório
+# por processo. Um segredo por processo parece funcionar em dev (um único
+# `uvicorn --reload`), mas com mais de um worker cada processo teria seu
+# próprio segredo e tokens emitidos por um worker virariam 401 aleatório
+# nos outros -- um jeito de mascarar em vez de resolver a configuração.
+JWT_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 

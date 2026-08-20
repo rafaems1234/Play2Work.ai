@@ -5,11 +5,14 @@ import { API_BASE_URL, setToken } from '../api';
 import AuroraBackground from './AuroraBackground';
 
 const Auth = ({ aoAutenticar }) => {
-  const [modo, setModo] = useState('login'); // 'login' | 'registro' | 'reset'
+  const [modo, setModo] = useState('login'); // 'login' | 'registro' | 'reset' | 'reset-resposta'
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [linkedin, setLinkedin] = useState('');
   const [senha, setSenha] = useState('');
+  const [perguntaSeguranca, setPerguntaSeguranca] = useState('');
+  const [respostaSeguranca, setRespostaSeguranca] = useState('');
+  const [perguntaSegurancaExibida, setPerguntaSegurancaExibida] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
   const [senhaTemporaria, setSenhaTemporaria] = useState(null);
@@ -20,21 +23,40 @@ const Auth = ({ aoAutenticar }) => {
     setCarregando(true);
 
     try {
+      // Passo 1 do reset: descobre a pergunta de segurança cadastrada pra
+      // esse e-mail. Só com o e-mail (que não é segredo) não dá pra resetar
+      // a senha de ninguém -- é por isso que esse passo existe.
       if (modo === 'reset') {
-        const response = await fetch(`${API_BASE_URL}/api/auth/resetar-senha`, {
+        const response = await fetch(`${API_BASE_URL}/api/auth/pergunta-seguranca`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email }),
         });
         const dados = await response.json();
+        if (!response.ok) throw new Error(dados.detail || 'Não foi possível encontrar essa conta.');
+        setPerguntaSegurancaExibida(dados.pergunta);
+        setModo('reset-resposta');
+        return;
+      }
+
+      // Passo 2 do reset: confirma a resposta e só então libera a senha temporária.
+      if (modo === 'reset-resposta') {
+        const response = await fetch(`${API_BASE_URL}/api/auth/resetar-senha`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, resposta_seguranca: respostaSeguranca }),
+        });
+        const dados = await response.json();
         if (!response.ok) throw new Error(dados.detail || 'Não foi possível gerar a senha temporária.');
-        if (!dados.senha_temporaria) throw new Error('Se esse e-mail existir, uma senha temporária foi gerada — confira o nome de login cadastrado.');
+        if (!dados.senha_temporaria) throw new Error('Não foi possível confirmar a resposta de segurança.');
         setSenhaTemporaria({ nome: dados.nome_login, senha: dados.senha_temporaria });
         return;
       }
 
       const rota = modo === 'login' ? '/api/auth/login' : '/api/auth/registrar';
-      const corpo = modo === 'login' ? { nome, senha } : { nome, email, linkedin: linkedin || null, senha };
+      const corpo = modo === 'login'
+        ? { nome, senha }
+        : { nome, email, linkedin: linkedin || null, senha, pergunta_seguranca: perguntaSeguranca, resposta_seguranca: respostaSeguranca };
 
       const response = await fetch(`${API_BASE_URL}${rota}`, {
         method: 'POST',
@@ -60,6 +82,8 @@ const Auth = ({ aoAutenticar }) => {
     setModo(novoModo);
     setErro(null);
     setSenhaTemporaria(null);
+    setPerguntaSegurancaExibida('');
+    setRespostaSeguranca('');
   };
 
   return (
@@ -170,16 +194,18 @@ const Auth = ({ aoAutenticar }) => {
               {modo === 'login' && 'Bem-vindo de volta'}
               {modo === 'registro' && 'Crie sua conta'}
               {modo === 'reset' && 'Recuperar senha'}
+              {modo === 'reset-resposta' && 'Confirme sua identidade'}
             </h1>
             <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '24px' }}>
               {modo === 'login' && 'Entre com seu nome e sobrenome pra continuar sua jornada.'}
               {modo === 'registro' && 'Leva menos de um minuto — seu progresso fica salvo de verdade.'}
-              {modo === 'reset' && 'Informe o e-mail do cadastro. Vamos gerar uma senha temporária.'}
+              {modo === 'reset' && 'Informe o e-mail do cadastro pra localizar sua pergunta de segurança.'}
+              {modo === 'reset-resposta' && 'Responda a pergunta que você cadastrou pra confirmar que a conta é sua.'}
             </p>
 
             <form onSubmit={submeter} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <AnimatePresence mode="wait">
-                {modo !== 'reset' ? (
+                {modo === 'login' || modo === 'registro' ? (
                   <motion.div key="nome" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <input
                       type="text"
@@ -190,7 +216,7 @@ const Auth = ({ aoAutenticar }) => {
                       required
                     />
                   </motion.div>
-                ) : (
+                ) : modo === 'reset' ? (
                   <motion.div key="email" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <input
                       type="email"
@@ -199,6 +225,21 @@ const Auth = ({ aoAutenticar }) => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div key="pergunta" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                    <div style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '12px', padding: '13px 16px', fontSize: '13px', color: '#c4b5fd', fontWeight: '600', marginBottom: '12px' }}>
+                      {perguntaSegurancaExibida}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Sua resposta"
+                      className="auth-input"
+                      value={respostaSeguranca}
+                      onChange={(e) => setRespostaSeguranca(e.target.value)}
+                      required
+                      autoFocus
                     />
                   </motion.div>
                 )}
@@ -237,7 +278,7 @@ const Auth = ({ aoAutenticar }) => {
                 )}
               </AnimatePresence>
 
-              {modo !== 'reset' && (
+              {(modo === 'login' || modo === 'registro') && (
                 <input
                   type="password"
                   placeholder="Sua senha"
@@ -248,6 +289,39 @@ const Auth = ({ aoAutenticar }) => {
                   required
                 />
               )}
+
+              <AnimatePresence>
+                {modo === 'registro' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '12px' }}
+                  >
+                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                      Pergunta de segurança — usada só pra confirmar que é você caso precise resetar a senha.
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Crie uma pergunta (ex: qual seu sobrenome?)"
+                      className="auth-input"
+                      value={perguntaSeguranca}
+                      onChange={(e) => setPerguntaSeguranca(e.target.value)}
+                      minLength={4}
+                      required
+                    />
+                    <input
+                      type="text"
+                      placeholder="Resposta"
+                      className="auth-input"
+                      value={respostaSeguranca}
+                      onChange={(e) => setRespostaSeguranca(e.target.value)}
+                      minLength={2}
+                      required
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {modo === 'login' && (
                 <button type="button" onClick={() => trocarModo('reset')} className="auth-link-btn">
@@ -266,14 +340,15 @@ const Auth = ({ aoAutenticar }) => {
                   <>
                     {modo === 'login' && 'Entrar'}
                     {modo === 'registro' && (<><IconSparkle /> Criar conta</>)}
-                    {modo === 'reset' && 'Gerar senha temporária'}
+                    {modo === 'reset' && 'Continuar'}
+                    {modo === 'reset-resposta' && 'Confirmar e gerar senha temporária'}
                   </>
                 )}
               </button>
             </form>
 
             <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: '#64748b' }}>
-              {modo === 'reset' ? (
+              {modo === 'reset' || modo === 'reset-resposta' ? (
                 <button onClick={() => trocarModo('login')} className="auth-toggle-btn">← Voltar pro login</button>
               ) : (
                 <>

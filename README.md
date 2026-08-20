@@ -9,12 +9,12 @@ Através de uma abordagem de **gamificação comportamental** (inspirada em mec�
 
 ## ⚙️ Funcionalidades Core
 
-1. **Autenticação real (login/registro/reset de senha).** Conta protegida por senha com hash `bcrypt` e sessão via **JWT**. O login é feito por **nome de exibição** (ex: "Gabriel Sozza"), não por e-mail — e-mail e LinkedIn só são pedidos no cadastro. Como o nome não é único (pode existir mais de um "João Silva"), o login testa a senha contra todas as contas com aquele nome até achar a que bate. Sem servidor de e-mail configurado, o "Resetar senha" gera uma **senha temporária exibida na própria tela**, que o estudante troca no primeiro acesso seguinte (tela obrigatória de "Definir nova senha" antes de liberar o app).
+1. **Autenticação real (login/registro/reset de senha).** Conta protegida por senha com hash `bcrypt` e sessão via **JWT**. O login é feito por **nome de exibição** (ex: "Gabriel Sozza"), não por e-mail — e-mail e LinkedIn só são pedidos no cadastro. Como o nome não é único (pode existir mais de um "João Silva"), o login testa a senha contra todas as contas com aquele nome até achar a que bate. Sem servidor de e-mail configurado, o "Resetar senha" pede a **pergunta de segurança** definida no cadastro antes de liberar qualquer coisa — só então gera uma **senha temporária exibida na própria tela**, que o estudante troca no primeiro acesso seguinte (tela obrigatória de "Definir nova senha" antes de liberar o app). Sem essa pergunta, e-mail sozinho (que não é segredo) seria suficiente pra derrubar a senha de qualquer conta.
 2. **Itinerários formativos (like Duolingo/idiomas).** O estudante escolhe **um** dos 4 itinerários oficiais do desafio (Tecnologia e Ciência de Dados, Robótica e Automação, Ciências Jurídicas, Ciências da Natureza e Matemática) numa aba própria de navegação. O itinerário atual fica sempre visível ao lado do ícone de ofensiva no cabeçalho, e both o **Quiz do Dia** e o **Simulador de Entrevista com IA** giram em torno do curso escolhido.
 3. **Mural de Vagas com Match Inteligente + candidatura real.** Algoritmo que cruza as competências do aluno com os requisitos das vagas, calculando o percentual de aderência e dando um boost extra para vagas que combinam com o itinerário escolhido (essas vagas sobem para o topo do mural e ganham um selo "combina com seu curso"). Clicar num card abre um painel de detalhes no estilo LinkedIn (descrição completa, habilidades exigidas, localização) com botão de **Aplicar**, que persiste a candidatura no banco (idempotente — não duplica se o estudante aplicar de novo) e fica consultável em "Minhas candidaturas".
 4. **Validação de Dados Corporativos.** Integração assíncrona (via `httpx.AsyncClient`, com as consultas rodando em paralelo) com APIs externas (BrasilAPI) para buscar e validar a Razão Social real das empresas parceiras a partir do CNPJ, garantindo um mural antifraude e verificado sem bloquear o event loop da API.
 5. **Simulador de Entrevista Interativo com IA.** Chatbot síncrono que atua como o Recrutador Chefe da Vivo, com perguntas contextualizadas pelo itinerário escolhido pelo estudante. A IA avalia as respostas, gera feedbacks construtivos e distribui XP de forma dinâmica (penalizando inputs aleatórios ou vazios com 0 XP para evitar abusos).
-6. **Quiz do Dia com mecânicas de jogo.** Quiz de 10 perguntas geradas por IA sobre o itinerário escolhido, com botão de **dica** (elimina uma alternativa errada) e **pular** (avança sem gastar vida), cada um limitado a 2 usos por quiz, cronômetro ao vivo, contador de combo/streak de acertos e botão de voltar direto pro mural.
+6. **Quiz do Dia com mecânicas de jogo e resultado validado no servidor.** Quiz de 10 perguntas geradas por IA sobre o itinerário escolhido, com botão de **dica** (elimina uma alternativa errada) e **pular** (avança sem gastar vida), cada um limitado a 2 usos por quiz, cronômetro ao vivo, contador de combo/streak de acertos e botão de voltar direto pro mural. O gabarito nunca é enviado ao cliente antecipadamente — cada resposta é conferida e registrada pelo backend em `/quiz/responder`, e o XP/vidas ganhos em `/quiz/submit` são contados a partir do que o servidor registrou, não do que o cliente afirma ter acertado.
 7. **Sistema de vidas, moedas e congelamento de ofensiva.** O estudante tem até 5 vidas, perde uma a cada erro no quiz, e regenera 1 vida a cada 2h (ou compra com moedas). Acertar o quiz perfeitamente 5 vezes seguidas dá uma vida bônus automática. A cada 7 dias de ofensiva contínua, o estudante ganha 1 congelamento, consumido automaticamente se ele perder um único dia (protegendo a sequência). Um calendário mensal (botão ao lado do ícone de ofensiva) mostra dias feitos, congelados e perdidos.
 8. **Gerador Estrito de Currículo Profissional.** Transforma descrições informais de jovens em currículos estruturados utilizando IA Generativa com tipagem estrita de dados, com exportação simulada para LinkedIn.
 9. **Liga Dinâmica (Leaderboard).** Controle de ofensivas diárias, cálculo automático de categorias de status ("Na Jornada" até "CONTRATADO!") e ranking global em tempo real (Top 10), com o XP semanal zerado automaticamente a cada nova semana.
@@ -27,7 +27,8 @@ O projeto foi construído seguindo rigorosos padrões de mercado de governança 
 
 - **Front-end (Apresentação):** **React.js + Vite** – SPA reativa e modular, com **Framer Motion** para animações, ícones **Phosphor**, tela de login/registro com fundo animado ("aurora") compartilhado com o app principal, e uma sessão persistida via token JWT em `localStorage`.
 - **Back-end (Serviços/API):** **FastAPI (Python)** – Servidor ASGI de alta performance, assíncrono, com injeção de dependências nativa (`Depends`) tanto para a sessão do banco quanto para o **estudante autenticado** (extraído do JWT em toda rota protegida), e validação de contratos via **Pydantic**.
-- **Autenticação:** **bcrypt** para hash de senha e **PyJWT** para tokens *bearer* (`HS256`, expiração de 7 dias). Nenhuma rota confia mais em um `estudante_id` enviado pelo cliente — a identidade vem sempre do token.
+- **Autenticação:** **bcrypt** para hash de senha e **PyJWT** para tokens *bearer* (`HS256`, expiração de 7 dias). Nenhuma rota confia mais em um `estudante_id` enviado pelo cliente — a identidade vem sempre do token. `JWT_SECRET_KEY` é **obrigatória** (o processo falha ao subir se faltar, igual `DATABASE_URL`) — não existe fallback de segredo gerado na hora, que seria diferente por worker num deploy com múltiplos processos.
+- **Rate limiting:** **slowapi** limita por IP as rotas mais sensíveis a força-bruta e enumeração (`/auth/login`, `/auth/registrar`, `/auth/pergunta-seguranca`, `/auth/resetar-senha`).
 - **Banco de Dados (Persistência):** **PostgreSQL** – Banco relacional. Utiliza o tipo nativo `ARRAY(String)` para as matrizes de habilidades de estudantes e vagas, e tabelas dedicadas para candidaturas e atividade diária (calendário de gamificação).
 - **ORM:** **SQLAlchemy** – Mapeamento objeto-relacional com gerenciamento eficiente de sessões (*pooling* transacional), prevenção de *SQL Injection* e deleções em cascata seguras.
 - **Migrações de schema:** **Alembic** – todo o schema é versionado; nenhuma alteração de tabela depende de recriar o banco do zero.
@@ -45,8 +46,9 @@ Play2Work.ai/
     ├── alembic/               # Migrações de schema versionadas (Alembic)
     ├── alembic.ini            # Configuração do Alembic
     ├── auth.py                # Hash/verificação de senha, JWT, dependência get_estudante_atual
+    ├── limiter.py              # Instância compartilhada do slowapi (rate limit por IP)
     ├── database.py            # Configuração de engine, pooling do Postgres e SessionLocal
-    ├── models.py              # Modelagem relacional (Estudante, Vaga, Candidatura, AtividadeDiaria, etc.)
+    ├── models.py              # Modelagem relacional (Estudante, Vaga, Candidatura, QuizSessao, AtividadeDiaria, etc.)
     ├── schemas.py              # Contratos Pydantic e Schemas JSON estritos p/ IA do Gemini
     ├── services.py             # Core de Negócio: gamificação, match de vagas, itinerários e SDK do Gemini
     ├── routes.py               # Endpoints REST (auth, vagas, quiz, itinerário, currículo, ranking)
@@ -105,7 +107,7 @@ JWT_SECRET_KEY=
 
 > **`GEMINI_API_KEY`** — opcional. Sem ela, o app cai automaticamente em respostas de fallback pré-definidas em vez de chamar a IA. Para ativar a IA de verdade, gere uma chave gratuita em [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (free tier: ~1.500 requisições/dia, sem cartão) e cole nessa variável.
 >
-> **`JWT_SECRET_KEY`** — recomendado para dev contínuo. Se não for definida, o backend gera uma chave aleatória a cada `python main.py`, o que **invalida todas as sessões logadas a cada reinício**. Gere uma fixa uma vez com `python -c "import secrets; print(secrets.token_hex(32))"` e cole aqui.
+> **`JWT_SECRET_KEY`** — **obrigatória**. O backend não sobe sem ela (mesmo padrão de `DATABASE_URL`) — não existe fallback de segredo gerado na hora. Gere uma vez com `python -c "import secrets; print(secrets.token_hex(32))"` e cole aqui.
 
 Aplique as migrações (cria/atualiza as tabelas via Alembic — é o jeito correto de manter o schema em dia, inclusive em bancos já existentes):
 
@@ -120,7 +122,7 @@ Depois, popule o banco com dados de teste (pode rodar de novo a qualquer momento
 python seed.py
 ```
 
-Isso cria um estudante de demonstração — login: **nome** `Gabriel Sozza`, **senha** `play2work123` — com itinerário definido e vagas cobrindo os 4 trilhos formativos.
+Isso cria um estudante de demonstração — login: **nome** `Gabriel Sozza`, **senha** `play2work123`, **pergunta de segurança** "Qual o seu sobrenome?" → resposta `sozza` — com itinerário definido e vagas cobrindo os 4 trilhos formativos.
 
 > Sempre que `models.py` mudar (nova coluna, nova tabela), gere uma migração com `alembic revision --autogenerate -m "descrição"` e rode `alembic upgrade head` — não dá pra confiar só no `create_all` do seed.py pra isso, ele cria tabelas novas mas nunca altera uma tabela que já existe.
 
@@ -156,9 +158,19 @@ Os testes usam `app.dependency_overrides` para trocar a sessão do banco e o est
 
 ## 🔐 Fluxo de autenticação (resumo)
 
-- `POST /api/auth/registrar` — cria a conta (nome, e-mail, senha, LinkedIn opcional). E-mail precisa ser único; nome **não** precisa.
-- `POST /api/auth/login` — recebe `nome` + `senha`. Se houver mais de uma conta com o mesmo nome, o backend testa a senha contra cada uma até achar a correta.
-- `POST /api/auth/resetar-senha` — recebe o e-mail cadastrado e devolve uma senha temporária em texto, já marcando a conta para forçar troca no próximo login (não depende de nenhum serviço de e-mail).
+- `POST /api/auth/registrar` — cria a conta (nome, e-mail, senha, pergunta+resposta de segurança, LinkedIn opcional). E-mail precisa ser único; nome **não** precisa. *(10/minuto por IP)*
+- `POST /api/auth/login` — recebe `nome` + `senha`. Se houver mais de uma conta com o mesmo nome, o backend testa a senha contra cada uma até achar a correta. *(15/minuto por IP)*
+- `POST /api/auth/pergunta-seguranca` — primeiro passo do reset: recebe o e-mail e devolve a pergunta de segurança cadastrada, sem revelar mais nada. *(10/minuto por IP)*
+- `POST /api/auth/resetar-senha` — segundo passo: recebe e-mail + resposta de segurança; só se a resposta bater é que devolve uma senha temporária em texto, já marcando a conta para forçar troca no próximo login. Sem a resposta certa, e-mail sozinho não é suficiente pra resetar a senha de ninguém. *(5/minuto por IP)*
 - `POST /api/auth/trocar-senha` — troca a senha (exige a senha atual); é a tela obrigatória exibida logo após um login com senha temporária.
 - `PUT /api/auth/conta` — atualiza o LinkedIn do perfil.
 - Toda rota autenticada usa `Authorization: Bearer <token>`, injetado automaticamente pelo `apiFetch` do front-end a partir do token salvo em `localStorage`.
+
+## 🎯 Integridade do Quiz do Dia
+
+O resultado do quiz não é autodeclarado pelo cliente. O fluxo é:
+
+1. `POST /api/quiz/generate` cria uma `QuizSessao` no banco com o gabarito (resposta certa + explicação de cada pergunta) e devolve ao cliente só `pergunta`+`opcoes` — nunca a resposta certa.
+2. `POST /api/quiz/responder` recebe a alternativa escolhida (ou `null` pra pular) pergunta a pergunta, confere contra o gabarito guardado no servidor e só então devolve se acertou e qual era a resposta certa. Pulos são limitados a 2 por quiz, validado no servidor.
+3. `POST /api/quiz/dica` sorteia uma alternativa errada pra eliminar — o servidor sabe a resposta certa, o cliente nunca calcula isso sozinho. Limitado a 2 por quiz, validado no servidor.
+4. `POST /api/quiz/submit` exige que todas as perguntas tenham sido respondidas e conta acertos/pulos a partir do que o próprio servidor registrou em `/quiz/responder` — o cliente não envia mais "acertos"/"total" de forma autodeclarada.
