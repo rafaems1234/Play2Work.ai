@@ -36,6 +36,8 @@ O projeto foi construído seguindo rigorosos padrões de mercado de governança 
 Play2Work.ai/
 ├── requirements.txt          # Dependências do ecossistema Python (.venv)
 └── app/                      # CORE DO BACK-END (FastAPI)
+    ├── alembic/               # Migrações de schema versionadas (Alembic)
+    ├── alembic.ini            # Configuração do Alembic
     ├── database.py           # Configuração de engine, pooling do Postgres e SessionLocal
     ├── models.py             # Modelagem relacional (Estudante, Vaga, HistoricoEntrevista, Curriculo)
     ├── schemas.py            # Contratos Pydantic e Schemas JSON estritos p/ IA do Gemini
@@ -85,12 +87,20 @@ GEMINI_API_KEY=
 
 > Sem `GEMINI_API_KEY`, o app funciona normalmente — `services.py` cai automaticamente em respostas de fallback pré-definidas em vez de chamar a IA. Para ativar a IA de verdade, gere uma chave gratuita em [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (free tier: ~1.500 requisições/dia, sem cartão) e cole nessa variável.
 
-Popule o banco (cria as tabelas e insere dados de teste — pode rodar de novo a qualquer momento, ele limpa e recria):
+Aplique as migrações (cria/atualiza as tabelas via Alembic — é o jeito correto de manter o schema em dia, inclusive em bancos já existentes):
 
 ```bash
 cd app
+alembic upgrade head
+```
+
+Depois, popule o banco com dados de teste (pode rodar de novo a qualquer momento, ele limpa e recria os registros — mas não mexe mais no schema, isso agora é papel do Alembic):
+
+```bash
 python seed.py
 ```
+
+> Sempre que `models.py` mudar (nova coluna, nova tabela), gere uma migração com `alembic revision --autogenerate -m "descrição"` e rode `alembic upgrade head` — não dá pra confiar só no `create_all` do seed.py pra isso, ele cria tabelas novas mas nunca altera uma tabela que já existe.
 
 Suba a API:
 
