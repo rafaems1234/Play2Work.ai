@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IconSparkle, IconWand, IconWarning, IconDocument, IconClipboard, IconLinkedIn } from './icons';
-import { API_BASE_URL } from '../api';
+import { apiFetch } from '../api';
 
 const formatarCurriculo = (dados) => {
   const listar = (itens) => (Array.isArray(itens) && itens.length ? itens.join(', ') : '—');
@@ -19,7 +19,7 @@ const formatarCurriculo = (dados) => {
   ].join('\n');
 };
 
-const ResumeBuilder = ({ estudanteId = 1 }) => {
+const ResumeBuilder = () => {
   const [habilidades, setHabilidades] = useState('');
   const [curriculoGerado, setCurriculoGerado] = useState('');
   const [carregando, setCarregando] = useState(false);
@@ -33,10 +33,9 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
       setCarregando(true);
       setErro(null);
 
-      const response = await fetch(`${API_BASE_URL}/api/resume/generate`, {
+      const response = await apiFetch('/api/resume/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estudante_id: estudanteId, habilidades_texto: habilidades }),
+        body: JSON.stringify({ habilidades_texto: habilidades }),
       });
 
       if (!response.ok) throw new Error('Falha ao comunicar com a IA para criar o currículo.');
@@ -60,10 +59,9 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
 
     try {
       setSincronizando(true);
-      const response = await fetch(`${API_BASE_URL}/api/resume/export-linkedin`, {
+      const response = await apiFetch('/api/resume/export-linkedin', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estudante_id: estudanteId, texto_curriculo: curriculoGerado }),
+        body: JSON.stringify({ texto_curriculo: curriculoGerado }),
       });
 
       if (!response.ok) throw new Error();

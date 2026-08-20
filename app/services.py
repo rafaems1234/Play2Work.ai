@@ -107,6 +107,10 @@ class AIService:
             logger.warning("Falha ao consultar BrasilAPI para o CNPJ %s: %s", cnpj, e)
         return None
 
+    # Boost aplicado ao match quando a vaga é da mesma área do itinerário/curso
+    # que o estudante escolheu — assim o mural fica de acordo com o curso.
+    BOOST_MATCH_ITINERARIO = 20
+
     @staticmethod
     async def calcular_match_vagas(estudante_id: int, db: Session, pagina: int = 1, tamanho_pagina: int = 20) -> dict:
         estudante = db.query(Estudante).filter(Estudante.id == estudante_id).first()
@@ -122,9 +126,15 @@ class AIService:
             hab_em_comum = hab_estudante.intersection(hab_vaga)
             total_exigido = len(hab_vaga)
             percentual = round((len(hab_em_comum) / max(total_exigido, 1)) * 100)
-            matches_brutos.append((vaga, percentual))
 
-        matches_brutos.sort(key=lambda item: item[1], reverse=True)
+            combina_com_curso = bool(estudante.itinerario) and vaga.area_itinerario == estudante.itinerario
+            if combina_com_curso:
+                percentual = min(100, percentual + AIService.BOOST_MATCH_ITINERARIO)
+
+            matches_brutos.append((vaga, percentual, combina_com_curso))
+
+        # Vagas do curso escolhido sobem pro topo do mural, e dentro de cada grupo ordena por match
+        matches_brutos.sort(key=lambda item: (item[2], item[1]), reverse=True)
 
         total = len(matches_brutos)
         inicio = max(pagina - 1, 0) * tamanho_pagina
@@ -134,7 +144,7 @@ class AIService:
         async with httpx.AsyncClient() as http_client:
             razoes_sociais = await asyncio.gather(*[
                 AIService._buscar_razao_social(http_client, vaga.cnpj_empresa) if vaga.cnpj_empresa else asyncio.sleep(0)
-                for vaga, _ in pagina_atual
+                for vaga, _, _ in pagina_atual
             ])
 
         resultado_matches = [
@@ -144,9 +154,13 @@ class AIService:
                 "empresa": vaga.empresa,
                 "razao_social_real": razao_social_real or "Parceiro Verificado VIVO",
                 "tipo_modalidade": vaga.tipo_modalidade,
+                "localizacao": vaga.localizacao,
+                "habilidades_exigidas": vaga.habilidades_exigidas,
+                "area_itinerario": vaga.area_itinerario,
+                "combina_com_curso": combina_com_curso,
                 "percentual_match": percentual,
             }
-            for (vaga, percentual), razao_social_real in zip(pagina_atual, razoes_sociais)
+            for (vaga, percentual, combina_com_curso), razao_social_real in zip(pagina_atual, razoes_sociais)
         ]
 
         return {"vagas": resultado_matches, "pagina": pagina, "tamanho_pagina": tamanho_pagina, "total": total}

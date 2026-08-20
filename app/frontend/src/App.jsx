@@ -7,9 +7,12 @@ import WeeklyLeaderboard from './components/WeeklyLeaderboard';
 import DailyQuiz from './components/DailyQuiz';
 import CourseSelector from './components/CourseSelector';
 import StreakCalendar from './components/StreakCalendar';
+import Auth from './components/Auth';
+import AccountSettings from './components/AccountSettings';
+import AuroraBackground from './components/AuroraBackground';
 import { IconBriefcase, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconGraduationCap } from './components/icons';
 import { useCountUp } from './hooks/useCountUp';
-import { API_BASE_URL } from './api';
+import { apiFetch, getToken, clearToken } from './api';
 
 const TABS = [
   { id: 'vagas', label: 'Mural', Icon: IconBriefcase },
@@ -21,16 +24,21 @@ const TABS = [
 ];
 
 function App() {
+  const [sessaoCarregando, setSessaoCarregando] = useState(true);
+  const [autenticado, setAutenticado] = useState(false);
+  const [contaInfo, setContaInfo] = useState({ nome: '', email: '', linkedin: '' });
+  const [deveTrocarSenha, setDeveTrocarSenha] = useState(false);
+  const [contaAberta, setContaAberta] = useState(false);
+
   const [abaAtiva, setAbaAtiva] = useState('vagas');
   const [estudanteStatus, setEstudanteStatus] = useState({
-    nome: 'Gabriel',
-    xp_total: 120,
+    nome: '',
+    xp_total: 0,
     nivel_gamificacao: 1,
-    ofensiva_dias: 4,
+    ofensiva_dias: 0,
     categoria_status: '🌌 Na Jornada'
   });
 
-  const ESTUDANTE_ID = 1;
   const xpExibido = useCountUp(estudanteStatus.xp_total);
 
   const [calendarioAberto, setCalendarioAberto] = useState(false);
@@ -41,27 +49,69 @@ function App() {
     setEstudanteStatus(prev => ({ ...prev, ...novosDados }));
   };
 
+  const buscarStatusInicial = async () => {
+    try {
+      const response = await apiFetch('/api/estudante/me/status');
+      if (!response.ok) return;
+      const dados = await response.json();
+      atualizarDadosUsuario({
+        nome: dados.nome,
+        xp_total: dados.xp_total,
+        nivel_gamificacao: dados.nivel_gamificacao,
+        categoria_status: dados.categoria_status,
+        ofensiva_dias: dados.ofensiva_dias,
+        itinerario: dados.itinerario,
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
-    const buscarStatusInicial = async () => {
+    const restaurarSessao = async () => {
+      if (!getToken()) {
+        setSessaoCarregando(false);
+        return;
+      }
       try {
-        const response = await fetch(`${API_BASE_URL}/api/estudante/${ESTUDANTE_ID}/status`);
-        if (!response.ok) return;
-        const dados = await response.json();
-        atualizarDadosUsuario({ ofensiva_dias: dados.ofensiva_dias, itinerario: dados.itinerario });
+        const response = await apiFetch('/api/auth/me');
+        if (response.ok) {
+          const dados = await response.json();
+          setContaInfo({ nome: dados.nome, email: dados.email, linkedin: dados.linkedin });
+          setDeveTrocarSenha(Boolean(dados.deve_trocar_senha));
+          setAutenticado(true);
+          await buscarStatusInicial();
+        }
       } catch (err) {
         console.error(err);
+      } finally {
+        setSessaoCarregando(false);
       }
     };
-    buscarStatusInicial();
+    restaurarSessao();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const aoAutenticar = async (usuario, precisaTrocarSenha) => {
+    setContaInfo({ nome: usuario.nome, email: usuario.email, linkedin: usuario.linkedin });
+    setDeveTrocarSenha(Boolean(precisaTrocarSenha));
+    setAutenticado(true);
+    atualizarDadosUsuario({ nome: usuario.nome });
+    await buscarStatusInicial();
+  };
+
+  const sair = () => {
+    clearToken();
+    setAutenticado(false);
+    setAbaAtiva('vagas');
+  };
 
   const alternarCalendario = async () => {
     const abrindo = !calendarioAberto;
     setCalendarioAberto(abrindo);
     if (abrindo) {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/estudante/${ESTUDANTE_ID}/calendario?ano=${hoje.getFullYear()}&mes=${hoje.getMonth() + 1}`);
+        const response = await apiFetch(`/api/estudante/me/calendario?ano=${hoje.getFullYear()}&mes=${hoje.getMonth() + 1}`);
         if (response.ok) {
           const dados = await response.json();
           setCalendarioDias(dados.dias || []);
@@ -71,6 +121,28 @@ function App() {
       }
     }
   };
+
+  if (sessaoCarregando) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#080812', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <img src="/logo-icon.png" alt="Play2Work.AI" style={{ width: '48px', height: '48px', borderRadius: '14px', opacity: 0.6 }} />
+      </div>
+    );
+  }
+
+  if (!autenticado) {
+    return <Auth aoAutenticar={aoAutenticar} />;
+  }
+
+  if (deveTrocarSenha) {
+    return (
+      <AccountSettings
+        estudante={contaInfo}
+        forcado
+        aoFechar={() => setDeveTrocarSenha(false)}
+      />
+    );
+  }
 
   return (
     <MotionConfig reducedMotion="user">
@@ -88,56 +160,6 @@ function App() {
         .app-pill:hover {
           border-color: rgba(167, 139, 250, 0.3) !important;
           background: rgba(255, 255, 255, 0.05) !important;
-        }
-
-        .aurora-layer {
-          position: fixed;
-          inset: 0;
-          overflow: hidden;
-          z-index: 0;
-          pointer-events: none;
-        }
-
-        .aurora-blob {
-          position: absolute;
-          border-radius: 50%;
-          filter: blur(90px);
-          opacity: 0.32;
-          will-change: transform;
-        }
-
-        .aurora-blob-1 {
-          width: 560px; height: 560px;
-          top: -160px; left: -120px;
-          background: radial-gradient(circle, #7c3aed, transparent 70%);
-          animation: auroraFloat1 24s ease-in-out infinite;
-        }
-
-        .aurora-blob-2 {
-          width: 500px; height: 500px;
-          top: 20%; right: -160px;
-          background: radial-gradient(circle, #22d3ee, transparent 70%);
-          animation: auroraFloat2 28s ease-in-out infinite;
-        }
-
-        .aurora-blob-3 {
-          width: 460px; height: 460px;
-          bottom: -180px; left: 28%;
-          background: radial-gradient(circle, #ec4899, transparent 70%);
-          animation: auroraFloat3 32s ease-in-out infinite;
-        }
-
-        @keyframes auroraFloat1 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50% { transform: translate(70px, 50px) scale(1.15); }
-        }
-        @keyframes auroraFloat2 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50% { transform: translate(-60px, 70px) scale(1.12); }
-        }
-        @keyframes auroraFloat3 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50% { transform: translate(50px, -60px) scale(1.18); }
         }
 
         .app-desktop-only {
@@ -180,16 +202,11 @@ function App() {
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .aurora-blob { animation: none !important; }
           .gradient-text-live { animation: none !important; background-position: 0% 50% !important; }
         }
       `}</style>
 
-      <div className="aurora-layer">
-        <div className="aurora-blob aurora-blob-1" />
-        <div className="aurora-blob aurora-blob-2" />
-        <div className="aurora-blob aurora-blob-3" />
-      </div>
+      <AuroraBackground />
 
       {/* Barra Superior (Header) */}
       <header style={{ background: 'rgba(8, 8, 18, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(167, 139, 250, 0.12)', position: 'sticky', top: 0, zIndex: 50 }}>
@@ -239,6 +256,28 @@ function App() {
               <span>Nível {estudanteStatus.nivel_gamificacao}</span>
               <span style={{ color: '#67e8f9', fontWeight: '600' }}>{xpExibido} XP</span>
             </div>
+
+            <button
+              onClick={() => setContaAberta(true)}
+              title="Sobre a conta"
+              style={{
+                width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
+                background: 'linear-gradient(135deg, #7c3aed, #0e7490)', border: 'none',
+                color: 'white', fontWeight: '800', fontSize: '13px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {(estudanteStatus.nome || '?').charAt(0).toUpperCase()}
+            </button>
+
+            <button
+              onClick={sair}
+              title="Sair"
+              className="app-pill"
+              style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', color: '#f87171', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '700', whiteSpace: 'nowrap' }}
+            >
+              Sair
+            </button>
 
             <AnimatePresence>
               {calendarioAberto && (
@@ -386,24 +425,33 @@ function App() {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           >
-            {abaAtiva === 'vagas' && <JobMatchBoard estudanteId={ESTUDANTE_ID} />}
-            {abaAtiva === 'simulador' && <InterviewSimulator estudanteId={ESTUDANTE_ID} aoGanharXp={atualizarDadosUsuario} />}
+            {abaAtiva === 'vagas' && <JobMatchBoard />}
+            {abaAtiva === 'simulador' && <InterviewSimulator aoGanharXp={atualizarDadosUsuario} />}
             {abaAtiva === 'quiz' && (
               <DailyQuiz
-                estudanteId={ESTUDANTE_ID}
                 aoGanharXp={atualizarDadosUsuario}
                 aoAbrirCursos={() => setAbaAtiva('curso')}
                 aoVoltarMural={() => setAbaAtiva('vagas')}
               />
             )}
             {abaAtiva === 'curso' && (
-              <CourseSelector estudanteId={ESTUDANTE_ID} aoEscolher={(itinerario) => atualizarDadosUsuario({ itinerario })} />
+              <CourseSelector aoEscolher={(itinerario) => atualizarDadosUsuario({ itinerario })} />
             )}
-            {abaAtiva === 'curriculo' && <ResumeBuilder estudanteId={ESTUDANTE_ID} />}
+            {abaAtiva === 'curriculo' && <ResumeBuilder />}
             {abaAtiva === 'ranking' && <WeeklyLeaderboard />}
           </motion.div>
         </AnimatePresence>
       </main>
+
+      <AnimatePresence>
+        {contaAberta && (
+          <AccountSettings
+            estudante={contaInfo}
+            aoFechar={() => setContaAberta(false)}
+            aoAtualizarLinkedin={(linkedin) => setContaInfo((prev) => ({ ...prev, linkedin }))}
+          />
+        )}
+      </AnimatePresence>
 
     </div>
     </MotionConfig>

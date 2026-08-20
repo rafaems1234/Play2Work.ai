@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { IconTarget, IconTrophy, IconWarning, IconSparkle, IconHeart, IconCoins, IconSnowflake, IconGraduationCap } from './icons';
-import { API_BASE_URL } from '../api';
+import { apiFetch } from '../api';
 import { SkeletonStyles, Skeleton } from './Skeleton';
 
 const DICAS_POR_QUIZ = 2;
@@ -29,7 +29,7 @@ const formatarTempo = (segundos) => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
-const DailyQuiz = ({ estudanteId = 1, aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
+const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
   const [quiz, setQuiz] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
@@ -54,7 +54,7 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp, aoAbrirCursos, aoVoltarMural }
 
   const buscarStatus = async () => {
     try {
-      const respStatus = await fetch(`${API_BASE_URL}/api/estudante/${estudanteId}/status`);
+      const respStatus = await apiFetch('/api/estudante/me/status');
       if (respStatus.ok) {
         const dadosStatus = await respStatus.json();
         setStatus(dadosStatus);
@@ -68,7 +68,7 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp, aoAbrirCursos, aoVoltarMural }
   useEffect(() => {
     buscarStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estudanteId]);
+  }, []);
 
   useEffect(() => {
     if (!quiz || resultado) return undefined;
@@ -81,11 +81,7 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp, aoAbrirCursos, aoVoltarMural }
   const comprarVida = async () => {
     try {
       setComprando(true);
-      const response = await fetch(`${API_BASE_URL}/api/vidas/comprar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estudante_id: estudanteId }),
-      });
+      const response = await apiFetch('/api/vidas/comprar', { method: 'POST' });
       const dados = await response.json();
       if (response.ok) {
         setStatus((prev) => ({ ...prev, vidas: dados.vidas, moedas: dados.moedas }));
@@ -104,11 +100,7 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp, aoAbrirCursos, aoVoltarMural }
     try {
       setCarregando(true);
       setErro(null);
-      const response = await fetch(`${API_BASE_URL}/api/quiz/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estudante_id: estudanteId }),
-      });
+      const response = await apiFetch('/api/quiz/generate', { method: 'POST' });
       if (response.status === 403) {
         const dados = await response.json();
         setSemVidas(true);
@@ -143,11 +135,9 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp, aoAbrirCursos, aoVoltarMural }
 
   const enviarResultado = async (pulosParaEnviar) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/quiz/submit`, {
+      const response = await apiFetch('/api/quiz/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          estudante_id: estudanteId,
           tema: quiz.tema,
           acertos,
           total: quiz.perguntas.length,

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { IconRobot, IconFire, IconTarget, IconSparkle, IconTrophy } from './icons';
-import { API_BASE_URL } from '../api';
+import { apiFetch } from '../api';
 import { useCountUp } from '../hooks/useCountUp';
 import Typewriter from './Typewriter';
 
@@ -13,7 +13,7 @@ const dispararConfete = () => {
   setTimeout(() => confetti({ particleCount: 60, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors: cores }), 150);
 };
 
-const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
+const InterviewSimulator = ({ aoGanharXp }) => {
   const [mensagem, setMensagem] = useState('');
   const [historico, setHistorico] = useState([
     {
@@ -68,10 +68,9 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
     ]);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat/message`, {
+      const response = await apiFetch('/api/chat/message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estudante_id: estudanteId, mensagem_usuario: mensagemUsuario }),
+        body: JSON.stringify({ mensagem_usuario: mensagemUsuario }),
       });
 
       if (!response.ok) throw new Error('Erro ao conversar com o servidor');

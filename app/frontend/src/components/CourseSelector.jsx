@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { IconGraduationCap, IconWarning } from './icons';
-import { API_BASE_URL } from '../api';
+import { apiFetch } from '../api';
 import { Skeleton, SkeletonStyles } from './Skeleton';
 
 const gridVariants = {
@@ -14,7 +14,7 @@ const cardVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
 };
 
-const CourseSelector = ({ estudanteId = 1, aoEscolher }) => {
+const CourseSelector = ({ aoEscolher }) => {
   const [itinerarios, setItinerarios] = useState([]);
   const [atual, setAtual] = useState(null);
   const [carregando, setCarregando] = useState(true);
@@ -26,8 +26,8 @@ const CourseSelector = ({ estudanteId = 1, aoEscolher }) => {
       try {
         setCarregando(true);
         const [respIt, respStatus] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/quiz/itinerarios`),
-          fetch(`${API_BASE_URL}/api/estudante/${estudanteId}/status`),
+          apiFetch('/api/quiz/itinerarios'),
+          apiFetch('/api/estudante/me/status'),
         ]);
         if (respIt.ok) setItinerarios((await respIt.json()).itinerarios || []);
         if (respStatus.ok) setAtual((await respStatus.json()).itinerario);
@@ -38,16 +38,15 @@ const CourseSelector = ({ estudanteId = 1, aoEscolher }) => {
       }
     };
     carregar();
-  }, [estudanteId]);
+  }, []);
 
   const escolher = async (nome) => {
     try {
       setEscolhendo(nome);
       setErro(null);
-      const response = await fetch(`${API_BASE_URL}/api/itinerario/escolher`, {
+      const response = await apiFetch('/api/itinerario/escolher', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estudante_id: estudanteId, itinerario: nome }),
+        body: JSON.stringify({ itinerario: nome }),
       });
       if (!response.ok) throw new Error('Não foi possível selecionar o curso.');
       const dados = await response.json();

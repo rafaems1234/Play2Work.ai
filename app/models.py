@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, UniqueConstraint, func
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, Boolean, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship
 from database import Base
@@ -11,8 +11,11 @@ class Estudante(Base):
     __tablename__ = 'estudantes'
 
     id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String(100), nullable=False)
-    email = Column(String(100), unique=True, nullable=False, index=True)
+    nome = Column(String(100), nullable=False, index=True)   # Nome de login -- não é único: se repetir, o login desempata pela senha
+    email = Column(String(100), unique=True, nullable=False, index=True)  # Usado só no cadastro e na recuperação de senha
+    linkedin = Column(String(255), nullable=True)            # URL do perfil do LinkedIn (opcional, coletado no cadastro)
+    senha_hash = Column(String(255), nullable=True)          # Hash bcrypt da senha (nulo = conta antiga sem login)
+    precisa_trocar_senha = Column(Boolean, default=False)    # True = está numa senha temporária de reset, força troca no próximo passo
     nivel_gamificacao = Column(Integer, default=1)
     
     # 🌟 CORRIGIDO: Alterado de 'pontos' para 'xp_total' para bater com as rotas e o React
@@ -44,6 +47,7 @@ class Estudante(Base):
     historico_entrevistas = relationship("HistoricoEntrevista", back_populates="estudante", cascade="all, delete-orphan")
     curriculos = relationship("Curriculo", back_populates="estudante", cascade="all, delete-orphan")
     atividades_diarias = relationship("AtividadeDiaria", back_populates="estudante", cascade="all, delete-orphan")
+    candidaturas = relationship("Candidatura", back_populates="estudante", cascade="all, delete-orphan")
 
 
 class Vaga(Base):
@@ -56,12 +60,16 @@ class Vaga(Base):
     id = Column(Integer, primary_key=True, index=True)
     titulo_vaga = Column(String(150), nullable=False)
     empresa = Column(String(100), nullable=False)
-    cnpj_empresa = Column(String(14), nullable=True)       
+    cnpj_empresa = Column(String(14), nullable=True)
     localizacao = Column(String(100), nullable=False)
     tipo_modalidade = Column(String(50), nullable=False)   # Presencial, Remoto, Híbrido
     habilidades_exigidas = Column(ARRAY(String), nullable=False)
     link_inscricao = Column(String(255), nullable=True)
+    area_itinerario = Column(String(60), nullable=True)     # Qual dos 4 cursos essa vaga combina mais (ITINERARIOS_QUIZ)
+    descricao_completa = Column(Text, nullable=True)        # Texto longo pro modal de detalhes estilo LinkedIn
     criada_em = Column(DateTime, server_default=func.now())
+
+    candidaturas = relationship("Candidatura", back_populates="vaga", cascade="all, delete-orphan")
 
 
 class HistoricoEntrevista(Base):
@@ -97,6 +105,26 @@ class AtividadeDiaria(Base):
     status = Column(String(12), nullable=False)  # 'feito' | 'congelado' | 'perdido'
 
     estudante = relationship("Estudante", back_populates="atividades_diarias")
+
+
+class Candidatura(Base):
+    """
+    Modelo que representa a tabela 'candidaturas'.
+    Registro real (persistido e consultável) de que um estudante se
+    candidatou a uma vaga -- substitui o antigo comportamento de
+    '/jobs/apply-meta', que só devolvia um ID fake sem gravar nada.
+    """
+    __tablename__ = 'candidaturas'
+    __table_args__ = (UniqueConstraint('estudante_id', 'vaga_id', name='uq_candidatura_estudante_vaga'),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False)
+    vaga_id = Column(Integer, ForeignKey('vagas.id', ondelete="CASCADE"), nullable=False)
+    status = Column(String(20), default="enviada")  # enviada | em_analise | recusada | aprovada
+    criada_em = Column(DateTime, server_default=func.now())
+
+    estudante = relationship("Estudante", back_populates="candidaturas")
+    vaga = relationship("Vaga", back_populates="candidaturas")
 
 
 class Curriculo(Base):
