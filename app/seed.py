@@ -42,9 +42,9 @@ def popular_banco():
         print("👤 Inserindo estudante de teste...")
         estudante_teste = models.Estudante(
             id=1,
-            nome="Gabriel Sozza",
-            email="gabriel@escola.com",
-            linkedin="https://linkedin.com/in/gabriel-sozza",
+            nome="Rafael Sozza",
+            email="rafael@escola.com",
+            linkedin="https://linkedin.com/in/rafael-sozza",
             senha_hash=hash_senha(SENHA_DEMO),
             pergunta_seguranca="Qual o seu sobrenome?",
             resposta_seguranca_hash=hash_senha(RESPOSTA_SEGURANCA_DEMO),
@@ -164,7 +164,7 @@ def popular_banco():
 
         db.add_all(vagas)
         db.commit()
-        print(f"🚀 Banco de dados populado com sucesso! (login demo: 'Gabriel Sozza' / {SENHA_DEMO} | resposta de segurança: '{RESPOSTA_SEGURANCA_DEMO}')")
+        print(f"🚀 Banco de dados populado com sucesso! (login demo: 'Rafael Sozza' / {SENHA_DEMO} | resposta de segurança: '{RESPOSTA_SEGURANCA_DEMO}')")
 
     except Exception as e:
         db.rollback()

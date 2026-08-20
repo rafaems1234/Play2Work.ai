@@ -3,6 +3,7 @@ import logging
 import random
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
@@ -122,8 +123,11 @@ def registrar(request: Request, data: RegistroRequest, db: Session = Depends(get
 def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
     # O nome de login não é único -- se houver mais de uma conta com o mesmo
     # nome, quem desempata é a senha: testamos contra cada uma até achar a
-    # que bate.
-    candidatos = db.query(Estudante).filter(Estudante.nome == data.nome).all()
+    # que bate. A comparação ignora maiúsculas/espaços nas pontas -- login
+    # por nome já é mais frágil que por e-mail, não faz sentido também
+    # exigir capitalização exata.
+    nome_normalizado = data.nome.strip().lower()
+    candidatos = db.query(Estudante).filter(func.lower(Estudante.nome) == nome_normalizado).all()
     estudante = next(
         (c for c in candidatos if c.senha_hash and verificar_senha(data.senha, c.senha_hash)),
         None,
