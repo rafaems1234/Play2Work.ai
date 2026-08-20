@@ -9,7 +9,7 @@ from typing import Optional
 # Importações do ecossistema do projeto
 from models import Estudante, Vaga, HistoricoEntrevista, Curriculo
 from database import get_db
-from services import AIService, ITINERARIOS_QUIZ
+from services import AIService, ITINERARIOS_QUIZ, VIDAS_MAXIMAS
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ def chat_interview(data: ChatMessageRequest, db: Session = Depends(get_db)):
     
     historico_texto = " ".join([f"{m.remetente}: {m.mensagem}" for m in reversed(historico)])
 
-    resultado_ia = AIService.processar_entrevista_ia(data.mensagem_usuario, historico_texto)
+    resultado_ia = AIService.processar_entrevista_ia(data.mensagem_usuario, historico_texto, estudante.itinerario)
     
     feedback_gerado = resultado_ia.get("analise_feedback")
     xp_concedido = resultado_ia.get("xp_concedido", 0)
@@ -131,20 +131,7 @@ def chat_interview(data: ChatMessageRequest, db: Session = Depends(get_db)):
         )
         db.add(msg_ia)
 
-        AIService.atualizar_ofensiva_duolingo(estudante, db)
-        AIService.resetar_xp_semanal_se_necessario(estudante)
-
-        # 🌟 CORRIGIDO: Modificado de '.pontos' para '.xp_total' para bater com o models.py
-        estudante.xp_total += xp_concedido
-        estudante.xp_semanal += xp_concedido
-        
-        # 🌟 CORRIGIDO: Modificado de '.pontos' para '.xp_total' no cálculo de level up
-        if  estudante.xp_total >= 300 * estudante.nivel_gamificacao:
-            estudante.nivel_gamificacao += 1 
-
-        # 🌟 CORRIGIDO: Modificado de '.pontos' para '.xp_total' no cálculo da liga/status
-        estudante.categoria_status = AIService.calcular_categoria_status(estudante.xp_total)
-
+        AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
         db.commit()
 
         return {
@@ -155,7 +142,8 @@ def chat_interview(data: ChatMessageRequest, db: Session = Depends(get_db)):
             "nivel_atual": estudante.nivel_gamificacao,
             "ofensiva_dias": estudante.ofensiva_dias,
             "categoria_status": estudante.categoria_status,
-            "missoes_diarias": estudante.missoes_diarias_concluidas
+            "missoes_diarias": estudante.missoes_diarias_concluidas,
+            "moedas": estudante.moedas,
         }
     except Exception:
         db.rollback()
@@ -209,10 +197,22 @@ def generate_quiz(data: QuizGenerateRequest, db: Session = Depends(get_db)):
         estudante.itinerario = data.itinerario
         db.commit()
 
+    AIService.regenerar_vidas(estudante)
+    if estudante.vidas <= 0:
+        db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "mensagem": "Você está sem vidas. Espere regenerar ou compre com moedas.",
+                "proxima_vida_em": estudante.proxima_vida_em.isoformat() if estudante.proxima_vida_em else None,
+            },
+        )
+    db.commit()
+
     tema = AIService.tema_quiz_do_dia(estudante.itinerario)
     quiz = AIService.gerar_quiz_ia(tema, estudante.itinerario)
 
-    return {"itinerario": estudante.itinerario, **quiz}
+    return {"itinerario": estudante.itinerario, "vidas": estudante.vidas, **quiz}
 
 
 # --- Rota Nova: Submeter resultado do Quiz do Dia ---
@@ -223,20 +223,15 @@ def submit_quiz(data: QuizSubmitRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Estudante não encontrado")
 
     acertos = max(0, min(data.acertos, data.total))
+    erros = data.total - acertos
     xp_concedido = acertos * 8  # 8 XP por acerto, mesma ordem de grandeza do simulador
 
     try:
-        AIService.atualizar_ofensiva_duolingo(estudante, db)
-        AIService.resetar_xp_semanal_se_necessario(estudante)
+        AIService.regenerar_vidas(estudante)
+        for _ in range(erros):
+            AIService.perder_vida(estudante)
 
-        estudante.xp_total += xp_concedido
-        estudante.xp_semanal += xp_concedido
-
-        if estudante.xp_total >= 300 * estudante.nivel_gamificacao:
-            estudante.nivel_gamificacao += 1
-
-        estudante.categoria_status = AIService.calcular_categoria_status(estudante.xp_total)
-
+        AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
         db.commit()
 
         return {
@@ -248,11 +243,65 @@ def submit_quiz(data: QuizSubmitRequest, db: Session = Depends(get_db)):
             "ofensiva_dias": estudante.ofensiva_dias,
             "categoria_status": estudante.categoria_status,
             "missoes_diarias": estudante.missoes_diarias_concluidas,
+            "vidas": estudante.vidas,
+            "moedas": estudante.moedas,
+            "congelamentos_disponiveis": estudante.congelamentos_disponiveis,
         }
     except Exception:
         db.rollback()
         logger.exception("Erro ao processar resultado do quiz do estudante %s", data.estudante_id)
         raise HTTPException(status_code=500, detail="Erro ao processar resultado do quiz. Tente novamente mais tarde.")
+
+
+# --- Rota Nova: Status consolidado de gamificação (vidas, moedas, congelamentos) ---
+@router.get("/estudante/{estudante_id}/status")
+def get_status_gamificacao(estudante_id: int, db: Session = Depends(get_db)):
+    estudante = db.query(Estudante).filter(Estudante.id == estudante_id).first()
+    if not estudante:
+        raise HTTPException(status_code=404, detail="Estudante não encontrado")
+
+    AIService.regenerar_vidas(estudante)
+    db.commit()
+
+    return {
+        "vidas": estudante.vidas,
+        "vidas_maximas": VIDAS_MAXIMAS,
+        "proxima_vida_em": estudante.proxima_vida_em.isoformat() if estudante.proxima_vida_em else None,
+        "moedas": estudante.moedas,
+        "congelamentos_disponiveis": estudante.congelamentos_disponiveis,
+        "ofensiva_dias": estudante.ofensiva_dias,
+        "itinerario": estudante.itinerario,
+    }
+
+
+# --- Rota Nova: Calendário de ofensiva do mês ---
+@router.get("/estudante/{estudante_id}/calendario")
+def get_calendario(estudante_id: int, ano: int = Query(...), mes: int = Query(..., ge=1, le=12), db: Session = Depends(get_db)):
+    estudante = db.query(Estudante).filter(Estudante.id == estudante_id).first()
+    if not estudante:
+        raise HTTPException(status_code=404, detail="Estudante não encontrado")
+
+    return {"dias": AIService.calendario_do_mes(estudante_id, ano, mes, db)}
+
+
+# --- Rota Nova: Comprar 1 vida com moedas ---
+@router.post("/vidas/comprar")
+def comprar_vida(data: QuizGenerateRequest, db: Session = Depends(get_db)):
+    estudante = db.query(Estudante).filter(Estudante.id == data.estudante_id).first()
+    if not estudante:
+        raise HTTPException(status_code=404, detail="Estudante não encontrado")
+
+    resultado = AIService.comprar_vida(estudante)
+    if not resultado["sucesso"]:
+        db.commit()
+        raise HTTPException(status_code=400, detail=resultado["motivo"])
+
+    db.commit()
+    return {
+        "sucesso": True,
+        "vidas": estudante.vidas,
+        "moedas": estudante.moedas,
+    }
 
 
 # --- Rota 4: Integração LinkedIn ---

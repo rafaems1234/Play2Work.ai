@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, func
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship
 from database import Base
@@ -27,15 +27,22 @@ class Estudante(Base):
     categoria_status = Column(String(50), default="🌌 Na Jornada") # Categoria/Liga do usuário
     itinerario = Column(String(60), nullable=True)          # Trilha formativa escolhida (ex: "Tecnologia e Dados")
 
+    # ❤️ Vidas, moedas e congelamento de ofensiva (estilo Duolingo)
+    vidas = Column(Integer, default=5)                       # Vidas atuais (máx. VIDAS_MAXIMAS)
+    proxima_vida_em = Column(DateTime, nullable=True)        # Quando a próxima vida perdida regenera (None = vidas cheias)
+    moedas = Column(Integer, default=0)                      # Moeda virtual, dá pra trocar por vida
+    congelamentos_disponiveis = Column(Integer, default=0)   # "Congelamentos de ofensiva" acumulados, gastos automaticamente quando falta um dia
+
     # ARRAY do PostgreSQL para guardar as habilidades
     # Nota: Se usar SQLite para testes, substitua por JSON ou Text se der erro de tipo.
     habilidades = Column(ARRAY(String), default=[])
-    
+
     criado_em = Column(DateTime, server_default=func.now())
 
     # Relacionamentos
     historico_entrevistas = relationship("HistoricoEntrevista", back_populates="estudante", cascade="all, delete-orphan")
     curriculos = relationship("Curriculo", back_populates="estudante", cascade="all, delete-orphan")
+    atividades_diarias = relationship("AtividadeDiaria", back_populates="estudante", cascade="all, delete-orphan")
 
 
 class Vaga(Base):
@@ -71,6 +78,24 @@ class HistoricoEntrevista(Base):
     enviado_em = Column(DateTime, server_default=func.now())
 
     estudante = relationship("Estudante", back_populates="historico_entrevistas")
+
+
+class AtividadeDiaria(Base):
+    """
+    Modelo que representa a tabela 'atividades_diarias'.
+    Um registro por (estudante, dia) usado pra desenhar o calendário de
+    ofensiva: dia com prática ('feito'), dia sem prática mas coberto por um
+    congelamento ('congelado'), ou dia realmente perdido ('perdido').
+    """
+    __tablename__ = 'atividades_diarias'
+    __table_args__ = (UniqueConstraint('estudante_id', 'data', name='uq_atividade_estudante_data'),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False)
+    data = Column(Date, nullable=False)
+    status = Column(String(12), nullable=False)  # 'feito' | 'congelado' | 'perdido'
+
+    estudante = relationship("Estudante", back_populates="atividades_diarias")
 
 
 class Curriculo(Base):

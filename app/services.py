@@ -3,13 +3,21 @@ import json
 import logging
 import asyncio
 import httpx
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from dotenv import load_dotenv
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from google import genai
-from models import Estudante, Vaga
+from models import Estudante, Vaga, AtividadeDiaria
 from schemas import CurriculoIaSchema, AvaliacaoEntrevistaSchema, QuizSchema
+
+# ❤️ Configuração do sistema de vidas/moedas/congelamento de ofensiva
+VIDAS_MAXIMAS = 5
+HORAS_PARA_REGENERAR_VIDA = 4
+CUSTO_MOEDAS_POR_VIDA = 50
+MOEDAS_POR_XP = 0.1              # 1 moeda a cada 10 XP ganho
+DIAS_OFENSIVA_POR_CONGELAMENTO = 7  # a cada 7 dias seguidos, ganha 1 congelamento de graça
 
 # Temas genéricos do Quiz do Dia — usados quando o estudante ainda não
 # escolheu um itinerário. Giram automaticamente por data (mesmo tema pra
@@ -166,13 +174,19 @@ class AIService:
         }
 
     @staticmethod
-    def processar_entrevista_ia(mensagem_usuario: str, historico_conversa: str = "") -> dict:
+    def processar_entrevista_ia(mensagem_usuario: str, historico_conversa: str = "", itinerario: str | None = None) -> dict:
         """
         Avalia dinamicamente as mensagens do aluno. Dá notas baixas e 0 XP para inputs vazios
         ou aleatórios (ex: 'gh3535', 'asdasd'), criando um fluxo viciante e gamificado de verdade.
+        Quando o estudante já escolheu um itinerário formativo, a entrevista gira em torno
+        de vagas e situações daquela área específica (mesmo itinerário usado no Quiz do Dia).
         """
+        contexto_trilha = (
+            f' A vaga simulada é da área de "{itinerario}" — direcione as perguntas e o feedback para esse contexto específico.'
+            if itinerario else ''
+        )
         prompt = f"""
-        Você é o recrutador chefe da Vivo conduzindo uma simulação de entrevista interativa.
+        Você é o recrutador chefe da Vivo conduzindo uma simulação de entrevista interativa.{contexto_trilha}
         Histórico anterior: {historico_conversa}
         O candidato acabou de responder: "{mensagem_usuario}"
 
@@ -323,6 +337,18 @@ class AIService:
             return "🚀 CONTRATADO!"
 
     @staticmethod
+    def _marcar_dia(estudante: Estudante, db: Session, dia: date, status: str) -> None:
+        """Upsert do registro de calendário de um dia específico do estudante."""
+        registro = db.query(AtividadeDiaria).filter(
+            AtividadeDiaria.estudante_id == estudante.id,
+            AtividadeDiaria.data == dia,
+        ).first()
+        if registro:
+            registro.status = status
+        else:
+            db.add(AtividadeDiaria(estudante_id=estudante.id, data=dia, status=status))
+
+    @staticmethod
     def atualizar_ofensiva_duolingo(estudante: Estudante, db: Session) -> None:
         hoje = date.today()
         if estudante.ultimo_treino is None:
@@ -333,11 +359,25 @@ class AIService:
         elif estudante.ultimo_treino == hoje - timedelta(days=1):
             estudante.ofensiva_dias += 1
             estudante.missoes_diarias_concluidas += 1
+        elif estudante.ultimo_treino == hoje - timedelta(days=2) and estudante.congelamentos_disponiveis > 0:
+            # Faltou só 1 dia e tem congelamento disponível: consome 1 e mantém a ofensiva viva
+            estudante.congelamentos_disponiveis -= 1
+            estudante.ofensiva_dias += 1
+            estudante.missoes_diarias_concluidas = 1
+            AIService._marcar_dia(estudante, db, hoje - timedelta(days=1), "congelado")
         else:
+            # Ofensiva quebrada de verdade — marca o dia anterior como perdido (se havia treino em andamento)
+            if estudante.ultimo_treino is not None and estudante.ultimo_treino < hoje - timedelta(days=1):
+                AIService._marcar_dia(estudante, db, hoje - timedelta(days=1), "perdido")
             estudante.ofensiva_dias = 1
             estudante.missoes_diarias_concluidas = 1
-        
+
+        # A cada X dias seguidos de ofensiva, ganha 1 congelamento de graça
+        if estudante.ofensiva_dias > 0 and estudante.ofensiva_dias % DIAS_OFENSIVA_POR_CONGELAMENTO == 0:
+            estudante.congelamentos_disponiveis += 1
+
         estudante.ultimo_treino = hoje
+        AIService._marcar_dia(estudante, db, hoje, "feito")
 
     @staticmethod
     def resetar_xp_semanal_se_necessario(estudante: Estudante) -> None:
@@ -349,3 +389,80 @@ class AIService:
         if estudante.semana_referencia != inicio_semana_atual:
             estudante.xp_semanal = 0
             estudante.semana_referencia = inicio_semana_atual
+
+    @staticmethod
+    def regenerar_vidas(estudante: Estudante) -> None:
+        """
+        Calcula, de forma lazy (sem cron nenhum), quantas vidas já regeneraram
+        desde a última perda com base em proxima_vida_em.
+        """
+        if estudante.vidas >= VIDAS_MAXIMAS or estudante.proxima_vida_em is None:
+            return
+
+        agora = datetime.utcnow()
+        if agora < estudante.proxima_vida_em:
+            return
+
+        intervalo = timedelta(hours=HORAS_PARA_REGENERAR_VIDA)
+        tempo_desde_a_marca = agora - estudante.proxima_vida_em
+        vidas_regeneradas = 1 + int(tempo_desde_a_marca / intervalo)
+
+        estudante.vidas = min(VIDAS_MAXIMAS, estudante.vidas + vidas_regeneradas)
+        estudante.proxima_vida_em = None if estudante.vidas >= VIDAS_MAXIMAS else agora + intervalo
+
+    @staticmethod
+    def perder_vida(estudante: Estudante) -> None:
+        if estudante.vidas <= 0:
+            return
+        estudante.vidas -= 1
+        if estudante.proxima_vida_em is None:
+            estudante.proxima_vida_em = datetime.utcnow() + timedelta(hours=HORAS_PARA_REGENERAR_VIDA)
+
+    @staticmethod
+    def conceder_moedas_por_xp(estudante: Estudante, xp_concedido: int) -> None:
+        if xp_concedido > 0:
+            estudante.moedas += max(1, round(xp_concedido * MOEDAS_POR_XP))
+
+    @staticmethod
+    def processar_gamificacao_pos_atividade(estudante: Estudante, db: Session, xp_concedido: int) -> None:
+        """
+        Ponto único que roda depois de qualquer atividade que dá XP (chat da
+        entrevista ou quiz): atualiza ofensiva, congelamento, calendário,
+        XP total/semanal, nível, moedas e categoria/liga.
+        """
+        AIService.atualizar_ofensiva_duolingo(estudante, db)
+        AIService.resetar_xp_semanal_se_necessario(estudante)
+
+        estudante.xp_total += xp_concedido
+        estudante.xp_semanal += xp_concedido
+
+        if estudante.xp_total >= 300 * estudante.nivel_gamificacao:
+            estudante.nivel_gamificacao += 1
+
+        estudante.categoria_status = AIService.calcular_categoria_status(estudante.xp_total)
+        AIService.conceder_moedas_por_xp(estudante, xp_concedido)
+
+    @staticmethod
+    def comprar_vida(estudante: Estudante) -> dict:
+        """Troca moedas por 1 vida. Retorna {sucesso, motivo} pra rota decidir o status HTTP."""
+        AIService.regenerar_vidas(estudante)
+
+        if estudante.vidas >= VIDAS_MAXIMAS:
+            return {"sucesso": False, "motivo": "Suas vidas já estão cheias."}
+        if estudante.moedas < CUSTO_MOEDAS_POR_VIDA:
+            return {"sucesso": False, "motivo": f"Moedas insuficientes. Precisa de {CUSTO_MOEDAS_POR_VIDA} moedas."}
+
+        estudante.moedas -= CUSTO_MOEDAS_POR_VIDA
+        estudante.vidas += 1
+        if estudante.vidas >= VIDAS_MAXIMAS:
+            estudante.proxima_vida_em = None
+        return {"sucesso": True, "motivo": None}
+
+    @staticmethod
+    def calendario_do_mes(estudante_id: int, ano: int, mes: int, db: Session) -> list[dict]:
+        registros = db.query(AtividadeDiaria).filter(
+            AtividadeDiaria.estudante_id == estudante_id,
+            func.extract('year', AtividadeDiaria.data) == ano,
+            func.extract('month', AtividadeDiaria.data) == mes,
+        ).all()
+        return [{"data": r.data.isoformat(), "status": r.status} for r in registros]

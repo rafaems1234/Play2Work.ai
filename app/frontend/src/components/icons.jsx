@@ -16,6 +16,10 @@ import {
   List,
   X,
   Exam,
+  Heart,
+  Coins,
+  Snowflake,
+  CalendarBlank,
 } from '@phosphor-icons/react';
 
 const wrap = (PhosphorIcon) => (props) => (
@@ -38,3 +42,7 @@ export const IconLinkedIn = wrap(LinkedinLogo);
 export const IconMenu = wrap(List);
 export const IconClose = wrap(X);
 export const IconQuiz = wrap(Exam);
+export const IconHeart = wrap(Heart);
+export const IconCoins = wrap(Coins);
+export const IconSnowflake = wrap(Snowflake);
+export const IconCalendar = wrap(CalendarBlank);

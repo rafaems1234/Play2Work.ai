@@ -29,6 +29,32 @@ def mock_db():
     app.dependency_overrides.pop(get_db, None)
 
 
+def criar_mock_estudante(**overrides):
+    """
+    MagicMock de Estudante com todos os campos numéricos/data usados pela
+    gamificação já setados com valores reais (não MagicMock auto-gerado),
+    pra comparações como `estudante.vidas >= 5` não quebrarem nos testes.
+    """
+    padrao = dict(
+        id=1,
+        xp_total=100,
+        xp_semanal=50,
+        nivel_gamificacao=1,
+        ofensiva_dias=2,
+        missoes_diarias_concluidas=1,
+        ultimo_treino=None,
+        semana_referencia=None,
+        categoria_status="🌌 Na Jornada",
+        itinerario=None,
+        vidas=5,
+        proxima_vida_em=None,
+        moedas=0,
+        congelamentos_disponiveis=0,
+    )
+    padrao.update(overrides)
+    return MagicMock(**padrao)
+
+
 def test_buscar_vagas_match(mock_db):
     # Simula que o estudante ID 1 existe no banco
     mock_estudante = MagicMock()
@@ -64,7 +90,7 @@ def test_aplicar_para_vaga(mock_db):
 @patch("routes.AIService.processar_entrevista_ia")
 def test_interagir_simulador_ia(mock_processar_ia, mock_db):
     # Simula estudante existente com os novos atributos corrigidos (.xp_total)
-    mock_estudante = MagicMock(id=1, xp_total=100, xp_semanal=50, nivel_gamificacao=1, ofensiva_dias=2)
+    mock_estudante = criar_mock_estudante()
     mock_db.query().filter().first.return_value = mock_estudante
 
     # Configura o retorno simulado do Gemini
@@ -119,7 +145,7 @@ def test_listar_itinerarios():
 
 @patch("routes.AIService.gerar_quiz_ia")
 def test_gerar_quiz(mock_gerar_quiz, mock_db):
-    mock_estudante = MagicMock(id=1, itinerario=None)
+    mock_estudante = criar_mock_estudante(itinerario=None)
     mock_db.query().filter().first.return_value = mock_estudante
 
     mock_gerar_quiz.return_value = {
@@ -138,7 +164,7 @@ def test_gerar_quiz(mock_gerar_quiz, mock_db):
 
 
 def test_gerar_quiz_itinerario_invalido(mock_db):
-    mock_estudante = MagicMock(id=1, itinerario=None)
+    mock_estudante = criar_mock_estudante(itinerario=None)
     mock_db.query().filter().first.return_value = mock_estudante
 
     payload = {"estudante_id": 1, "itinerario": "Trilha Que Não Existe"}
@@ -148,7 +174,7 @@ def test_gerar_quiz_itinerario_invalido(mock_db):
 
 
 def test_submeter_quiz(mock_db):
-    mock_estudante = MagicMock(id=1, xp_total=100, xp_semanal=50, nivel_gamificacao=1, ofensiva_dias=2)
+    mock_estudante = criar_mock_estudante()
     mock_db.query().filter().first.return_value = mock_estudante
 
     payload = {"estudante_id": 1, "tema": "Lógica de programação para iniciantes", "acertos": 4, "total": 5}
@@ -157,6 +183,48 @@ def test_submeter_quiz(mock_db):
     assert response.status_code == 200
     assert response.json()["xp_concedido"] == 32  # 4 acertos * 8 XP
     assert response.json()["acertos"] == 4
+
+
+def test_status_gamificacao(mock_db):
+    mock_estudante = criar_mock_estudante(vidas=3, moedas=40, congelamentos_disponiveis=1)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    response = client.get("/api/estudante/1/status")
+
+    assert response.status_code == 200
+    assert response.json()["vidas"] == 3
+    assert response.json()["moedas"] == 40
+    assert response.json()["congelamentos_disponiveis"] == 1
+
+
+def test_quiz_bloqueado_sem_vidas(mock_db):
+    mock_estudante = criar_mock_estudante(vidas=0, proxima_vida_em=None)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    payload = {"estudante_id": 1}
+    response = client.post("/api/quiz/generate", json=payload)
+
+    assert response.status_code == 403
+
+
+def test_comprar_vida_sucesso(mock_db):
+    mock_estudante = criar_mock_estudante(vidas=3, moedas=100)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    response = client.post("/api/vidas/comprar", json={"estudante_id": 1})
+
+    assert response.status_code == 200
+    assert response.json()["vidas"] == 4
+    assert response.json()["moedas"] == 50
+
+
+def test_comprar_vida_sem_moedas_suficientes(mock_db):
+    mock_estudante = criar_mock_estudante(vidas=3, moedas=10)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    response = client.post("/api/vidas/comprar", json={"estudante_id": 1})
+
+    assert response.status_code == 400
 
 
 def test_ranking_ignora_xp_de_semana_anterior(mock_db):

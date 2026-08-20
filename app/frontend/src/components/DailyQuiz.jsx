@@ -1,25 +1,64 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { IconTarget, IconTrophy, IconWarning, IconSparkle } from './icons';
+import { IconTarget, IconTrophy, IconWarning, IconSparkle, IconHeart, IconCoins, IconSnowflake } from './icons';
 import { API_BASE_URL } from '../api';
 import { SkeletonStyles, Skeleton } from './Skeleton';
+import StreakCalendar from './StreakCalendar';
 
 const dispararConfete = () => {
   const cores = ['#a78bfa', '#67e8f9', '#7c3aed', '#34d399'];
   confetti({ particleCount: 120, spread: 75, origin: { y: 0.6 }, colors: cores });
 };
 
+const formatarEspera = (isoData) => {
+  if (!isoData) return null;
+  const ms = new Date(isoData).getTime() - Date.now();
+  if (ms <= 0) return 'já já';
+  const horas = Math.floor(ms / 3_600_000);
+  const minutos = Math.floor((ms % 3_600_000) / 60_000);
+  return horas > 0 ? `${horas}h ${minutos}min` : `${minutos}min`;
+};
+
+const CUSTO_VIDA_MOEDAS = 50;
+
 const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
   const [itinerarios, setItinerarios] = useState([]);
   const [quiz, setQuiz] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
+  const [semVidas, setSemVidas] = useState(false);
+
+  const [status, setStatus] = useState(null);
+  const [calendario, setCalendario] = useState([]);
+  const [comprando, setComprando] = useState(false);
 
   const [indiceAtual, setIndiceAtual] = useState(0);
   const [opcaoSelecionada, setOpcaoSelecionada] = useState(null);
   const [acertos, setAcertos] = useState(0);
   const [resultado, setResultado] = useState(null);
+
+  const hoje = new Date();
+
+  const buscarStatusECalendario = async () => {
+    try {
+      const [respStatus, respCal] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/estudante/${estudanteId}/status`),
+        fetch(`${API_BASE_URL}/api/estudante/${estudanteId}/calendario?ano=${hoje.getFullYear()}&mes=${hoje.getMonth() + 1}`),
+      ]);
+      if (respStatus.ok) {
+        const dadosStatus = await respStatus.json();
+        setStatus(dadosStatus);
+        setSemVidas(dadosStatus.vidas <= 0);
+      }
+      if (respCal.ok) {
+        const dadosCal = await respCal.json();
+        setCalendario(dadosCal.dias || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     const buscarItinerarios = async () => {
@@ -33,7 +72,31 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
       }
     };
     buscarItinerarios();
-  }, []);
+    buscarStatusECalendario();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estudanteId]);
+
+  const comprarVida = async () => {
+    try {
+      setComprando(true);
+      const response = await fetch(`${API_BASE_URL}/api/vidas/comprar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estudante_id: estudanteId }),
+      });
+      const dados = await response.json();
+      if (response.ok) {
+        setStatus((prev) => ({ ...prev, vidas: dados.vidas, moedas: dados.moedas }));
+        setSemVidas(dados.vidas <= 0);
+      } else {
+        setErro(dados.detail || 'Não foi possível comprar a vida.');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setComprando(false);
+    }
+  };
 
   const gerarQuiz = async (itinerario) => {
     try {
@@ -44,9 +107,16 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ estudante_id: estudanteId, itinerario }),
       });
+      if (response.status === 403) {
+        const dados = await response.json();
+        setSemVidas(true);
+        setErro(dados.detail?.mensagem || 'Você está sem vidas.');
+        return;
+      }
       if (!response.ok) throw new Error('Não foi possível gerar o quiz.');
       const dados = await response.json();
       setQuiz(dados);
+      setStatus((prev) => ({ ...prev, vidas: dados.vidas }));
       setIndiceAtual(0);
       setOpcaoSelecionada(null);
       setAcertos(0);
@@ -98,6 +168,16 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
           ofensiva_dias: dados.ofensiva_dias,
           categoria_status: dados.categoria_status,
         });
+      }
+      if (response.ok) {
+        setStatus((prev) => ({
+          ...prev,
+          vidas: dados.vidas,
+          moedas: dados.moedas,
+          congelamentos_disponiveis: dados.congelamentos_disponiveis,
+        }));
+        setSemVidas(dados.vidas <= 0);
+        buscarStatusECalendario();
       }
       if (acertos === quiz.perguntas.length) dispararConfete();
     } catch (err) {
@@ -197,24 +277,76 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
           transform: translateY(-2px);
           box-shadow: 0 12px 32px rgba(124,58,237,0.35);
         }
+
+        .quiz-next-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
+        }
+
+        .quiz-stat {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.08);
+          padding: 6px 12px;
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 700;
+          color: #e2e8f0;
+        }
       `}</style>
       <SkeletonStyles />
 
       <div className="quiz-card">
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '28px' }}>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div>
             <div style={{ fontSize: '12px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>Quiz do Dia</div>
             <h2 style={{ fontSize: '26px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.5px' }}>
               Teste o que <span className="gradient-text-live">você sabe</span>
             </h2>
             <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, marginTop: '8px', maxWidth: '440px' }}>
-              5 perguntas rápidas sobre um itinerário à sua escolha. Acertou, ganhou XP — e ainda conta pra sua ofensiva do dia.
+              5 perguntas rápidas sobre o itinerário escolhido — o mesmo usado pela IA Recrutadora no Simulador. Errou, perde uma vida; acertou, ganha XP e moedas.
             </p>
           </div>
           <IconTarget style={{ fontSize: '24px', color: '#a78bfa', flexShrink: 0, marginTop: '4px' }} />
         </div>
 
-        {!quiz && !carregando && (
+        {status && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '28px' }}>
+            <div className="quiz-stat">
+              {Array.from({ length: status.vidas_maximas }).map((_, i) => (
+                <IconHeart key={i} style={{ color: i < status.vidas ? '#f43f5e' : 'rgba(255,255,255,0.15)' }} />
+              ))}
+            </div>
+            <div className="quiz-stat"><IconCoins style={{ color: '#fbbf24' }} /> {status.moedas}</div>
+            {status.congelamentos_disponiveis > 0 && (
+              <div className="quiz-stat"><IconSnowflake style={{ color: '#67e8f9' }} /> {status.congelamentos_disponiveis} congelamento{status.congelamentos_disponiveis > 1 ? 's' : ''}</div>
+            )}
+          </div>
+        )}
+
+        {semVidas && !quiz && (
+          <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '16px', padding: '22px', textAlign: 'center', marginBottom: '24px' }}>
+            <IconHeart style={{ fontSize: '28px', color: '#f43f5e', marginBottom: '10px' }} />
+            <div style={{ color: '#e2e8f0', fontWeight: '700', marginBottom: '6px' }}>Você está sem vidas</div>
+            <div style={{ color: '#64748b', fontSize: '13px', marginBottom: '16px' }}>
+              {status?.proxima_vida_em ? `Próxima vida em ${formatarEspera(status.proxima_vida_em)}` : 'Aguarde a regeneração ou compre com moedas.'}
+            </div>
+            <button
+              onClick={comprarVida}
+              disabled={comprando || (status?.moedas ?? 0) < CUSTO_VIDA_MOEDAS}
+              className="quiz-next-btn"
+              style={{ maxWidth: '280px', margin: '0 auto' }}
+            >
+              {comprando ? 'Comprando...' : `Comprar 1 vida (${CUSTO_VIDA_MOEDAS} moedas)`}
+            </button>
+          </div>
+        )}
+
+        {!quiz && !carregando && !semVidas && (
           <div>
             <div style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Escolha seu itinerário
@@ -322,6 +454,12 @@ const DailyQuiz = ({ estudanteId = 1, aoGanharXp }) => {
               Fazer outro quiz
             </button>
           </motion.div>
+        )}
+
+        {!quiz && (
+          <div style={{ marginTop: '32px', paddingTop: '28px', borderTop: '1px solid rgba(167,139,250,0.1)' }}>
+            <StreakCalendar ano={hoje.getFullYear()} mes={hoje.getMonth() + 1} dias={calendario} />
+          </div>
         )}
       </div>
     </div>
