@@ -111,6 +111,54 @@ def test_obter_ranking_semanal(mock_db):
     assert response.json()[0]["nome"] == "Rafael"
 
 
+def test_listar_itinerarios():
+    response = client.get("/api/quiz/itinerarios")
+    assert response.status_code == 200
+    assert "Tecnologia e Dados" in response.json()["itinerarios"]
+
+
+@patch("routes.AIService.gerar_quiz_ia")
+def test_gerar_quiz(mock_gerar_quiz, mock_db):
+    mock_estudante = MagicMock(id=1, itinerario=None)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    mock_gerar_quiz.return_value = {
+        "tema": "Lógica de programação para iniciantes",
+        "perguntas": [
+            {"pergunta": "P1?", "opcoes": ["a", "b", "c", "d"], "resposta_correta_index": 0, "explicacao": "..."},
+        ],
+    }
+
+    payload = {"estudante_id": 1, "itinerario": "Tecnologia e Dados"}
+    response = client.post("/api/quiz/generate", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["itinerario"] == "Tecnologia e Dados"
+    assert len(response.json()["perguntas"]) == 1
+
+
+def test_gerar_quiz_itinerario_invalido(mock_db):
+    mock_estudante = MagicMock(id=1, itinerario=None)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    payload = {"estudante_id": 1, "itinerario": "Trilha Que Não Existe"}
+    response = client.post("/api/quiz/generate", json=payload)
+
+    assert response.status_code == 400
+
+
+def test_submeter_quiz(mock_db):
+    mock_estudante = MagicMock(id=1, xp_total=100, xp_semanal=50, nivel_gamificacao=1, ofensiva_dias=2)
+    mock_db.query().filter().first.return_value = mock_estudante
+
+    payload = {"estudante_id": 1, "tema": "Lógica de programação para iniciantes", "acertos": 4, "total": 5}
+    response = client.post("/api/quiz/submit", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["xp_concedido"] == 32  # 4 acertos * 8 XP
+    assert response.json()["acertos"] == 4
+
+
 def test_ranking_ignora_xp_de_semana_anterior(mock_db):
     # Estudante com xp_semanal > 0 mas de uma semana passada não deve aparecer
     semana_passada = date.today() - timedelta(days=date.today().weekday() + 14)

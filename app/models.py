@@ -25,7 +25,8 @@ class Estudante(Base):
     xp_semanal = Column(Integer, default=0)                 # XP acumulado na semana corrente
     semana_referencia = Column(Date, nullable=True)         # Segunda-feira da semana em que xp_semanal foi contabilizado
     categoria_status = Column(String(50), default="🌌 Na Jornada") # Categoria/Liga do usuário
-    
+    itinerario = Column(String(60), nullable=True)          # Trilha formativa escolhida (ex: "Tecnologia e Dados")
+
     # ARRAY do PostgreSQL para guardar as habilidades
     # Nota: Se usar SQLite para testes, substitua por JSON ou Text se der erro de tipo.
     habilidades = Column(ARRAY(String), default=[])

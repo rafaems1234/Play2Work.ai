@@ -9,7 +9,7 @@ from typing import Optional
 # Importações do ecossistema do projeto
 from models import Estudante, Vaga, HistoricoEntrevista, Curriculo
 from database import get_db
-from services import AIService
+from services import AIService, ITINERARIOS_QUIZ
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,16 @@ class LinkedInExportRequest(BaseModel):
 class MetaEmpresaRequest(BaseModel):
     estudante_id: int
     vaga_id: int
+
+class QuizGenerateRequest(BaseModel):
+    estudante_id: int
+    itinerario: Optional[str] = None
+
+class QuizSubmitRequest(BaseModel):
+    estudante_id: int
+    tema: str
+    acertos: int
+    total: int
 
 # ----------------------------------------------------------------------
 # ENDPOINTS / ROTAS
@@ -177,6 +187,72 @@ def get_weekly_ranking(db: Session = Depends(get_db)):
         }
         for idx, est in enumerate(ranking)
     ]
+
+
+# --- Rota Nova: Itinerários formativos disponíveis ---
+@router.get("/quiz/itinerarios")
+def get_itinerarios():
+    return {"itinerarios": list(ITINERARIOS_QUIZ.keys())}
+
+
+# --- Rota Nova: Gerar o Quiz do Dia ---
+@router.post("/quiz/generate")
+def generate_quiz(data: QuizGenerateRequest, db: Session = Depends(get_db)):
+    estudante = db.query(Estudante).filter(Estudante.id == data.estudante_id).first()
+    if not estudante:
+        raise HTTPException(status_code=404, detail="Estudante não encontrado")
+
+    # Se o estudante escolheu (ou trocou) o itinerário agora, persiste a escolha
+    if data.itinerario and data.itinerario != estudante.itinerario:
+        if data.itinerario not in ITINERARIOS_QUIZ:
+            raise HTTPException(status_code=400, detail="Itinerário inválido")
+        estudante.itinerario = data.itinerario
+        db.commit()
+
+    tema = AIService.tema_quiz_do_dia(estudante.itinerario)
+    quiz = AIService.gerar_quiz_ia(tema, estudante.itinerario)
+
+    return {"itinerario": estudante.itinerario, **quiz}
+
+
+# --- Rota Nova: Submeter resultado do Quiz do Dia ---
+@router.post("/quiz/submit")
+def submit_quiz(data: QuizSubmitRequest, db: Session = Depends(get_db)):
+    estudante = db.query(Estudante).filter(Estudante.id == data.estudante_id).first()
+    if not estudante:
+        raise HTTPException(status_code=404, detail="Estudante não encontrado")
+
+    acertos = max(0, min(data.acertos, data.total))
+    xp_concedido = acertos * 8  # 8 XP por acerto, mesma ordem de grandeza do simulador
+
+    try:
+        AIService.atualizar_ofensiva_duolingo(estudante, db)
+        AIService.resetar_xp_semanal_se_necessario(estudante)
+
+        estudante.xp_total += xp_concedido
+        estudante.xp_semanal += xp_concedido
+
+        if estudante.xp_total >= 300 * estudante.nivel_gamificacao:
+            estudante.nivel_gamificacao += 1
+
+        estudante.categoria_status = AIService.calcular_categoria_status(estudante.xp_total)
+
+        db.commit()
+
+        return {
+            "acertos": acertos,
+            "total": data.total,
+            "xp_concedido": xp_concedido,
+            "novos_pontos_totais": estudante.xp_total,
+            "nivel_atual": estudante.nivel_gamificacao,
+            "ofensiva_dias": estudante.ofensiva_dias,
+            "categoria_status": estudante.categoria_status,
+            "missoes_diarias": estudante.missoes_diarias_concluidas,
+        }
+    except Exception:
+        db.rollback()
+        logger.exception("Erro ao processar resultado do quiz do estudante %s", data.estudante_id)
+        raise HTTPException(status_code=500, detail="Erro ao processar resultado do quiz. Tente novamente mais tarde.")
 
 
 # --- Rota 4: Integração LinkedIn ---

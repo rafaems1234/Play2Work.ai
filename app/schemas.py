@@ -24,3 +24,26 @@ class CurriculoRequest(BaseModel):
 class ChatRequest(BaseModel):
     estudante_id: int
     mensagem_usuario: str
+
+# Esquema para o Gemini gerar uma pergunta de múltipla escolha do Quiz
+class QuizPerguntaSchema(BaseModel):
+    pergunta: str = Field(description="Enunciado da pergunta de múltipla escolha")
+    opcoes: List[str] = Field(description="Exatamente 4 alternativas de resposta, curtas e distintas")
+    resposta_correta_index: int = Field(description="Índice (0 a 3) da alternativa correta em 'opcoes'")
+    explicacao: str = Field(description="Explicação curta e didática do porquê a alternativa está certa")
+
+# Esquema para o Gemini gerar o Quiz do dia completo
+class QuizSchema(BaseModel):
+    tema: str = Field(description="Tema geral do quiz, igual ao informado")
+    perguntas: List[QuizPerguntaSchema] = Field(description="Lista com exatamente 5 perguntas sobre o tema")
+
+# Corpo da requisição para gerar o quiz
+class QuizGenerateRequest(BaseModel):
+    estudante_id: int
+
+# Corpo da requisição para enviar o resultado do quiz
+class QuizSubmitRequest(BaseModel):
+    estudante_id: int
+    tema: str
+    acertos: int
+    total: int

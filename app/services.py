@@ -9,7 +9,55 @@ from sqlalchemy.orm import Session
 
 from google import genai
 from models import Estudante, Vaga
-from schemas import CurriculoIaSchema, AvaliacaoEntrevistaSchema
+from schemas import CurriculoIaSchema, AvaliacaoEntrevistaSchema, QuizSchema
+
+# Temas genéricos do Quiz do Dia — usados quando o estudante ainda não
+# escolheu um itinerário. Giram automaticamente por data (mesmo tema pra
+# todo mundo no mesmo dia, sem precisar guardar estado nenhum no banco).
+TEMAS_QUIZ = [
+    "Soft skills e trabalho em equipe",
+    "Postura e etiqueta em entrevistas de emprego",
+    "Lógica de programação para iniciantes",
+    "Comunicação profissional (e-mail, chat, reuniões)",
+    "Organização, produtividade e gestão do tempo",
+    "Ética e postura no ambiente de trabalho",
+]
+
+# Itinerários formativos disponíveis. Cada um tem seus próprios sub-temas de
+# quiz, girando por data do mesmo jeito — assim quem escolhe uma trilha vê
+# conteúdo relevante pra ela em vez de temas genéricos aleatórios.
+ITINERARIOS_QUIZ = {
+    "Tecnologia e Dados": [
+        "Lógica de programação para iniciantes",
+        "Fundamentos de banco de dados e planilhas",
+        "Segurança digital básica no trabalho",
+        "Como explicar um projeto técnico pra quem não é da área",
+    ],
+    "Administrativo e Escritório": [
+        "Organização, produtividade e gestão do tempo",
+        "Comunicação profissional (e-mail, chat, reuniões)",
+        "Rotinas administrativas e arquivamento de documentos",
+        "Etiqueta profissional no escritório",
+    ],
+    "Atendimento e Vendas": [
+        "Comunicação profissional com clientes",
+        "Como lidar com reclamações e clientes difíceis",
+        "Técnicas básicas de venda e negociação",
+        "Postura e escuta ativa no atendimento",
+    ],
+    "Logística e Operações": [
+        "Organização, produtividade e gestão do tempo",
+        "Segurança e boas práticas em ambientes operacionais",
+        "Trabalho em equipe em processos operacionais",
+        "Noções básicas de estoque e conferência",
+    ],
+    "Marketing e Comunicação": [
+        "Comunicação profissional (e-mail, chat, reuniões)",
+        "Noções básicas de redes sociais para marcas",
+        "Como dar e receber feedback criativo",
+        "Ética e postura no ambiente de trabalho",
+    ],
+}
 
 # Garante que GEMINI_API_KEY esteja carregada mesmo se este módulo for
 # importado antes de database.py (que também carrega o .env)
@@ -161,6 +209,102 @@ class AIService:
             "analise_feedback": "Ótima resposta! Você demonstrar clareza sobre suas competências chama a atenção de forma positiva.",
             "xp_concedido": 35,
             "proxima_pergunta": "Excelente progresso. Como você lida com feedbacks negativos ou críticas em trabalhos em equipe?"
+        }
+
+    @staticmethod
+    def tema_quiz_do_dia(itinerario: str | None = None) -> str:
+        """
+        Escolhe o tema do dia de forma determinística (mesmo tema o dia
+        inteiro pra todo mundo). Se o estudante tiver um itinerário
+        escolhido, sorteia dentro dos sub-temas daquela trilha específica.
+        """
+        temas = ITINERARIOS_QUIZ.get(itinerario, TEMAS_QUIZ)
+        return temas[date.today().toordinal() % len(temas)]
+
+    @staticmethod
+    def gerar_quiz_ia(tema: str, itinerario: str | None = None) -> dict:
+        """
+        Gera um quiz de 5 perguntas de múltipla escolha sobre o tema do dia,
+        no mesmo padrão de JSON estrito usado no currículo e na entrevista.
+        """
+        contexto_trilha = f' O estudante está seguindo o itinerário formativo "{itinerario}", então contextualize os exemplos para essa área.' if itinerario else ''
+        prompt = f"""
+        Atue como um instrutor de preparação para o primeiro emprego de jovens aprendizes.
+        Crie um quiz de exatamente 5 perguntas de múltipla escolha (4 alternativas cada,
+        só uma correta) sobre o tema: "{tema}".{contexto_trilha}
+        As perguntas devem ser objetivas, práticas e adequadas para jovens sem experiência
+        prévia de mercado de trabalho. Evite pegadinhas — o objetivo é ensinar, não confundir.
+        """
+
+        if client:
+            try:
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=prompt,
+                    config={
+                        'response_mime_type': 'application/json',
+                        'response_schema': QuizSchema,
+                    },
+                )
+                return json.loads(response.text)
+            except Exception as e:
+                logger.warning("Falha ao gerar quiz via Gemini, usando fallback: %s", e)
+
+        # Fallback estático caso a API falhe ou não tenha chave configurada
+        return {
+            "tema": tema,
+            "perguntas": [
+                {
+                    "pergunta": "Você chega 10 minutos atrasado para uma reunião online importante. Qual a melhor atitude?",
+                    "opcoes": [
+                        "Entrar sem avisar e fingir que não houve atraso",
+                        "Entrar, pedir desculpas rapidamente e focar no que está sendo dito",
+                        "Não entrar mais, já que já perdeu o começo",
+                        "Mandar mensagem culpando o trânsito ou a internet em detalhes",
+                    ],
+                    "resposta_correta_index": 1,
+                    "explicacao": "Reconhecer o atraso com objetividade e seguir em frente demonstra profissionalismo sem gerar mais atrito.",
+                },
+                {
+                    "pergunta": "Qual dessas é uma soft skill valorizada por recrutadores?",
+                    "opcoes": ["Comunicação clara", "Velocidade de digitação", "Memorização de fórmulas", "Uso avançado de planilhas"],
+                    "resposta_correta_index": 0,
+                    "explicacao": "Soft skills são competências comportamentais — comunicação clara é uma das mais buscadas em qualquer área.",
+                },
+                {
+                    "pergunta": "Você recebeu um feedback negativo do seu líder. O que fazer?",
+                    "opcoes": [
+                        "Ignorar, já que é só opinião",
+                        "Discutir na hora para provar que está certo",
+                        "Ouvir com atenção e perguntar como pode melhorar",
+                        "Evitar aquele líder daí em diante",
+                    ],
+                    "resposta_correta_index": 2,
+                    "explicacao": "Feedback é uma ferramenta de crescimento — ouvir e buscar melhorar é o que diferencia profissionais em evolução.",
+                },
+                {
+                    "pergunta": "Num e-mail profissional, o que é mais adequado?",
+                    "opcoes": [
+                        "Escrever tudo em letras maiúsculas para dar ênfase",
+                        "Usar linguagem informal e gírias",
+                        "Ser claro, objetivo e educado, com saudação e assinatura",
+                        "Enviar sem assunto para ser mais rápido",
+                    ],
+                    "resposta_correta_index": 2,
+                    "explicacao": "Clareza, objetividade e educação são a base de uma comunicação profissional eficaz por e-mail.",
+                },
+                {
+                    "pergunta": "Você tem 3 tarefas para hoje e pouco tempo. Qual a melhor estratégia?",
+                    "opcoes": [
+                        "Fazer todas ao mesmo tempo",
+                        "Priorizar a mais urgente/importante primeiro",
+                        "Fazer a mais fácil só para riscar da lista",
+                        "Esperar até o fim do dia para decidir",
+                    ],
+                    "resposta_correta_index": 1,
+                    "explicacao": "Priorizar por urgência e importância é a base de uma boa gestão de tempo.",
+                },
+            ],
         }
 
     @staticmethod
