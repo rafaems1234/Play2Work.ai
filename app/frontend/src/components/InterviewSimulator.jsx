@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
-import { IconRobot, IconFire, IconTarget, IconSparkle } from './icons';
+import { motion, AnimatePresence } from 'framer-motion';
+import confetti from 'canvas-confetti';
+import { IconRobot, IconFire, IconTarget, IconSparkle, IconTrophy } from './icons';
 import { API_BASE_URL } from '../api';
+import { useCountUp } from '../hooks/useCountUp';
+import Typewriter from './Typewriter';
+
+const dispararConfete = () => {
+  const cores = ['#a78bfa', '#67e8f9', '#7c3aed', '#34d399'];
+  confetti({ particleCount: 130, spread: 75, origin: { y: 0.6 }, colors: cores });
+  setTimeout(() => confetti({ particleCount: 60, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, colors: cores }), 150);
+  setTimeout(() => confetti({ particleCount: 60, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors: cores }), 150);
+};
 
 const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
   const [mensagem, setMensagem] = useState('');
@@ -14,12 +25,34 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
     }
   ]);
   const [carregando, setCarregando] = useState(false);
+  const [sessaoConcluida, setSessaoConcluida] = useState(false);
 
   // Estados locais sincronizados com o back-end
   const [pontos, setPontos] = useState(120);
   const [nivel, setNivel] = useState(1);
   const [ofensiva, setOfensiva] = useState(4);
   const [missoes, setMissoes] = useState(2);
+
+  const pontosExibidos = useCountUp(pontos);
+  const xpGanhoSessao = historico.reduce((acc, m) => acc + (m.xp_ganho || 0), 0);
+
+  const encerrarSimulacao = () => {
+    setSessaoConcluida(true);
+    dispararConfete();
+  };
+
+  const novaSimulacao = () => {
+    setSessaoConcluida(false);
+    setHistorico([
+      {
+        id: Date.now(),
+        remetente: 'ai',
+        texto: 'Bora de novo! Me conta sobre outra experiência ou habilidade sua para praticarmos.',
+        feedback: null,
+        xp_ganho: null,
+      },
+    ]);
+  };
 
   const enviarMensagem = async () => {
     if (!mensagem.trim() || carregando) return;
@@ -131,7 +164,7 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
         }
 
         .sim-msg-user {
-          background: linear-gradient(135deg, rgba(167,139,250,0.25) 0%, rgba(103,232,249,0.15) 100%);
+          background: rgba(167,139,250,0.16);
           border: 1px solid rgba(167,139,250,0.3);
           color: #e2e8f0;
           border-radius: 16px;
@@ -213,18 +246,64 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
         }
+
+        .sim-end-btn {
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.12);
+          color: #cbd5e1;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 6px 12px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-family: inherit;
+          transition: all 0.2s;
+        }
+
+        .sim-end-btn:hover {
+          background: rgba(167,139,250,0.18);
+          border-color: rgba(167,139,250,0.35);
+          color: #e2e8f0;
+        }
+
+        .sim-complete-card {
+          background: rgba(167,139,250,0.08);
+          border: 1px solid rgba(167,139,250,0.3);
+          border-radius: 16px;
+          padding: 20px 24px;
+          text-align: center;
+        }
+
+        .sim-restart-btn {
+          margin-top: 14px;
+          background: #7c3aed;
+          border: none;
+          border-radius: 10px;
+          color: white;
+          font-weight: 700;
+          font-size: 13px;
+          padding: 10px 20px;
+          cursor: pointer;
+          font-family: inherit;
+          transition: all 0.2s;
+        }
+
+        .sim-restart-btn:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 8px 20px rgba(124,58,237,0.3);
+        }
       `}</style>
 
       {/* Stats bar */}
       <div style={{ maxWidth: '760px', width: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
         <div className="sim-stat-card">
-          <div style={{ background: 'linear-gradient(135deg, #7c3aed, #0e7490)', borderRadius: '8px', padding: '5px 10px', fontSize: '12px', fontWeight: '700', color: 'white', letterSpacing: '0.5px' }}>
+          <div style={{ background: '#7c3aed', borderRadius: '8px', padding: '5px 10px', fontSize: '12px', fontWeight: '700', color: 'white', letterSpacing: '0.5px' }}>
             NÍV {nivel}
           </div>
           <div className="sim-xp-bar-track">
             <div className="sim-xp-bar-fill" style={{ width: `${xpProgress}%` }} />
           </div>
-          <span style={{ fontSize: '12px', color: '#a78bfa', fontWeight: '700' }}>{pontos} XP</span>
+          <span style={{ fontSize: '12px', color: '#a78bfa', fontWeight: '700' }}>{pontosExibidos} XP</span>
         </div>
 
         <div style={{ display: 'flex', gap: '12px' }}>
@@ -250,7 +329,9 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
       <div style={{
         maxWidth: '760px',
         width: '100%',
-        background: 'rgba(255,255,255,0.02)',
+        background: 'rgba(255,255,255,0.04)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
         border: '1px solid rgba(167,139,250,0.15)',
         borderRadius: '24px',
         overflow: 'hidden',
@@ -260,7 +341,7 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
       }}>
         {/* Header */}
         <div style={{
-          background: 'linear-gradient(135deg, rgba(124,58,237,0.3) 0%, rgba(14,116,144,0.2) 100%)',
+          background: 'rgba(124,58,237,0.14)',
           borderBottom: '1px solid rgba(167,139,250,0.15)',
           padding: '20px 24px',
           display: 'flex',
@@ -273,9 +354,16 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
             </div>
             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Simulador de Entrevista · Vaga Jovem Aprendiz</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div className="sim-pulse" style={{ background: carregando ? '#facc15' : '#34d399' }} />
-            <span style={{ fontSize: '12px', color: '#64748b' }}>{carregando ? 'analisando' : 'online'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="sim-pulse" style={{ background: carregando ? '#facc15' : '#34d399' }} />
+              <span style={{ fontSize: '12px', color: '#64748b' }}>{carregando ? 'analisando' : 'online'}</span>
+            </div>
+            {!sessaoConcluida && historico.some((m) => m.remetente === 'user') && (
+              <button onClick={encerrarSimulacao} className="sim-end-btn">
+                Encerrar simulação
+              </button>
+            )}
           </div>
         </div>
 
@@ -292,15 +380,21 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
           maxHeight: '520px',
         }}>
           {historico.map((msg) => (
-            <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <motion.div
+              key={msg.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}
+            >
               <div style={{ display: 'flex', justifyContent: msg.remetente === 'user' ? 'flex-end' : 'flex-start' }}>
                 {msg.remetente === 'ai' && (
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg,#7c3aed,#0e7490)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', marginRight: '8px', flexShrink: 0, alignSelf: 'flex-end' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', marginRight: '8px', flexShrink: 0, alignSelf: 'flex-end' }}>
                     <IconRobot />
                   </div>
                 )}
                 <div className={msg.remetente === 'user' ? 'sim-msg-user' : 'sim-msg-ai'}>
-                  {msg.texto}
+                  {msg.remetente === 'ai' ? <Typewriter text={msg.texto} /> : msg.texto}
                 </div>
               </div>
 
@@ -314,36 +408,65 @@ const InterviewSimulator = ({ estudanteId = 1, aoGanharXp }) => {
                   </div>
                 </div>
               )}
-            </div>
+            </motion.div>
           ))}
 
           {carregando && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg,#7c3aed,#0e7490)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', flexShrink: 0 }}><IconRobot /></div>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', flexShrink: 0 }}><IconRobot /></div>
               <p className="sim-typing">A IA está analisando sua resposta...</p>
             </div>
           )}
         </div>
 
-        {/* Input */}
-        <div style={{ padding: '16px 20px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(167,139,250,0.1)', display: 'flex', gap: '10px' }}>
-          <input
-            type="text"
-            placeholder={carregando ? 'Aguarde a IA...' : 'Digite sua resposta aqui...'}
-            className="sim-input"
-            value={mensagem}
-            onChange={(e) => setMensagem(e.target.value)}
-            disabled={carregando}
-            onKeyDown={(e) => e.key === 'Enter' && enviarMensagem()}
-          />
-          <button
-            onClick={enviarMensagem}
-            disabled={carregando}
-            className="sim-send-btn"
-          >
-            {carregando ? '···' : 'Enviar →'}
-          </button>
-        </div>
+        {/* Input / Conclusão */}
+        <AnimatePresence mode="wait">
+          {sessaoConcluida ? (
+            <motion.div
+              key="complete"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              style={{ padding: '20px' }}
+            >
+              <div className="sim-complete-card">
+                <div style={{ fontSize: '15px', fontWeight: '800', color: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <IconTrophy /> Simulação concluída!
+                </div>
+                <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '6px' }}>
+                  Você ganhou <strong style={{ color: '#67e8f9' }}>{xpGanhoSessao} XP</strong> nessa sessão de prática.
+                </div>
+                <button onClick={novaSimulacao} className="sim-restart-btn">
+                  Nova simulação
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="input"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{ padding: '16px 20px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(167,139,250,0.1)', display: 'flex', gap: '10px' }}
+            >
+              <input
+                type="text"
+                placeholder={carregando ? 'Aguarde a IA...' : 'Digite sua resposta aqui...'}
+                className="sim-input"
+                value={mensagem}
+                onChange={(e) => setMensagem(e.target.value)}
+                disabled={carregando}
+                onKeyDown={(e) => e.key === 'Enter' && enviarMensagem()}
+              />
+              <button
+                onClick={enviarMensagem}
+                disabled={carregando}
+                className="sim-send-btn"
+              >
+                {carregando ? '···' : 'Enviar →'}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

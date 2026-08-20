@@ -1,6 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { IconTarget, IconPin, IconBuilding, IconWarning } from './icons';
+import { motion } from 'framer-motion';
+import { IconPin, IconBuilding, IconWarning } from './icons';
 import { API_BASE_URL } from '../api';
+import { SkeletonStyles, JobCardSkeleton } from './Skeleton';
+
+
+
+const gridVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.07 } },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
+};
+
+const handleCardMouseMove = (e) => {
+  const rect = e.currentTarget.getBoundingClientRect();
+  e.currentTarget.style.setProperty('--mx', `${e.clientX - rect.left}px`);
+  e.currentTarget.style.setProperty('--my', `${e.clientY - rect.top}px`);
+};
 
 const JobMatchBoard = ({ estudanteId = 1 }) => {
   const [oportunidades, setOportunidades] = useState([]);
@@ -59,17 +79,19 @@ const JobMatchBoard = ({ estudanteId = 1 }) => {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#080812', padding: '48px 24px' }}>
+    <div style={{ minHeight: '100vh', padding: '48px 24px' }}>
       <style>{`
         .job-card {
-          background: rgba(255,255,255,0.025);
-          border: 1px solid rgba(167,139,250,0.12);
+          background: rgba(255,255,255,0.04);
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
+          border: 1px solid rgba(167,139,250,0.14);
           border-radius: 20px;
           padding: 24px;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          transition: all 0.25s ease;
+          transition: border-color 0.25s ease, background 0.25s ease;
           position: relative;
           overflow: hidden;
         }
@@ -79,21 +101,36 @@ const JobMatchBoard = ({ estudanteId = 1 }) => {
           position: absolute;
           top: 0; left: 0; right: 0;
           height: 2px;
-          background: linear-gradient(90deg, #7c3aed, #0e7490);
+          background: #a78bfa;
           opacity: 0;
           transition: opacity 0.25s;
+          z-index: 2;
+        }
+
+        .job-card::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(480px circle at var(--mx, 50%) var(--my, 50%), rgba(167,139,250,0.16), transparent 60%);
+          opacity: 0;
+          transition: opacity 0.3s;
+          pointer-events: none;
         }
 
         .job-card:hover {
-          border-color: rgba(167,139,250,0.28);
-          background: rgba(167,139,250,0.04);
-          transform: translateY(-3px);
-          box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+          border-color: rgba(167,139,250,0.32);
         }
 
         .job-card:hover::before { opacity: 1; }
+        .job-card:hover::after { opacity: 1; }
+
+        .match-glow {
+          box-shadow: 0 0 14px rgba(52,211,153,0.25);
+        }
 
         .apply-btn {
+          position: relative;
+          z-index: 1;
           width: 100%;
           border: none;
           border-radius: 12px;
@@ -119,44 +156,43 @@ const JobMatchBoard = ({ estudanteId = 1 }) => {
           cursor: not-allowed;
         }
 
-        .spinner {
-          width: 40px; height: 40px;
-          border: 2px solid rgba(167,139,250,0.15);
-          border-top-color: #a78bfa;
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
-          margin: 0 auto 16px;
-        }
-
-        @keyframes spin { to { transform: rotate(360deg); } }
-
         .jobs-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
           gap: 20px;
         }
       `}</style>
+      <SkeletonStyles />
 
       <div style={{ maxWidth: '1060px', margin: '0 auto' }}>
-        <header style={{ marginBottom: '48px', textAlign: 'center' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '99px', padding: '6px 16px', marginBottom: '20px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '1px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><IconTarget /> Match Inteligente</span>
+        <header style={{
+          marginBottom: '40px',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '20px',
+          borderBottom: '1px solid rgba(167,139,250,0.1)',
+          paddingBottom: '28px',
+        }}>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>
+              Match Inteligente
+            </div>
+            <h1 style={{ fontSize: '32px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.6px' }}>
+              Mural de <span className="gradient-text-live">Oportunidades</span>
+            </h1>
           </div>
-          <h1 style={{ fontSize: '36px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.8px', marginBottom: '12px' }}>
-            Seu Mural de{' '}
-            <span style={{ background: 'linear-gradient(135deg, #a78bfa, #67e8f9)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-              Oportunidades
-            </span>
-          </h1>
-          <p style={{ color: '#64748b', fontSize: '15px', maxWidth: '480px', margin: '0 auto', lineHeight: 1.6 }}>
+          <p style={{ color: '#64748b', fontSize: '14px', maxWidth: '320px', lineHeight: 1.6, textAlign: 'right' }}>
             Nossa IA cruzou seu perfil com as melhores vagas da região e validou os dados corporativos.
           </p>
         </header>
 
         {carregando && (
-          <div style={{ textAlign: 'center', padding: '80px 0' }}>
-            <div className="spinner" />
-            <p style={{ color: '#475569', fontSize: '14px', fontStyle: 'italic' }}>Calculando os melhores matches para você...</p>
+          <div className="jobs-grid">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <JobCardSkeleton key={i} />
+            ))}
           </div>
         )}
 
@@ -168,17 +204,24 @@ const JobMatchBoard = ({ estudanteId = 1 }) => {
         )}
 
         {!carregando && !erro && (
-          <div className="jobs-grid">
+          <motion.div className="jobs-grid" variants={gridVariants} initial="hidden" animate="visible">
             {oportunidades.length === 0 ? (
               <p style={{ color: '#475569', textAlign: 'center', gridColumn: '1/-1', padding: '60px 0' }}>Nenhuma vaga encontrada para o seu perfil.</p>
             ) : (
               oportunidades.map((vaga) => {
                 const percentual = vaga.percentual_match || 0;
                 const matchStyle = getMatchStyle(percentual);
-                
+
                 return (
-                  <div key={vaga.id || Math.random()} className="job-card">
-                    <div>
+                  <motion.div
+                    key={vaga.id || Math.random()}
+                    className="job-card"
+                    variants={cardVariants}
+                    whileHover={{ y: -8, scale: 1.02, boxShadow: '0 20px 45px rgba(0,0,0,0.35)' }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                    onMouseMove={handleCardMouseMove}
+                  >
+                    <div style={{ position: 'relative', zIndex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '16px' }}>
                         <div style={{ flex: 1 }}>
                           <h2 style={{ fontSize: '16px', fontWeight: '700', color: '#e2e8f0', marginBottom: '4px', letterSpacing: '-0.2px' }}>
@@ -190,7 +233,7 @@ const JobMatchBoard = ({ estudanteId = 1 }) => {
                           </div>
                         </div>
 
-                        <div style={{
+                        <div className={percentual >= 80 ? 'match-glow' : ''} style={{
                           flexShrink: 0,
                           background: matchStyle.bg,
                           border: `1px solid ${matchStyle.border}`,
@@ -224,11 +267,11 @@ const JobMatchBoard = ({ estudanteId = 1 }) => {
                     >
                       {aplicandoId === vaga.id ? 'Enviando perfil...' : 'Ver detalhes e aplicar →'}
                     </button>
-                  </div>
+                  </motion.div>
                 );
               })
             )}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>

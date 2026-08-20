@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { IconSparkle, IconWand, IconWarning, IconDocument, IconClipboard, IconLinkedIn } from './icons';
 import { API_BASE_URL } from '../api';
 
@@ -83,7 +84,9 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
     <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
       <style>{`
         .resume-card {
-          background: rgba(255,255,255,0.025);
+          background: rgba(255,255,255,0.045);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
           border: 1px solid rgba(167,139,250,0.15);
           border-radius: 24px;
           padding: 40px;
@@ -244,19 +247,17 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
 
       <div className="resume-card">
         {/* Header */}
-        <div style={{ marginBottom: '32px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '99px', padding: '5px 14px', marginBottom: '16px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '1px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><IconSparkle /> IA Generativa</span>
+        <div style={{ marginBottom: '32px', display: 'flex', gap: '16px', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>IA Generativa</div>
+            <h2 style={{ fontSize: '26px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.5px', marginBottom: '10px' }}>
+              Gerador de <span className="gradient-text-live">Currículo</span>
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, maxWidth: '440px' }}>
+              Não sabe como montar um currículo? Digite o que você gosta e sabe fazer — a IA formata tudo como um profissional.
+            </p>
           </div>
-          <h2 style={{ fontSize: '28px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.6px', marginBottom: '10px' }}>
-            Gerador de{' '}
-            <span style={{ background: 'linear-gradient(135deg, #a78bfa, #67e8f9)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-              Currículo
-            </span>
-          </h2>
-          <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6 }}>
-            Não sabe como montar um currículo? Digite o que você gosta e sabe fazer — a IA formata tudo como um profissional.
-          </p>
+          <IconSparkle style={{ fontSize: '24px', color: '#a78bfa', flexShrink: 0, marginTop: '4px' }} />
         </div>
 
         {/* Input */}
@@ -301,8 +302,14 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
           </div>
         )}
 
+        <AnimatePresence>
         {curriculoGerado && (
-          <div className="result-container">
+          <motion.div
+            className="result-container"
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          >
             <div className="result-header">
               <span style={{ fontSize: '13px', fontWeight: '700', color: '#a78bfa', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><IconDocument /> Currículo gerado</span>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -326,8 +333,9 @@ const ResumeBuilder = ({ estudanteId = 1 }) => {
             <div className="result-body">
               {curriculoGerado}
             </div>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </div>
     </div>
   );
