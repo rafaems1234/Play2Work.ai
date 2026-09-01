@@ -12,6 +12,7 @@ from main import app
 from database import get_db
 from auth import get_estudante_atual, hash_senha
 from limiter import limiter
+from services import AIService
 
 client = TestClient(app=app)
 
@@ -59,6 +60,7 @@ def criar_mock_estudante(**overrides):
         ultimo_treino=None,
         semana_referencia=None,
         categoria_status="🌌 Na Jornada",
+        liga="Bronze",
         itinerario=None,
         vidas=5,
         proxima_vida_em=None,
@@ -238,9 +240,12 @@ def test_trocar_senha_atual_incorreta(mock_db, mock_estudante_logado):
     assert resposta.status_code == 401
 
 
-def test_rota_protegida_sem_token(mock_db):
+def test_rota_sem_estudante_unico_retorna_404(mock_db):
+    # Sem tela de login, todas as rotas operam sobre o único estudante da
+    # base (ver ESTUDANTE_UNICO_ID em auth.py); se ele não existir, 404.
+    mock_db.query().filter().first.return_value = None
     response = client.get("/api/estudante/me/status")
-    assert response.status_code == 401
+    assert response.status_code == 404
 
 
 def test_login_tem_rate_limit(mock_db):
@@ -313,7 +318,7 @@ def test_gerar_curriculo_ia(mock_gerar_ia, mock_db, mock_estudante_logado):
     assert response.json()["sucesso"] is True
 
 
-def test_obter_ranking_semanal(mock_db):
+def test_obter_ranking_semanal(mock_db, mock_estudante_logado):
     inicio_semana_atual = date.today() - timedelta(days=date.today().weekday())
     mock_estudante = MagicMock(
         nome="Rafael",
@@ -325,8 +330,10 @@ def test_obter_ranking_semanal(mock_db):
 
     response = client.get("/api/ranking")
     assert response.status_code == 200
-    assert len(response.json()) > 0
-    assert response.json()[0]["nome"] == "Rafael"
+    dados = response.json()
+    assert dados["liga"] == "Bronze"
+    assert len(dados["ranking"]) > 0
+    assert dados["ranking"][0]["nome"] == "Rafael"
 
 
 def test_listar_itinerarios():
@@ -526,7 +533,7 @@ def test_quiz_imperfeito_reseta_sequencia_de_perfeitos(mock_db, mock_estudante_l
     assert response.json()["quizzes_perfeitos_seguidos"] == 0
 
 
-def test_ranking_ignora_xp_de_semana_anterior(mock_db):
+def test_ranking_ignora_xp_de_semana_anterior(mock_db, mock_estudante_logado):
     # Estudante com xp_semanal > 0 mas de uma semana passada não deve aparecer
     semana_passada = date.today() - timedelta(days=date.today().weekday() + 14)
     mock_estudante = MagicMock(
@@ -539,4 +546,56 @@ def test_ranking_ignora_xp_de_semana_anterior(mock_db):
 
     response = client.get("/api/ranking")
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json()["ranking"] == []
+
+
+def test_calcular_estado_ofensiva_em_risco_sem_treino_hoje():
+    estudante = criar_mock_estudante(ofensiva_dias=3, ultimo_treino=date.today() - timedelta(days=1))
+    assert AIService.calcular_estado_ofensiva(estudante) == {"treinou_hoje": False, "em_risco": True}
+
+
+def test_calcular_estado_ofensiva_treinou_hoje_nao_esta_em_risco():
+    estudante = criar_mock_estudante(ofensiva_dias=3, ultimo_treino=date.today())
+    assert AIService.calcular_estado_ofensiva(estudante) == {"treinou_hoje": True, "em_risco": False}
+
+
+def test_calcular_estado_ofensiva_sem_ofensiva_ativa():
+    estudante = criar_mock_estudante(ofensiva_dias=0, ultimo_treino=date.today() - timedelta(days=1))
+    assert AIService.calcular_estado_ofensiva(estudante) == {"treinou_hoje": False, "em_risco": False}
+
+
+def test_avaliar_liga_semanal_promove_top_da_liga():
+    db = MagicMock()
+    lider = criar_mock_estudante(id=1, liga="Bronze", xp_semanal=200)
+    outro = criar_mock_estudante(id=2, liga="Bronze", xp_semanal=10)
+    db.query().filter().all.return_value = [lider, outro]
+
+    resultado = AIService.avaliar_liga_semanal(lider, db)
+
+    assert resultado == {"direcao": "subiu", "liga_anterior": "Bronze", "liga_nova": "Prata"}
+    assert lider.liga == "Prata"
+
+
+def test_avaliar_liga_semanal_rebaixa_ultimos_do_grupo_grande():
+    db = MagicMock()
+    grupo = [criar_mock_estudante(id=i, liga="Prata", xp_semanal=100 - i * 10) for i in range(1, 6)]
+    ultimo = grupo[-1]
+    db.query().filter().all.return_value = grupo
+
+    resultado = AIService.avaliar_liga_semanal(ultimo, db)
+
+    assert resultado == {"direcao": "desceu", "liga_anterior": "Prata", "liga_nova": "Bronze"}
+
+
+def test_avaliar_liga_semanal_sem_mudanca_no_meio_do_grupo():
+    # Grupo de 8: zona de promoção são as posições 1-3, zona de rebaixamento
+    # as posições 6-8 -- a posição 5 (bem no meio) não deve se mexer.
+    db = MagicMock()
+    grupo = [criar_mock_estudante(id=i, liga="Prata", xp_semanal=100 - i * 10) for i in range(1, 9)]
+    meio = grupo[4]
+    db.query().filter().all.return_value = grupo
+
+    resultado = AIService.avaliar_liga_semanal(meio, db)
+
+    assert resultado is None
+    assert meio.liga == "Prata"

@@ -5,6 +5,7 @@ import { IconRobot, IconFire, IconTarget, IconSparkle, IconTrophy } from './icon
 import { apiFetch } from '../api';
 import { useCountUp } from '../hooks/useCountUp';
 import Typewriter from './Typewriter';
+import { tocarSomAcerto, tocarSomErro } from '../utils/sound';
 
 const dispararConfete = () => {
   const cores = ['#a78bfa', '#67e8f9', '#7c3aed', '#34d399'];
@@ -89,13 +90,21 @@ const InterviewSimulator = ({ aoGanharXp }) => {
       setOfensiva(novaOfensiva);
       setMissoes(novasMissoes);
 
+      if (dados.xp_concedido > 0) {
+        tocarSomAcerto();
+      } else {
+        tocarSomErro();
+      }
+
       // ⚡ Opcional: Atualiza o Header global do App.js se a propriedade foi passada
       if (aoGanharXp) {
         aoGanharXp({
           xp_total: novosPontos,
           nivel_gamificacao: novoNivel,
           ofensiva_dias: novaOfensiva,
-          categoria_status: dados.categoria_status
+          categoria_status: dados.categoria_status,
+          liga: dados.liga,
+          mudanca_liga: dados.mudanca_liga,
         });
       }
 

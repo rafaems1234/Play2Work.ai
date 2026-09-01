@@ -22,6 +22,14 @@ QUIZZES_PERFEITOS_PARA_VIDA_BONUS = 5  # 5 quizzes seguidos com 100% de acerto =
 DICAS_POR_QUIZ = 2               # limite de dicas (elimina 1 alternativa errada) por quiz, validado no servidor
 PULOS_POR_QUIZ = 2               # limite de perguntas puláveis por quiz, validado no servidor
 
+# 🏆 Ligas semanais estilo Duolingo: sobe/desce entre grupos de acordo com o
+# XP da semana que terminou. Ordem crescente de prestígio.
+LIGAS = ["Bronze", "Prata", "Ouro", "Diamante"]
+LIGA_EMOJI = {"Bronze": "🥉", "Prata": "🥈", "Ouro": "🥇", "Diamante": "💎"}
+ZONA_PROMOCAO = 3           # top 3 da liga sobem de patamar
+ZONA_REBAIXAMENTO = 3       # últimos 3 descem de patamar
+TAMANHO_MINIMO_PARA_REBAIXAR = 4  # só rebaixa se a liga tiver gente suficiente pra não punir quem está sozinho
+
 # Temas genéricos do Quiz do Dia — usados quando o estudante ainda não
 # escolheu um itinerário. Giram automaticamente por data (mesmo tema pra
 # todo mundo no mesmo dia, sem precisar guardar estado nenhum no banco).
@@ -464,15 +472,81 @@ class AIService:
         AIService._marcar_dia(estudante, db, hoje, "feito")
 
     @staticmethod
-    def resetar_xp_semanal_se_necessario(estudante: Estudante) -> None:
+    def calcular_estado_ofensiva(estudante: Estudante) -> dict:
+        """
+        Calcula (sem persistir nada) se a ofensiva atual corre risco de
+        quebrar ainda hoje -- usado só pra mostrar o aviso no front. A quebra
+        de verdade continua sendo tratada de forma lazy em
+        atualizar_ofensiva_duolingo, disparada apenas quando o estudante
+        volta a treinar.
+        """
+        hoje = date.today()
+        if not estudante.ultimo_treino or estudante.ofensiva_dias <= 0:
+            return {"treinou_hoje": False, "em_risco": False}
+
+        dias_desde_treino = (hoje - estudante.ultimo_treino).days
+        treinou_hoje = dias_desde_treino == 0
+        coberto_por_congelamento = dias_desde_treino == 2 and estudante.congelamentos_disponiveis > 0
+        em_risco = not treinou_hoje and (dias_desde_treino == 1 or coberto_por_congelamento)
+        return {"treinou_hoje": treinou_hoje, "em_risco": em_risco}
+
+    @staticmethod
+    def avaliar_liga_semanal(estudante: Estudante, db: Session) -> dict | None:
+        """
+        Roda na virada de semana, antes de zerar o xp_semanal: compara o
+        desempenho do estudante com os demais da mesma liga na semana que
+        terminou e decide promoção/rebaixamento (estilo Duolingo). Retorna um
+        resumo pro front mostrar um aviso, ou None se a liga não mudou.
+        """
+        liga_atual = estudante.liga if estudante.liga in LIGAS else "Bronze"
+        estudante.liga = liga_atual
+
+        grupo = db.query(Estudante).filter(Estudante.liga == liga_atual).all()
+        if estudante not in grupo:
+            grupo.append(estudante)
+        grupo.sort(key=lambda e: (-e.xp_semanal, e.id))
+        posicao = grupo.index(estudante) + 1
+        tamanho_grupo = len(grupo)
+
+        indice_atual = LIGAS.index(liga_atual)
+        nova_liga = liga_atual
+
+        if estudante.xp_semanal > 0 and posicao <= ZONA_PROMOCAO and indice_atual < len(LIGAS) - 1:
+            nova_liga = LIGAS[indice_atual + 1]
+        elif (
+            tamanho_grupo >= TAMANHO_MINIMO_PARA_REBAIXAR
+            and posicao > tamanho_grupo - ZONA_REBAIXAMENTO
+            and indice_atual > 0
+        ):
+            nova_liga = LIGAS[indice_atual - 1]
+
+        if nova_liga == liga_atual:
+            return None
+
+        estudante.liga = nova_liga
+        return {
+            "direcao": "subiu" if LIGAS.index(nova_liga) > indice_atual else "desceu",
+            "liga_anterior": liga_atual,
+            "liga_nova": nova_liga,
+        }
+
+    @staticmethod
+    def resetar_xp_semanal_se_necessario(estudante: Estudante, db: Session) -> dict | None:
         """
         Zera o xp_semanal quando o estudante entra em uma nova semana (segunda-feira),
-        mantendo o ranking em '/api/ranking' de fato semanal.
+        mantendo o ranking em '/api/ranking' de fato semanal. Antes de zerar,
+        avalia a mudança de liga referente à semana que está terminando.
         """
         inicio_semana_atual = date.today() - timedelta(days=date.today().weekday())
-        if estudante.semana_referencia != inicio_semana_atual:
-            estudante.xp_semanal = 0
-            estudante.semana_referencia = inicio_semana_atual
+        if estudante.semana_referencia == inicio_semana_atual:
+            return None
+
+        # Só avalia liga se já havia uma semana anterior de fato encerrando
+        # (evita promover/rebaixar um estudante novo na primeira atividade dele).
+        mudanca_liga = AIService.avaliar_liga_semanal(estudante, db) if estudante.semana_referencia is not None else None
+        estudante.xp_semanal = 0
+        estudante.semana_referencia = inicio_semana_atual
+        return mudanca_liga
 
     @staticmethod
     def regenerar_vidas(estudante: Estudante) -> None:
@@ -531,14 +605,16 @@ class AIService:
             estudante.moedas += max(1, round(xp_concedido * MOEDAS_POR_XP))
 
     @staticmethod
-    def processar_gamificacao_pos_atividade(estudante: Estudante, db: Session, xp_concedido: int) -> None:
+    def processar_gamificacao_pos_atividade(estudante: Estudante, db: Session, xp_concedido: int) -> dict | None:
         """
         Ponto único que roda depois de qualquer atividade que dá XP (chat da
         entrevista ou quiz): atualiza ofensiva, congelamento, calendário,
-        XP total/semanal, nível, moedas e categoria/liga.
+        XP total/semanal, nível, moedas, categoria de carreira e liga
+        semanal. Retorna um resumo de mudança de liga (ou None) pro front
+        mostrar um aviso de promoção/rebaixamento.
         """
         AIService.atualizar_ofensiva_duolingo(estudante, db)
-        AIService.resetar_xp_semanal_se_necessario(estudante)
+        mudanca_liga = AIService.resetar_xp_semanal_se_necessario(estudante, db)
 
         estudante.xp_total += xp_concedido
         estudante.xp_semanal += xp_concedido
@@ -548,6 +624,7 @@ class AIService:
 
         estudante.categoria_status = AIService.calcular_categoria_status(estudante.xp_total)
         AIService.conceder_moedas_por_xp(estudante, xp_concedido)
+        return mudanca_liga
 
     @staticmethod
     def comprar_vida(estudante: Estudante) -> dict:

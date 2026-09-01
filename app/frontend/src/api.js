@@ -1,30 +1,21 @@
+import { atenderRequisicaoFake } from './mockApi';
+
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
-const TOKEN_KEY = 'play2work_token';
+// Modo demonstração: liga por padrão (pra dar pra apresentar o produto
+// rodando só `npm run dev`, sem precisar subir o backend/banco de dados).
+// Pra desenvolver contra a API real, defina VITE_DEMO_MODE=false no .env.
+export const DEMO_MODE = String(import.meta.env.VITE_DEMO_MODE ?? 'true') !== 'false';
 
-export const getToken = () => localStorage.getItem(TOKEN_KEY);
-export const setToken = (token) => localStorage.setItem(TOKEN_KEY, token);
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
-
-/**
- * fetch() com o token de autenticação já anexado. Se o back-end responder
- * 401 (token ausente/expirado), limpa a sessão local e recarrega a página,
- * o que devolve o usuário pra tela de login.
- */
 export const apiFetch = async (path, options = {}) => {
-  const token = getToken();
+  if (DEMO_MODE) {
+    return atenderRequisicaoFake(path, options);
+  }
+
   const headers = {
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
-
-  if (response.status === 401) {
-    clearToken();
-    window.location.reload();
-  }
-
-  return response;
+  return fetch(`${API_BASE_URL}${path}`, { ...options, headers });
 };

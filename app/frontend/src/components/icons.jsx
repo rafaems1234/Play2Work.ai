@@ -21,6 +21,9 @@ import {
   Snowflake,
   CalendarBlank,
   GraduationCap,
+  SpeakerHigh,
+  SpeakerX,
+  Medal,
 } from '@phosphor-icons/react';
 
 const wrap = (PhosphorIcon) => (props) => (
@@ -48,3 +51,6 @@ export const IconCoins = wrap(Coins);
 export const IconSnowflake = wrap(Snowflake);
 export const IconCalendar = wrap(CalendarBlank);
 export const IconGraduationCap = wrap(GraduationCap);
+export const IconSpeakerHigh = wrap(SpeakerHigh);
+export const IconSpeakerX = wrap(SpeakerX);
+export const IconMedal = wrap(Medal);

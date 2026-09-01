@@ -3,13 +3,13 @@
 
 O **Play2Work.AI** é um ecossistema tecnológico completo projetado para democratizar o acesso à orientação profissional e impulsionar a empregabilidade de jovens estudantes em busca do primeiro emprego e vagas de Jovem Aprendiz.
 
-Através de uma abordagem de **gamificação comportamental** (inspirada em mecânicas como Duolingo e RPGs de alta performance), a plataforma transforma a preparação para processos seletivos em uma jornada viciante. O sistema utiliza Inteligência Artificial de última geração integrada a bancos relacionais para analisar perfis, simular entrevistas realistas da Vivo, escolher um itinerário formativo e calcular a aderência técnica (*match*) de vagas em tempo real — tudo isso atrás de autenticação real, com cada estudante dono da própria conta e do próprio progresso.
+Através de uma abordagem de **gamificação comportamental** (inspirada em mecânicas como Duolingo e RPGs de alta performance), a plataforma transforma a preparação para processos seletivos em uma jornada viciante. O sistema utiliza Inteligência Artificial de última geração integrada a bancos relacionais para analisar perfis, simular entrevistas realistas da Vivo, escolher um itinerário formativo e calcular a aderência técnica (*match*) de vagas em tempo real. O app não tem tela de login — abre direto no progresso de um único estudante (pensado pra demonstração/apresentação; ver "Modo demonstração" abaixo pra rodar sem backend nenhum).
 
 ---
 
 ## ⚙️ Funcionalidades Core
 
-1. **Autenticação real (login/registro/reset de senha).** Conta protegida por senha com hash `bcrypt` e sessão via **JWT**. O login é feito por **nome de exibição** (ex: "Rafael Sozza"), não por e-mail — e-mail e LinkedIn só são pedidos no cadastro. Como o nome não é único (pode existir mais de um "João Silva"), o login testa a senha contra todas as contas com aquele nome até achar a que bate. Sem servidor de e-mail configurado, o "Resetar senha" pede a **pergunta de segurança** definida no cadastro antes de liberar qualquer coisa — só então gera uma **senha temporária exibida na própria tela**, que o estudante troca no primeiro acesso seguinte (tela obrigatória de "Definir nova senha" antes de liberar o app). Sem essa pergunta, e-mail sozinho (que não é segredo) seria suficiente pra derrubar a senha de qualquer conta.
+1. **Sem tela de login.** O app abre direto no progresso de um único estudante (`ESTUDANTE_UNICO_ID` em `auth.py`) — pensado pra demonstração/apresentação, não pra multiusuário. O backend ainda guarda as rotas de `bcrypt`/JWT (`/auth/registrar`, `/auth/login`, reset de senha) como código legado, mas nenhuma delas é chamada pelo front hoje.
 2. **Itinerários formativos (like Duolingo/idiomas).** O estudante escolhe **um** dos 4 itinerários oficiais do desafio (Tecnologia e Ciência de Dados, Robótica e Automação, Ciências Jurídicas, Ciências da Natureza e Matemática) numa aba própria de navegação. O itinerário atual fica sempre visível ao lado do ícone de ofensiva no cabeçalho, e both o **Quiz do Dia** e o **Simulador de Entrevista com IA** giram em torno do curso escolhido.
 3. **Mural de Vagas com Match Inteligente + candidatura real.** Algoritmo que cruza as competências do aluno com os requisitos das vagas, calculando o percentual de aderência e dando um boost extra para vagas que combinam com o itinerário escolhido (essas vagas sobem para o topo do mural e ganham um selo "combina com seu curso"). Clicar num card abre um painel de detalhes no estilo LinkedIn (descrição completa, habilidades exigidas, localização) com botão de **Aplicar**, que persiste a candidatura no banco (idempotente — não duplica se o estudante aplicar de novo) e fica consultável em "Minhas candidaturas".
 4. **Validação de Dados Corporativos.** Integração assíncrona (via `httpx.AsyncClient`, com as consultas rodando em paralelo) com APIs externas (BrasilAPI) para buscar e validar a Razão Social real das empresas parceiras a partir do CNPJ, garantindo um mural antifraude e verificado sem bloquear o event loop da API.
@@ -17,7 +17,9 @@ Através de uma abordagem de **gamificação comportamental** (inspirada em mec�
 6. **Quiz do Dia com mecânicas de jogo e resultado validado no servidor.** Quiz de 10 perguntas geradas por IA sobre o itinerário escolhido, com botão de **dica** (elimina uma alternativa errada) e **pular** (avança sem gastar vida), cada um limitado a 2 usos por quiz, cronômetro ao vivo, contador de combo/streak de acertos e botão de voltar direto pro mural. O gabarito nunca é enviado ao cliente antecipadamente — cada resposta é conferida e registrada pelo backend em `/quiz/responder`, e o XP/vidas ganhos em `/quiz/submit` são contados a partir do que o servidor registrou, não do que o cliente afirma ter acertado.
 7. **Sistema de vidas, moedas e congelamento de ofensiva.** O estudante tem até 5 vidas, perde uma a cada erro no quiz, e regenera 1 vida a cada 2h (ou compra com moedas). Acertar o quiz perfeitamente 5 vezes seguidas dá uma vida bônus automática. A cada 7 dias de ofensiva contínua, o estudante ganha 1 congelamento, consumido automaticamente se ele perder um único dia (protegendo a sequência). Um calendário mensal (botão ao lado do ícone de ofensiva) mostra dias feitos, congelados e perdidos.
 8. **Gerador Estrito de Currículo Profissional.** Transforma descrições informais de jovens em currículos estruturados utilizando IA Generativa com tipagem estrita de dados, com exportação simulada para LinkedIn.
-9. **Liga Dinâmica (Leaderboard).** Controle de ofensivas diárias, cálculo automático de categorias de status ("Na Jornada" até "CONTRATADO!") e ranking global em tempo real (Top 10), com o XP semanal zerado automaticamente a cada nova semana.
+9. **Status de carreira + Liga semanal (estilo Duolingo).** Cálculo automático de categoria de status a partir do XP total ("Na Jornada" até "CONTRATADO!"), e uma **liga semanal separada** (Bronze → Prata → Ouro → Diamante): a cada virada de semana, o top 3 da liga sobe de patamar e os últimos 3 descem (só em grupos com 4+ pessoas), com o ranking (`WeeklyLeaderboard`) mostrando só os colegas da própria liga e destacando as zonas de promoção/rebaixamento.
+10. **Aviso de sequência em risco.** Se o estudante ainda não treinou hoje e tem uma ofensiva ativa, um banner no topo avisa ("sua sequência de X dias está em risco") com atalho direto pro Quiz do Dia — dispensável por aquele dia.
+11. **Feedback sonoro e animado.** Sons curtos sintetizados via Web Audio API (sem arquivos de áudio) para acerto/erro no quiz, level-up e mudança de liga, com confete e toasts no level-up/promoção. Um botão no cabeçalho liga/desliga o som (preferência salva no navegador).
 
 ---
 
@@ -25,9 +27,9 @@ Através de uma abordagem de **gamificação comportamental** (inspirada em mec�
 
 O projeto foi construído seguindo rigorosos padrões de mercado de governança de dados, escalabilidade, segurança e separação de conceitos (*Clean Architecture*):
 
-- **Front-end (Apresentação):** **React.js + Vite** – SPA reativa e modular, com **Framer Motion** para animações, ícones **Phosphor**, tela de login/registro com fundo animado ("aurora") compartilhado com o app principal, e uma sessão persistida via token JWT em `localStorage`.
-- **Back-end (Serviços/API):** **FastAPI (Python)** – Servidor ASGI de alta performance, assíncrono, com injeção de dependências nativa (`Depends`) tanto para a sessão do banco quanto para o **estudante autenticado** (extraído do JWT em toda rota protegida), e validação de contratos via **Pydantic**.
-- **Autenticação:** **bcrypt** para hash de senha e **PyJWT** para tokens *bearer* (`HS256`, expiração de 7 dias). Nenhuma rota confia mais em um `estudante_id` enviado pelo cliente — a identidade vem sempre do token. `JWT_SECRET_KEY` é **obrigatória** (o processo falha ao subir se faltar, igual `DATABASE_URL`) — não existe fallback de segredo gerado na hora, que seria diferente por worker num deploy com múltiplos processos.
+- **Front-end (Apresentação):** **React.js + Vite** – SPA reativa e modular, com **Framer Motion** para animações, ícones **Phosphor**, sem tela de login, e um **modo demonstração** (`src/mockApi.js`) que simula toda a API no navegador pra rodar sem backend.
+- **Back-end (Serviços/API):** **FastAPI (Python)** – Servidor ASGI de alta performance, assíncrono, com injeção de dependências nativa (`Depends`) para a sessão do banco e para o estudante único da demonstração, e validação de contratos via **Pydantic**.
+- **Autenticação:** removida da experiência do usuário — o backend mantém `bcrypt`/`PyJWT` como código legado (rotas `/auth/*` ainda funcionam via API, mas não são chamadas pelo front). `JWT_SECRET_KEY` continua obrigatória pra essas rotas legadas subirem sem erro.
 - **Rate limiting:** **slowapi** limita por IP as rotas mais sensíveis a força-bruta e enumeração (`/auth/login`, `/auth/registrar`, `/auth/pergunta-seguranca`, `/auth/resetar-senha`).
 - **Banco de Dados (Persistência):** **PostgreSQL** – Banco relacional. Utiliza o tipo nativo `ARRAY(String)` para as matrizes de habilidades de estudantes e vagas, e tabelas dedicadas para candidaturas e atividade diária (calendário de gamificação).
 - **ORM:** **SQLAlchemy** – Mapeamento objeto-relacional com gerenciamento eficiente de sessões (*pooling* transacional), prevenção de *SQL Injection* e deleções em cascata seguras.
@@ -59,9 +61,10 @@ Play2Work.ai/
     │
     └── frontend/               # CORE DO FRONT-END (React.js + Vite)
         └── src/
-            ├── api.js          # apiFetch: injeta o token JWT, trata 401 derrubando a sessão
+            ├── api.js          # apiFetch: roteia pro backend real ou pro mockApi.js (modo demonstração)
+            ├── mockApi.js      # Simula toda a API no navegador (modo demonstração, sem backend)
+            ├── utils/sound.js  # Sons curtos via Web Audio API (acerto/erro/level-up/liga)
             ├── components/
-            │   ├── Auth.jsx            # Login (nome+senha), registro e reset de senha
             │   ├── AccountSettings.jsx # "Sobre a conta": trocar senha, editar LinkedIn
             │   ├── AuroraBackground.jsx# Fundo animado compartilhado (login + app)
             │   ├── CourseSelector.jsx  # Aba de escolha de itinerário
@@ -145,6 +148,8 @@ npm run dev
 
 O front-end sobe em `http://localhost:5173` e já aponta para o back-end em `http://127.0.0.1:8000`.
 
+> **Modo demonstração (sem backend).** Por padrão (`VITE_DEMO_MODE` não definida, ou `true`), o front roda **sozinho** — todas as chamadas de API são respondidas por dados fictícios simulados no navegador (`src/mockApi.js`), sem precisar de backend, Postgres nem `.env`. Ideal pra apresentar o produto ou mandar o link do repositório pra alguém testar com um `npm install && npm run dev`. Um selo **"🎭 Demonstração"** aparece no cabeçalho enquanto esse modo estiver ativo. Pra apontar pro backend real (Postgres + Gemini), crie `app/frontend/.env` com `VITE_DEMO_MODE=false`.
+
 ### 3. Rodando os testes
 
 ```bash
@@ -156,15 +161,9 @@ Os testes usam `app.dependency_overrides` para trocar a sessão do banco e o est
 
 ---
 
-## 🔐 Fluxo de autenticação (resumo)
+## 🔐 Sobre a remoção da tela de login
 
-- `POST /api/auth/registrar` — cria a conta (nome, e-mail, senha, pergunta+resposta de segurança, LinkedIn opcional). E-mail precisa ser único; nome **não** precisa. *(10/minuto por IP)*
-- `POST /api/auth/login` — recebe `nome` + `senha`. Se houver mais de uma conta com o mesmo nome, o backend testa a senha contra cada uma até achar a correta. *(15/minuto por IP)*
-- `POST /api/auth/pergunta-seguranca` — primeiro passo do reset: recebe o e-mail e devolve a pergunta de segurança cadastrada, sem revelar mais nada. *(10/minuto por IP)*
-- `POST /api/auth/resetar-senha` — segundo passo: recebe e-mail + resposta de segurança; só se a resposta bater é que devolve uma senha temporária em texto, já marcando a conta para forçar troca no próximo login. Sem a resposta certa, e-mail sozinho não é suficiente pra resetar a senha de ninguém. *(5/minuto por IP)*
-- `POST /api/auth/trocar-senha` — troca a senha (exige a senha atual); é a tela obrigatória exibida logo após um login com senha temporária.
-- `PUT /api/auth/conta` — atualiza o LinkedIn do perfil.
-- Toda rota autenticada usa `Authorization: Bearer <token>`, injetado automaticamente pelo `apiFetch` do front-end a partir do token salvo em `localStorage`.
+O front não tem mais tela de login: `get_estudante_atual` (em `auth.py`) resolve sempre pro mesmo estudante (`ESTUDANTE_UNICO_ID = 1`, o "Rafael Sozza" do `seed.py`), sem exigir token. As rotas `/api/auth/registrar`, `/login`, `/pergunta-seguranca`, `/resetar-senha` e `/trocar-senha` continuam existindo no backend (código legado, ainda cobertas por `test_main.py`), mas não são mais chamadas pelo front.
 
 ## 🎯 Integridade do Quiz do Dia
 

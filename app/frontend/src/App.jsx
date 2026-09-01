@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import InterviewSimulator from './components/InterviewSimulator';
 import JobMatchBoard from './components/JobMatchBoard';
 import ResumeBuilder from './components/ResumeBuilder';
@@ -7,12 +8,12 @@ import WeeklyLeaderboard from './components/WeeklyLeaderboard';
 import DailyQuiz from './components/DailyQuiz';
 import CourseSelector from './components/CourseSelector';
 import StreakCalendar from './components/StreakCalendar';
-import Auth from './components/Auth';
 import AccountSettings from './components/AccountSettings';
 import AuroraBackground from './components/AuroraBackground';
-import { IconBriefcase, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconGraduationCap } from './components/icons';
+import { IconBriefcase, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconGraduationCap, IconSpeakerHigh, IconSpeakerX, IconMedal, IconWarning } from './components/icons';
 import { useCountUp } from './hooks/useCountUp';
-import { apiFetch, getToken, clearToken } from './api';
+import { apiFetch, DEMO_MODE } from './api';
+import { somEstaAtivado, definirSomAtivado, tocarSomLevelUp, tocarSomLiga } from './utils/sound';
 
 const TABS = [
   { id: 'vagas', label: 'Mural', Icon: IconBriefcase },
@@ -23,11 +24,23 @@ const TABS = [
   { id: 'ranking', label: 'Ranking', Icon: IconTrophy },
 ];
 
+const LIGA_INFO = {
+  Bronze: { emoji: '🥉', cor: '#cd7f32' },
+  Prata: { emoji: '🥈', cor: '#c0c0c0' },
+  Ouro: { emoji: '🥇', cor: '#fbbf24' },
+  Diamante: { emoji: '💎', cor: '#67e8f9' },
+};
+
+const CHAVE_BANNER_OFENSIVA = 'play2work_banner_ofensiva_dispensado_em';
+const hojeISO = () => new Date().toISOString().slice(0, 10);
+
+const dispararConfeteLevelUp = () => {
+  const cores = ['#a78bfa', '#67e8f9', '#fbbf24', '#34d399'];
+  confetti({ particleCount: 140, spread: 80, origin: { y: 0.4 }, colors: cores });
+};
+
 function App() {
-  const [sessaoCarregando, setSessaoCarregando] = useState(true);
-  const [autenticado, setAutenticado] = useState(false);
   const [contaInfo, setContaInfo] = useState({ nome: '', email: '', linkedin: '' });
-  const [deveTrocarSenha, setDeveTrocarSenha] = useState(false);
   const [contaAberta, setContaAberta] = useState(false);
 
   const [abaAtiva, setAbaAtiva] = useState('vagas');
@@ -36,7 +49,9 @@ function App() {
     xp_total: 0,
     nivel_gamificacao: 1,
     ofensiva_dias: 0,
-    categoria_status: '🌌 Na Jornada'
+    ofensiva_em_risco: false,
+    categoria_status: '🌌 Na Jornada',
+    liga: 'Bronze',
   });
 
   const xpExibido = useCountUp(estudanteStatus.xp_total);
@@ -45,66 +60,101 @@ function App() {
   const [calendarioDias, setCalendarioDias] = useState([]);
   const hoje = new Date();
 
+  const [somAtivado, setSomAtivado] = useState(somEstaAtivado);
+  const alternarSom = () => {
+    setSomAtivado((prev) => {
+      const novoValor = !prev;
+      definirSomAtivado(novoValor);
+      return novoValor;
+    });
+  };
+
+  const [toasts, setToasts] = useState([]);
+  const adicionarToast = (emoji, texto) => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, emoji, texto }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+  };
+
+  const [bannerOfensivaDispensado, setBannerOfensivaDispensado] = useState(() => {
+    try {
+      return localStorage.getItem(CHAVE_BANNER_OFENSIVA) === hojeISO();
+    } catch {
+      return false;
+    }
+  });
+  const dispensarBannerOfensiva = () => {
+    try {
+      localStorage.setItem(CHAVE_BANNER_OFENSIVA, hojeISO());
+    } catch {
+      // sem localStorage disponível -- o banner só reaparece nessa mesma sessão
+    }
+    setBannerOfensivaDispensado(true);
+  };
+
   const atualizarDadosUsuario = (novosDados) => {
+    if (
+      typeof novosDados.nivel_gamificacao === 'number' &&
+      novosDados.nivel_gamificacao > estudanteStatus.nivel_gamificacao
+    ) {
+      dispararConfeteLevelUp();
+      tocarSomLevelUp();
+      adicionarToast('🎉', `Nível ${novosDados.nivel_gamificacao} alcançado!`);
+    }
+
+    if (novosDados.mudanca_liga) {
+      const { direcao, liga_nova } = novosDados.mudanca_liga;
+      const subiu = direcao === 'subiu';
+      tocarSomLiga(subiu);
+      const emoji = LIGA_INFO[liga_nova]?.emoji || '🏅';
+      adicionarToast(
+        emoji,
+        subiu ? `Você subiu para a Liga ${liga_nova}!` : `Você caiu para a Liga ${liga_nova}. Bora recuperar!`,
+      );
+    }
+
     setEstudanteStatus(prev => ({ ...prev, ...novosDados }));
   };
 
+  // Só popula o estado (sem disparar comemoração de level-up/liga) -- usado
+  // na carga inicial, onde o "nível atual" não é uma conquista nova.
   const buscarStatusInicial = async () => {
     try {
       const response = await apiFetch('/api/estudante/me/status');
       if (!response.ok) return;
       const dados = await response.json();
-      atualizarDadosUsuario({
+      setEstudanteStatus(prev => ({
+        ...prev,
         nome: dados.nome,
         xp_total: dados.xp_total,
         nivel_gamificacao: dados.nivel_gamificacao,
         categoria_status: dados.categoria_status,
         ofensiva_dias: dados.ofensiva_dias,
+        ofensiva_em_risco: dados.ofensiva_em_risco,
         itinerario: dados.itinerario,
-      });
+        liga: dados.liga,
+      }));
     } catch (err) {
       console.error(err);
     }
   };
 
   useEffect(() => {
-    const restaurarSessao = async () => {
-      if (!getToken()) {
-        setSessaoCarregando(false);
-        return;
-      }
+    const carregarConta = async () => {
       try {
         const response = await apiFetch('/api/auth/me');
         if (response.ok) {
           const dados = await response.json();
           setContaInfo({ nome: dados.nome, email: dados.email, linkedin: dados.linkedin });
-          setDeveTrocarSenha(Boolean(dados.deve_trocar_senha));
-          setAutenticado(true);
-          await buscarStatusInicial();
         }
       } catch (err) {
         console.error(err);
-      } finally {
-        setSessaoCarregando(false);
       }
+      await buscarStatusInicial();
     };
-    restaurarSessao();
+    carregarConta();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const aoAutenticar = async (usuario, precisaTrocarSenha) => {
-    setContaInfo({ nome: usuario.nome, email: usuario.email, linkedin: usuario.linkedin });
-    setDeveTrocarSenha(Boolean(precisaTrocarSenha));
-    setAutenticado(true);
-    atualizarDadosUsuario({ nome: usuario.nome });
-    await buscarStatusInicial();
-  };
-
-  const sair = () => {
-    clearToken();
-    setAutenticado(false);
-    setAbaAtiva('vagas');
-  };
 
   const alternarCalendario = async () => {
     const abrindo = !calendarioAberto;
@@ -121,28 +171,6 @@ function App() {
       }
     }
   };
-
-  if (sessaoCarregando) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#080812', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <img src="/logo-icon.png" alt="Play2Work.AI" style={{ width: '48px', height: '48px', borderRadius: '14px', opacity: 0.6 }} />
-      </div>
-    );
-  }
-
-  if (!autenticado) {
-    return <Auth aoAutenticar={aoAutenticar} />;
-  }
-
-  if (deveTrocarSenha) {
-    return (
-      <AccountSettings
-        estudante={contaInfo}
-        forcado
-        aoFechar={() => setDeveTrocarSenha(false)}
-      />
-    );
-  }
 
   return (
     <MotionConfig reducedMotion="user">
@@ -216,6 +244,14 @@ function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <img src="/logo-icon.png" alt="Play2Work.AI" style={{ width: '32px', height: '32px', borderRadius: '9px', display: 'block' }} />
             <span style={{ fontSize: '20px', fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: '800', color: '#f1f5f9' }}>Play2Work<span className="gradient-text-live">.ai</span></span>
+            {DEMO_MODE && (
+              <span
+                title="Todos os dados nesta tela são fictícios, gerados no navegador -- não há backend/banco de dados rodando."
+                style={{ fontSize: '10px', fontWeight: '800', color: '#fbbf24', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)', padding: '3px 9px', borderRadius: '99px', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+              >
+                🎭 Demonstração
+              </span>
+            )}
           </div>
 
           {/* Estado de Gamificação (desktop) */}
@@ -232,9 +268,18 @@ function App() {
               </button>
             )}
             <div className="app-pill" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap' }}>
-              <span>Liga:</span>
+              <span>Status:</span>
               <span style={{ color: '#a78bfa', fontWeight: '700' }}>{estudanteStatus.categoria_status}</span>
             </div>
+            <button
+              onClick={() => setAbaAtiva('ranking')}
+              className="app-pill"
+              title={`Liga ${estudanteStatus.liga} — veja o ranking semanal`}
+              style={{ background: 'rgba(255, 255, 255, 0.03)', border: `1px solid ${LIGA_INFO[estudanteStatus.liga]?.cor || '#cd7f32'}55`, padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit' }}
+            >
+              <span>{LIGA_INFO[estudanteStatus.liga]?.emoji || '🥉'}</span>
+              <span style={{ color: LIGA_INFO[estudanteStatus.liga]?.cor || '#cd7f32', fontWeight: '700' }}>Liga {estudanteStatus.liga}</span>
+            </button>
             <div className="app-pill" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '20px', fontSize: '12px', display: 'flex', alignItems: 'center', padding: '4px 4px 4px 12px', gap: '6px', whiteSpace: 'nowrap' }}>
               <IconFire style={{ color: '#f97316' }} />
               <span style={{ color: '#a78bfa', fontWeight: '700' }}>{estudanteStatus.ofensiva_dias} dias</span>
@@ -258,6 +303,21 @@ function App() {
             </div>
 
             <button
+              onClick={alternarSom}
+              title={somAtivado ? 'Desativar sons' : 'Ativar sons'}
+              aria-label={somAtivado ? 'Desativar sons' : 'Ativar sons'}
+              className="app-pill"
+              style={{
+                width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
+                color: somAtivado ? '#c4b5fd' : '#64748b', cursor: 'pointer', fontSize: '14px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {somAtivado ? <IconSpeakerHigh /> : <IconSpeakerX />}
+            </button>
+
+            <button
               onClick={() => setContaAberta(true)}
               title="Sobre a conta"
               style={{
@@ -268,15 +328,6 @@ function App() {
               }}
             >
               {(estudanteStatus.nome || '?').charAt(0).toUpperCase()}
-            </button>
-
-            <button
-              onClick={sair}
-              title="Sair"
-              className="app-pill"
-              style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', color: '#f87171', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '700', whiteSpace: 'nowrap' }}
-            >
-              Sair
             </button>
 
             <AnimatePresence>
@@ -385,6 +436,65 @@ function App() {
 
         </div>
       </header>
+
+      <AnimatePresence>
+        {estudanteStatus.ofensiva_em_risco && !bannerOfensivaDispensado && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{
+              maxWidth: '1200px', margin: '0 auto', padding: '14px 24px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', flexWrap: 'wrap',
+              background: 'rgba(249,115,22,0.08)', borderBottom: '1px solid rgba(249,115,22,0.25)',
+            }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fdba74', fontSize: '13px', fontWeight: '600' }}>
+                <IconFire style={{ color: '#f97316', fontSize: '16px' }} />
+                Sua sequência de {estudanteStatus.ofensiva_dias} dias está em risco! Faça o quiz de hoje pra não perder.
+              </span>
+              <button
+                onClick={() => setAbaAtiva('quiz')}
+                style={{ background: '#f97316', border: 'none', color: '#1c0a02', fontWeight: '700', fontSize: '12px', padding: '6px 14px', borderRadius: '10px', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Fazer quiz agora
+              </button>
+              <button
+                onClick={dispensarBannerOfensiva}
+                aria-label="Dispensar aviso"
+                style={{ background: 'none', border: 'none', color: '#fdba74', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '0 4px' }}
+              >
+                ×
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
+        <AnimatePresence>
+          {toasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ opacity: 0, x: 40, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 40, scale: 0.9 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                background: 'rgba(10,10,20,0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                border: '1px solid rgba(167,139,250,0.3)', borderRadius: '14px', padding: '12px 18px',
+                display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+                color: '#e2e8f0', fontSize: '13px', fontWeight: '700', maxWidth: '300px',
+              }}
+            >
+              <span style={{ fontSize: '18px' }}>{toast.emoji}</span>
+              {toast.texto}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
 
       {/* Navegação inferior fixa (mobile) — todas as abas sempre à mão, sem menu escondido */}
       <nav

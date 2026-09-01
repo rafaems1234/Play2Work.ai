@@ -18,6 +18,11 @@ from services import (
     QUIZZES_PERFEITOS_PARA_VIDA_BONUS,
     DICAS_POR_QUIZ,
     PULOS_POR_QUIZ,
+    LIGAS,
+    LIGA_EMOJI,
+    ZONA_PROMOCAO,
+    ZONA_REBAIXAMENTO,
+    TAMANHO_MINIMO_PARA_REBAIXAR,
 )
 from auth import hash_senha, verificar_senha, criar_token, get_estudante_atual, gerar_senha_temporaria
 from limiter import limiter
@@ -340,7 +345,7 @@ def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_
         )
         db.add(msg_ia)
 
-        AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
+        mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
         db.commit()
 
         return {
@@ -353,6 +358,8 @@ def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_
             "categoria_status": estudante.categoria_status,
             "missoes_diarias": estudante.missoes_diarias_concluidas,
             "moedas": estudante.moedas,
+            "liga": estudante.liga,
+            "mudanca_liga": mudanca_liga,
         }
     except Exception:
         db.rollback()
@@ -360,30 +367,52 @@ def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_
         raise HTTPException(status_code=500, detail="Erro no processamento do chat. Tente novamente mais tarde.")
 
 
-# --- Rota Nova: Leaderboard / Ranking Semanal (pública) ---
+# --- Rota Nova: Leaderboard / Liga Semanal ---
+# Mostra só quem está na mesma liga que o estudante atual (estilo Duolingo:
+# você compete dentro do seu grupo, não no ranking global).
 @router.get("/ranking")
-def get_weekly_ranking(db: Session = Depends(get_db)):
+def get_weekly_ranking(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     inicio_semana_atual = date.today() - timedelta(days=date.today().weekday())
+    liga_atual = estudante.liga or "Bronze"
 
     # Estudantes sem interação na semana atual ainda não passaram pelo reset
     # lazy (disparado em /chat/message); tratamos o xp deles como 0 aqui para
     # o ranking não exibir pontuação de semanas anteriores.
-    candidatos = db.query(Estudante).filter(Estudante.xp_semanal > 0).all()
+    candidatos = db.query(Estudante).filter(Estudante.liga == liga_atual, Estudante.xp_semanal > 0).all()
     candidatos_semana_atual = [
         est for est in candidatos if est.semana_referencia == inicio_semana_atual
     ]
     candidatos_semana_atual.sort(key=lambda est: est.xp_semanal, reverse=True)
+    tamanho_grupo = len(candidatos_semana_atual)
+    indice_liga_atual = LIGAS.index(liga_atual)
+
+    def zona_da_posicao(posicao: int) -> str | None:
+        if posicao <= ZONA_PROMOCAO and indice_liga_atual < len(LIGAS) - 1:
+            return "promocao"
+        if (
+            tamanho_grupo >= TAMANHO_MINIMO_PARA_REBAIXAR
+            and posicao > tamanho_grupo - ZONA_REBAIXAMENTO
+            and indice_liga_atual > 0
+        ):
+            return "rebaixamento"
+        return None
+
     ranking = candidatos_semana_atual[:10]
 
-    return [
-        {
-            "posicao": idx + 1,
-            "nome": est.nome,
-            "xp_semanal": est.xp_semanal,
-            "categoria": est.categoria_status or "🌌 Na Jornada"
-        }
-        for idx, est in enumerate(ranking)
-    ]
+    return {
+        "liga": liga_atual,
+        "liga_emoji": LIGA_EMOJI.get(liga_atual, "🥉"),
+        "ranking": [
+            {
+                "posicao": idx + 1,
+                "nome": est.nome,
+                "xp_semanal": est.xp_semanal,
+                "categoria": est.categoria_status or "🌌 Na Jornada",
+                "zona": zona_da_posicao(idx + 1),
+            }
+            for idx, est in enumerate(ranking)
+        ],
+    }
 
 
 # --- Rota Nova: Itinerários formativos disponíveis (funcionam como "cursos", pública) ---
@@ -553,7 +582,7 @@ def submit_quiz(data: QuizSubmitRequest, estudante: Estudante = Depends(get_estu
             AIService.perder_vida(estudante)
 
         vida_bonus_ganha = AIService.avaliar_bonus_por_desempenho(estudante, acertos, total)
-        AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
+        mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
         db.commit()
 
         return {
@@ -570,6 +599,8 @@ def submit_quiz(data: QuizSubmitRequest, estudante: Estudante = Depends(get_estu
             "congelamentos_disponiveis": estudante.congelamentos_disponiveis,
             "quizzes_perfeitos_seguidos": estudante.quizzes_perfeitos_seguidos,
             "vida_bonus_ganha": vida_bonus_ganha,
+            "liga": estudante.liga,
+            "mudanca_liga": mudanca_liga,
         }
     except Exception:
         db.rollback()
@@ -583,6 +614,8 @@ def get_status_gamificacao(estudante: Estudante = Depends(get_estudante_atual), 
     AIService.regenerar_vidas(estudante)
     db.commit()
 
+    estado_ofensiva = AIService.calcular_estado_ofensiva(estudante)
+
     return {
         "vidas": estudante.vidas,
         "vidas_maximas": VIDAS_MAXIMAS,
@@ -592,11 +625,14 @@ def get_status_gamificacao(estudante: Estudante = Depends(get_estudante_atual), 
         "quizzes_perfeitos_seguidos": estudante.quizzes_perfeitos_seguidos,
         "quizzes_perfeitos_para_bonus": QUIZZES_PERFEITOS_PARA_VIDA_BONUS,
         "ofensiva_dias": estudante.ofensiva_dias,
+        "treinou_hoje": estado_ofensiva["treinou_hoje"],
+        "ofensiva_em_risco": estado_ofensiva["em_risco"],
         "itinerario": estudante.itinerario,
         "nome": estudante.nome,
         "xp_total": estudante.xp_total,
         "nivel_gamificacao": estudante.nivel_gamificacao,
         "categoria_status": estudante.categoria_status,
+        "liga": estudante.liga or "Bronze",
     }
 
 

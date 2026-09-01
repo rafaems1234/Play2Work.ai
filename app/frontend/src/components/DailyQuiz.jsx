@@ -4,6 +4,7 @@ import confetti from 'canvas-confetti';
 import { IconTarget, IconTrophy, IconWarning, IconSparkle, IconHeart, IconCoins, IconSnowflake, IconGraduationCap } from './icons';
 import { apiFetch } from '../api';
 import { SkeletonStyles, Skeleton } from './Skeleton';
+import { tocarSomAcerto, tocarSomErro } from '../utils/sound';
 
 const DICAS_POR_QUIZ = 2;
 const PULOS_POR_QUIZ = 2;
@@ -154,6 +155,8 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
           nivel_gamificacao: dados.nivel_atual,
           ofensiva_dias: dados.ofensiva_dias,
           categoria_status: dados.categoria_status,
+          liga: dados.liga,
+          mudanca_liga: dados.mudanca_liga,
         });
       }
       if (response.ok) {
@@ -185,9 +188,11 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
       if (!response.ok) throw new Error();
       setFeedback(dados);
       if (dados.correta) {
+        tocarSomAcerto();
         setAcertos((a) => a + 1);
         setCombo((c) => c + 1);
       } else {
+        tocarSomErro();
         setCombo(0);
       }
     } catch (err) {
@@ -333,12 +338,32 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
           border-color: rgba(52,211,153,0.5);
           background: rgba(52,211,153,0.12);
           color: #6ee7b7;
+          animation: quizPulseCorreta 0.35s ease;
         }
 
         .quiz-option-btn.wrong {
           border-color: rgba(239,68,68,0.5);
           background: rgba(239,68,68,0.1);
           color: #fca5a5;
+          animation: quizShakeErrada 0.4s ease;
+        }
+
+        @keyframes quizPulseCorreta {
+          0% { transform: scale(1); }
+          35% { transform: scale(1.035); }
+          100% { transform: scale(1); }
+        }
+
+        @keyframes quizShakeErrada {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-6px); }
+          40% { transform: translateX(5px); }
+          60% { transform: translateX(-3px); }
+          80% { transform: translateX(2px); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .quiz-option-btn.correct, .quiz-option-btn.wrong { animation: none; }
         }
 
         .quiz-option-btn.eliminada {

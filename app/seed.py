@@ -53,6 +53,7 @@ def popular_banco():
             xp_semanal=120,
             semana_referencia=date.today() - timedelta(days=date.today().weekday()),
             categoria_status="🌌 Na Jornada",
+            liga="Bronze",
             ofensiva_dias=4,
             ultimo_treino=ontem,
             missoes_diarias_concluidas=2,
