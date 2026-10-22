@@ -24,11 +24,28 @@ PULOS_POR_QUIZ = 2               # limite de perguntas puláveis por quiz, valid
 
 # 🏆 Ligas semanais estilo Duolingo: sobe/desce entre grupos de acordo com o
 # XP da semana que terminou. Ordem crescente de prestígio.
-LIGAS = ["Bronze", "Prata", "Ouro", "Diamante"]
-LIGA_EMOJI = {"Bronze": "🥉", "Prata": "🥈", "Ouro": "🥇", "Diamante": "💎"}
-ZONA_PROMOCAO = 3           # top 3 da liga sobem de patamar
-ZONA_REBAIXAMENTO = 3       # últimos 3 descem de patamar
+# Da mais baixa pra mais alta -- mesma ordem de app/frontend/src/ligas.js.
+LIGAS = ["Bronze", "Prata", "Ouro", "Safira", "Rubi", "Esmeralda", "Ametista", "Pérola", "Obsidiana", "Diamante"]
+LIGA_EMOJI = {
+    "Bronze": "🥉", "Prata": "🥈", "Ouro": "🥇", "Safira": "🔷", "Rubi": "🔴",
+    "Esmeralda": "🟢", "Ametista": "🟣", "Pérola": "⚪", "Obsidiana": "⚫", "Diamante": "💎",
+}
+TAMANHO_GRUPO_LIGA = 30     # o ranking mostra até 30 colegas da mesma liga
+ZONA_PROMOCAO = 10          # num grupo cheio (30), os 10 primeiros sobem...
+ZONA_REBAIXAMENTO = 10      # ...e os 10 últimos descem
 TAMANHO_MINIMO_PARA_REBAIXAR = 4  # só rebaixa se a liga tiver gente suficiente pra não punir quem está sozinho
+
+
+def vagas_das_zonas(tamanho_grupo: int) -> tuple[int, int]:
+    """
+    Quantos sobem e quantos descem num grupo desse tamanho: o terço de cima
+    sobe e o terço de baixo desce, com teto de 10 cada (grupo cheio de 30 =
+    10 sobem, 10 ficam, 10 descem). Em grupos pequenos o 1º sempre sobe e
+    ninguém desce se tiver menos de TAMANHO_MINIMO_PARA_REBAIXAR pessoas.
+    """
+    promocao = min(ZONA_PROMOCAO, max(1, tamanho_grupo // 3))
+    rebaixamento = 0 if tamanho_grupo < TAMANHO_MINIMO_PARA_REBAIXAR else min(ZONA_REBAIXAMENTO, tamanho_grupo // 3)
+    return promocao, rebaixamento
 
 # Temas genéricos do Quiz do Dia — usados quando o estudante ainda não
 # escolheu um itinerário. Giram automaticamente por data (mesmo tema pra
@@ -162,7 +179,7 @@ class AIService:
                 "id": vaga.id,
                 "titulo_vaga": vaga.titulo_vaga,
                 "empresa": vaga.empresa,
-                "razao_social_real": razao_social_real or "Parceiro Verificado VIVO",
+                "razao_social_real": razao_social_real or "Parceiro Verificado",
                 "tipo_modalidade": vaga.tipo_modalidade,
                 "localizacao": vaga.localizacao,
                 "habilidades_exigidas": vaga.habilidades_exigidas,
@@ -184,6 +201,8 @@ class AIService:
         Atue como um recrutador especialista focado em inclusão produtiva de jovens.
         O estudante se chama {nome_estudante} e digitou o seguinte sobre seu perfil: "{habilidades_texto}".
         Extraia as informações de forma profissional, inferindo objetivos viáveis e corrigindo falhas informais.
+        É o primeiro currículo dele: valorize atividades da escola, cursos, grêmio, voluntariado e projetos
+        pessoais como experiência, sem inventar nada que não esteja no texto.
         """
 
         if client:
@@ -207,6 +226,7 @@ class AIService:
             "objetivo_profissional": "Busco minha primeira oportunidade como Jovem Aprendiz para aplicar minha dedicação e competências digitais.",
             "hard_skills": ["Informática Básica", "Navegação Web"],
             "soft_skills": ["Trabalho em Equipe", "Adaptabilidade"],
+            "experiencias": [],
             "sugestao_areas_atuacao": ["Atendimento ao Cliente", "Suporte Operacional"]
         }
 
@@ -223,7 +243,7 @@ class AIService:
             if itinerario else ''
         )
         prompt = f"""
-        Você é o recrutador chefe da Vivo conduzindo uma simulação de entrevista interativa.{contexto_trilha}
+        Você é um recrutador experiente de uma grande empresa conduzindo uma simulação de entrevista interativa para uma vaga de Jovem Aprendiz.{contexto_trilha}
         Histórico anterior: {historico_conversa}
         O candidato acabou de responder: "{mensagem_usuario}"
 
@@ -495,7 +515,7 @@ class AIService:
         """
         Roda na virada de semana, antes de zerar o xp_semanal: compara o
         desempenho do estudante com os demais da mesma liga na semana que
-        terminou e decide promoção/rebaixamento (estilo Duolingo). Retorna um
+        terminou e decide promoção/rebaixamento (ver vagas_das_zonas). Retorna um
         resumo pro front mostrar um aviso, ou None se a liga não mudou.
         """
         liga_atual = estudante.liga if estudante.liga in LIGAS else "Bronze"
@@ -510,14 +530,11 @@ class AIService:
 
         indice_atual = LIGAS.index(liga_atual)
         nova_liga = liga_atual
+        vagas_promocao, vagas_rebaixamento = vagas_das_zonas(tamanho_grupo)
 
-        if estudante.xp_semanal > 0 and posicao <= ZONA_PROMOCAO and indice_atual < len(LIGAS) - 1:
+        if estudante.xp_semanal > 0 and posicao <= vagas_promocao and indice_atual < len(LIGAS) - 1:
             nova_liga = LIGAS[indice_atual + 1]
-        elif (
-            tamanho_grupo >= TAMANHO_MINIMO_PARA_REBAIXAR
-            and posicao > tamanho_grupo - ZONA_REBAIXAMENTO
-            and indice_atual > 0
-        ):
+        elif posicao > tamanho_grupo - vagas_rebaixamento and indice_atual > 0:
             nova_liga = LIGAS[indice_atual - 1]
 
         if nova_liga == liga_atual:

@@ -7,7 +7,8 @@ class CurriculoIaSchema(BaseModel):
     objetivo_profissional: str = Field(description="Texto motivador focado em primeiro emprego/LinkedIn")
     hard_skills: List[str] = Field(description="Lista de habilidades técnicas mapeadas do texto")
     soft_skills: List[str] = Field(description="Lista de habilidades comportamentais extraídas")
-    sugestao_areas_atuacao: List[str] = Field(description="Lista de áreas/cargos ideais na Vivo ou mercado")
+    experiencias: List[str] = Field(description="Projetos, atividades escolares, cursos, voluntariado ou trabalhos citados no texto, cada um reescrito numa frase curta e profissional (verbo de ação + resultado). Lista vazia se não houver nenhum")
+    sugestao_areas_atuacao: List[str] = Field(description="Lista de áreas/cargos ideais no mercado de trabalho para Jovem Aprendiz")
 
 # Esquema para o Gemini analisar a resposta da entrevista de forma humana e inteligente
 class AvaliacaoEntrevistaSchema(BaseModel):

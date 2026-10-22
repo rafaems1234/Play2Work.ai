@@ -1,26 +1,35 @@
 :root {
-  /* ALINHAMENTO COM O SEU BACK E FRONT: Forçando o Dark Mode Fixo do Play2Work */
+  /* Identidade Play2Work: preto absoluto + azul elétrico + ciano.
+     Pra trocar a cor de destaque do app inteiro, mude só --accent-rgb
+     (e os tons derivados logo abaixo). */
+  --accent-rgb: 46 123 255;          /* #2e7bff */
+  --accent-strong-rgb: 22 82 224;    /* #1652e0 */
+  --accent-2-rgb: 0 229 255;         /* #00e5ff */
+  --surface-rgb: 6 6 10;
+
+  --accent: rgb(var(--accent-rgb));
+  --accent-strong: rgb(var(--accent-strong-rgb));
+  --accent-soft: #8ab4ff;
+  --accent-2: rgb(var(--accent-2-rgb));
+  --accent-2-strong: #0090a8;
+
   --text: #9ca3af;
-  --text-h: #f3f4f6;
-  --bg: #080812;              /* O fundo dark exato do seu App.jsx */
-  --border: rgba(167, 139, 250, 0.12); /* Bordas roxas discretas do seu front */
-  --code-bg: #1f2028;
-  --accent: #a78bfa;          /* O roxo neon das suas telas */
-  --accent-2: #67e8f9;
-  --accent-bg: rgba(167, 139, 250, 0.1);
-  --accent-border: rgba(167, 139, 250, 0.45);
-  --social-bg: rgba(255, 255, 255, 0.03);
-  --shadow: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  --gradient: linear-gradient(135deg, #7c3aed 0%, #0e7490 100%);
-  --gradient-soft: linear-gradient(135deg, #a78bfa, #67e8f9);
+  --text-h: #ffffff;
+  --bg: #050507;
+  --border: rgba(255, 255, 255, 0.08);
+  --code-bg: #14141a;
+  --accent-bg: rgb(var(--accent-rgb) / 0.1);
+  --accent-border: rgb(var(--accent-rgb) / 0.45);
+  --gradient: linear-gradient(135deg, var(--accent-strong) 0%, var(--accent-2-strong) 100%);
+  --gradient-soft: linear-gradient(135deg, var(--accent), var(--accent-2));
 
   --sans: 'Inter', system-ui, -apple-system, sans-serif;
   --heading: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
-  color-scheme: dark;         /* Garante que elementos do sistema fiquem escuros */
+  color-scheme: dark;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -29,16 +38,46 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Responsividade da raiz */
 @media (max-width: 1024px) {
   :root {
     font-size: 16px;
   }
 }
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   background: var(--bg);
+}
+
+/* Proteção contra cópia: nada é selecionável, exceto campos de digitação
+   e o que estiver marcado com .permitir-copia (ex.: a folha do currículo).
+   O bloqueio de Ctrl+C / botão direito fica em main.jsx. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+input,
+textarea,
+[contenteditable="true"],
+.permitir-copia,
+.permitir-copia * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+img,
+svg {
+  -webkit-user-drag: none;
+}
+
+::selection {
+  background: var(--accent);
+  color: #000;
 }
 
 #root {
@@ -47,7 +86,7 @@ body {
 
 /* Texto com gradiente vivo (animado) — reservado para os poucos destaques de marca */
 .gradient-text-live {
-  background: linear-gradient(90deg, #a78bfa, #67e8f9, #f472b6, #a78bfa);
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-soft), var(--accent));
   background-size: 300% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -61,10 +100,20 @@ body {
   100% { background-position: 0% 50%; }
 }
 
+/* Rótulo técnico em monoespaçada: "// 01 — MURAL" */
+.tech-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
 h1,
 h2 {
   font-family: var(--heading);
-  font-weight: 800; /* Estilo Gamer/Pitch robusto */
+  font-weight: 800;
   color: var(--text-h);
 }
 
@@ -98,15 +147,11 @@ p {
   margin: 0;
 }
 
-code,
-.counter {
+code {
   font-family: var(--mono);
   display: inline-flex;
   border-radius: 4px;
   color: var(--text-h);
-}
-
-code {
   font-size: 15px;
   line-height: 135%;
   padding: 4px 8px;
@@ -123,7 +168,6 @@ textarea:focus-visible,
   outline-offset: 2px;
 }
 
-/* Respeita a preferência do usuário por menos movimento */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

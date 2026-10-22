@@ -1,25 +1,26 @@
 # Play2Work.AI 🚀 
-> **Desafio dos Dados Vivo 2026** – Inclusão Produtiva de Jovens com IA e Gamificação
+> Inclusão Produtiva de Jovens com IA e Gamificação
 
 O **Play2Work.AI** é um ecossistema tecnológico completo projetado para democratizar o acesso à orientação profissional e impulsionar a empregabilidade de jovens estudantes em busca do primeiro emprego e vagas de Jovem Aprendiz.
 
-Através de uma abordagem de **gamificação comportamental** (inspirada em mecânicas como Duolingo e RPGs de alta performance), a plataforma transforma a preparação para processos seletivos em uma jornada viciante. O sistema utiliza Inteligência Artificial de última geração integrada a bancos relacionais para analisar perfis, simular entrevistas realistas da Vivo, escolher um itinerário formativo e calcular a aderência técnica (*match*) de vagas em tempo real. O app não tem tela de login — abre direto no progresso de um único estudante (pensado pra demonstração/apresentação; ver "Modo demonstração" abaixo pra rodar sem backend nenhum).
+Através de uma abordagem de **gamificação comportamental** (inspirada em mecânicas de jogos e RPGs de alta performance), a plataforma transforma a preparação para processos seletivos em uma jornada viciante. O sistema utiliza Inteligência Artificial de última geração integrada a bancos relacionais para analisar perfis, simular entrevistas realistas, escolher um itinerário formativo e calcular a aderência técnica (*match*) de vagas em tempo real. O app não tem tela de login — abre direto no progresso de um único estudante (pensado pra demonstração/apresentação; ver "Modo demonstração" abaixo pra rodar sem backend nenhum).
 
 ---
 
 ## ⚙️ Funcionalidades Core
 
 1. **Sem tela de login.** O app abre direto no progresso de um único estudante (`ESTUDANTE_UNICO_ID` em `auth.py`) — pensado pra demonstração/apresentação, não pra multiusuário. O backend ainda guarda as rotas de `bcrypt`/JWT (`/auth/registrar`, `/auth/login`, reset de senha) como código legado, mas nenhuma delas é chamada pelo front hoje.
-2. **Itinerários formativos (like Duolingo/idiomas).** O estudante escolhe **um** dos 4 itinerários oficiais do desafio (Tecnologia e Ciência de Dados, Robótica e Automação, Ciências Jurídicas, Ciências da Natureza e Matemática) numa aba própria de navegação. O itinerário atual fica sempre visível ao lado do ícone de ofensiva no cabeçalho, e both o **Quiz do Dia** e o **Simulador de Entrevista com IA** giram em torno do curso escolhido.
+2. **Itinerários formativos.** O estudante escolhe **um** dos 4 itinerários formativos do Ensino Médio (Tecnologia e Ciência de Dados, Robótica e Automação, Ciências Jurídicas, Ciências da Natureza e Matemática) numa aba própria de navegação. O itinerário atual fica sempre visível ao lado do ícone de ofensiva no cabeçalho, e both o **Quiz do Dia** e o **Simulador de Entrevista com IA** giram em torno do curso escolhido.
 3. **Mural de Vagas com Match Inteligente + candidatura real.** Algoritmo que cruza as competências do aluno com os requisitos das vagas, calculando o percentual de aderência e dando um boost extra para vagas que combinam com o itinerário escolhido (essas vagas sobem para o topo do mural e ganham um selo "combina com seu curso"). Clicar num card abre um painel de detalhes no estilo LinkedIn (descrição completa, habilidades exigidas, localização) com botão de **Aplicar**, que persiste a candidatura no banco (idempotente — não duplica se o estudante aplicar de novo) e fica consultável em "Minhas candidaturas".
 4. **Validação de Dados Corporativos.** Integração assíncrona (via `httpx.AsyncClient`, com as consultas rodando em paralelo) com APIs externas (BrasilAPI) para buscar e validar a Razão Social real das empresas parceiras a partir do CNPJ, garantindo um mural antifraude e verificado sem bloquear o event loop da API.
-5. **Simulador de Entrevista Interativo com IA.** Chatbot síncrono que atua como o Recrutador Chefe da Vivo, com perguntas contextualizadas pelo itinerário escolhido pelo estudante. A IA avalia as respostas, gera feedbacks construtivos e distribui XP de forma dinâmica (penalizando inputs aleatórios ou vazios com 0 XP para evitar abusos).
+5. **Simulador de Entrevista Interativo com IA.** Chatbot síncrono que atua como um recrutador experiente, com perguntas contextualizadas pelo itinerário escolhido pelo estudante. A IA avalia as respostas, gera feedbacks construtivos e distribui XP de forma dinâmica (penalizando inputs aleatórios ou vazios com 0 XP para evitar abusos).
 6. **Quiz do Dia com mecânicas de jogo e resultado validado no servidor.** Quiz de 10 perguntas geradas por IA sobre o itinerário escolhido, com botão de **dica** (elimina uma alternativa errada) e **pular** (avança sem gastar vida), cada um limitado a 2 usos por quiz, cronômetro ao vivo, contador de combo/streak de acertos e botão de voltar direto pro mural. O gabarito nunca é enviado ao cliente antecipadamente — cada resposta é conferida e registrada pelo backend em `/quiz/responder`, e o XP/vidas ganhos em `/quiz/submit` são contados a partir do que o servidor registrou, não do que o cliente afirma ter acertado.
 7. **Sistema de vidas, moedas e congelamento de ofensiva.** O estudante tem até 5 vidas, perde uma a cada erro no quiz, e regenera 1 vida a cada 2h (ou compra com moedas). Acertar o quiz perfeitamente 5 vezes seguidas dá uma vida bônus automática. A cada 7 dias de ofensiva contínua, o estudante ganha 1 congelamento, consumido automaticamente se ele perder um único dia (protegendo a sequência). Um calendário mensal (botão ao lado do ícone de ofensiva) mostra dias feitos, congelados e perdidos.
-8. **Gerador Estrito de Currículo Profissional.** Transforma descrições informais de jovens em currículos estruturados utilizando IA Generativa com tipagem estrita de dados, com exportação simulada para LinkedIn.
-9. **Status de carreira + Liga semanal (estilo Duolingo).** Cálculo automático de categoria de status a partir do XP total ("Na Jornada" até "CONTRATADO!"), e uma **liga semanal separada** (Bronze → Prata → Ouro → Diamante): a cada virada de semana, o top 3 da liga sobe de patamar e os últimos 3 descem (só em grupos com 4+ pessoas), com o ranking (`WeeklyLeaderboard`) mostrando só os colegas da própria liga e destacando as zonas de promoção/rebaixamento.
+8. **Gerador de Currículo com PDF.** Transforma descrições informais de jovens (escola, cursos, grêmio, projetos) em currículos estruturados via IA Generativa com tipagem estrita, incluindo uma seção de **experiências e projetos** pensada pra quem ainda não teve emprego. O currículo aparece numa folha A4 formatada e o botão **Baixar PDF** gera o arquivo pronto pra mandar (via impressão do navegador, sem biblioteca extra). Exportação para LinkedIn segue simulada (sandbox).
+9. **Status de carreira + Liga semanal.** Cálculo automático de categoria de status a partir do XP total ("Na Jornada" até "CONTRATADO!"), e uma **liga semanal separada** (10 ligas: Bronze → Prata → Ouro → Safira → Rubi → Esmeralda → Ametista → Pérola → Obsidiana → Diamante, cada uma com sua taça): a cada virada de semana, o top 3 da liga sobe de patamar e os últimos 3 descem (só em grupos com 4+ pessoas), com o ranking (`WeeklyLeaderboard`) mostrando só os colegas da própria liga e destacando as zonas de promoção/rebaixamento.
 10. **Aviso de sequência em risco.** Se o estudante ainda não treinou hoje e tem uma ofensiva ativa, um banner no topo avisa ("sua sequência de X dias está em risco") com atalho direto pro Quiz do Dia — dispensável por aquele dia.
 11. **Feedback sonoro e animado.** Sons curtos sintetizados via Web Audio API (sem arquivos de áudio) para acerto/erro no quiz, level-up e mudança de liga, com confete e toasts no level-up/promoção. Um botão no cabeçalho liga/desliga o som (preferência salva no navegador).
+12. **Tela de abertura.** Landing em estilo tech (grade, terminal de IA "digitando", números animados e a jornada em 6 passos) que apresenta a proposta antes de entrar na plataforma — `Enter` ou o botão entram, e clicar no logo volta pra ela.
 
 ---
 
@@ -66,7 +67,9 @@ Play2Work.ai/
             ├── utils/sound.js  # Sons curtos via Web Audio API (acerto/erro/level-up/liga)
             ├── components/
             │   ├── AccountSettings.jsx # "Sobre a conta": trocar senha, editar LinkedIn
-            │   ├── AuroraBackground.jsx# Fundo animado compartilhado (login + app)
+            │   ├── TechBackground.jsx  # Fundo tech compartilhado (grade + brilho + varredura)
+            │   ├── IntroScreen.jsx     # Tela de abertura (landing da apresentação)
+            │   ├── Logo.jsx            # Marca em SVG (mesmo desenho de public/favicon.svg)
             │   ├── CourseSelector.jsx  # Aba de escolha de itinerário
             │   ├── DailyQuiz.jsx       # Quiz do dia (dica, pular, combo, cronômetro)
             │   ├── JobMatchBoard.jsx   # Mural de vagas + modal de detalhes/candidatura
@@ -74,7 +77,7 @@ Play2Work.ai/
             │   ├── ResumeBuilder.jsx
             │   └── WeeklyLeaderboard.jsx
             ├── App.jsx         # Hub central: sessão, navegação, estado global do estudante
-            ├── index.css       # Variáveis de design token (:root), fontes e Reset CSS
+            ├── index.css       # Design tokens (:root) — a cor de destaque do app inteiro é --accent-rgb
             └── main.jsx        # Ponto de inicialização do Virtual DOM do React
 ```
 

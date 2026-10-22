@@ -9,8 +9,12 @@ import DailyQuiz from './components/DailyQuiz';
 import CourseSelector from './components/CourseSelector';
 import StreakCalendar from './components/StreakCalendar';
 import AccountSettings from './components/AccountSettings';
-import AuroraBackground from './components/AuroraBackground';
-import { IconBriefcase, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconGraduationCap, IconSpeakerHigh, IconSpeakerX, IconMedal, IconWarning } from './components/icons';
+import TechBackground from './components/TechBackground';
+import IntroScreen from './components/IntroScreen';
+import Logo from './components/Logo';
+import Trofeu from './components/Trofeu';
+import { buscarLiga } from './ligas';
+import { IconBriefcase, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconGraduationCap, IconSpeakerHigh, IconSpeakerX } from './components/icons';
 import { useCountUp } from './hooks/useCountUp';
 import { apiFetch, DEMO_MODE } from './api';
 import { somEstaAtivado, definirSomAtivado, tocarSomLevelUp, tocarSomLiga } from './utils/sound';
@@ -24,18 +28,12 @@ const TABS = [
   { id: 'ranking', label: 'Ranking', Icon: IconTrophy },
 ];
 
-const LIGA_INFO = {
-  Bronze: { emoji: '🥉', cor: '#cd7f32' },
-  Prata: { emoji: '🥈', cor: '#c0c0c0' },
-  Ouro: { emoji: '🥇', cor: '#fbbf24' },
-  Diamante: { emoji: '💎', cor: '#67e8f9' },
-};
 
 const CHAVE_BANNER_OFENSIVA = 'play2work_banner_ofensiva_dispensado_em';
 const hojeISO = () => new Date().toISOString().slice(0, 10);
 
 const dispararConfeteLevelUp = () => {
-  const cores = ['#a78bfa', '#67e8f9', '#fbbf24', '#34d399'];
+  const cores = ['#2e7bff', '#00e5ff', '#fbbf24', '#34d399'];
   confetti({ particleCount: 140, spread: 80, origin: { y: 0.4 }, colors: cores });
 };
 
@@ -43,6 +41,7 @@ function App() {
   const [contaInfo, setContaInfo] = useState({ nome: '', email: '', linkedin: '' });
   const [contaAberta, setContaAberta] = useState(false);
 
+  const [mostrandoIntro, setMostrandoIntro] = useState(true);
   const [abaAtiva, setAbaAtiva] = useState('vagas');
   const [estudanteStatus, setEstudanteStatus] = useState({
     nome: '',
@@ -55,6 +54,11 @@ function App() {
   });
 
   const xpExibido = useCountUp(estudanteStatus.xp_total);
+
+  // Cada aba abre do topo (senão herda a rolagem da aba anterior).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [abaAtiva]);
 
   const [calendarioAberto, setCalendarioAberto] = useState(false);
   const [calendarioDias, setCalendarioDias] = useState([]);
@@ -106,14 +110,17 @@ function App() {
       const { direcao, liga_nova } = novosDados.mudanca_liga;
       const subiu = direcao === 'subiu';
       tocarSomLiga(subiu);
-      const emoji = LIGA_INFO[liga_nova]?.emoji || '🏅';
+      const emoji = subiu ? '🏆' : '📉';
       adicionarToast(
         emoji,
         subiu ? `Você subiu para a Liga ${liga_nova}!` : `Você caiu para a Liga ${liga_nova}. Bora recuperar!`,
       );
     }
 
-    setEstudanteStatus(prev => ({ ...prev, ...novosDados }));
+    // Quiz e entrevista só repassam ofensiva_dias depois de um treino concluído:
+    // a sequência de hoje está garantida, então o aviso de "ofensiva em risco" some.
+    const treinou = typeof novosDados.ofensiva_dias === 'number';
+    setEstudanteStatus(prev => ({ ...prev, ...novosDados, ...(treinou ? { ofensiva_em_risco: false } : {}) }));
   };
 
   // Só popula o estado (sem disparar comemoração de level-up/liga) -- usado
@@ -172,21 +179,38 @@ function App() {
     }
   };
 
+  if (mostrandoIntro) {
+    return (
+      <MotionConfig reducedMotion="user">
+        <IntroScreen aoEntrar={() => { setMostrandoIntro(false); window.scrollTo(0, 0); }} />
+      </MotionConfig>
+    );
+  }
+
   return (
     <MotionConfig reducedMotion="user">
-    <div style={{ minHeight: '100vh', background: '#080812', color: '#94a3b8', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div className="app-escala" style={{ minHeight: '100vh', background: 'var(--bg)', color: '#94a3b8', fontFamily: 'var(--sans)' }}>
       <style>{`
+        /* Telas grandes (notebook, monitor, projetor): o app inteiro cresce
+           ~15% -- letras, botões, cards e espaçamentos juntos. */
+        @media (min-width: 1100px) {
+          .app-escala { zoom: 1.15; }
+        }
+        @media (min-width: 1700px) {
+          .app-escala { zoom: 1.3; }
+        }
+
         .app-nav-btn {
           transition: color 0.2s ease;
         }
         .app-nav-btn:hover {
-          color: #c4b5fd !important;
+          color: var(--accent-soft) !important;
         }
         .app-pill {
           transition: all 0.2s ease;
         }
         .app-pill:hover {
-          border-color: rgba(167, 139, 250, 0.3) !important;
+          border-color: rgb(var(--accent-rgb) / 0.3) !important;
           background: rgba(255, 255, 255, 0.05) !important;
         }
 
@@ -214,7 +238,7 @@ function App() {
           font-family: inherit;
         }
         .app-bottom-nav-btn svg { font-size: 20px; }
-        .app-bottom-nav-btn.active { color: #c4b5fd; }
+        .app-bottom-nav-btn.active { color: var(--accent-soft); }
 
         @media (max-width: 860px) {
           .app-desktop-only { display: none !important; }
@@ -234,15 +258,19 @@ function App() {
         }
       `}</style>
 
-      <AuroraBackground />
+      <TechBackground />
 
       {/* Barra Superior (Header) */}
-      <header style={{ background: 'rgba(8, 8, 18, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(167, 139, 250, 0.12)', position: 'sticky', top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '10px 24px', minHeight: '64px', display: 'flex', flexWrap: 'wrap', rowGap: '8px', alignItems: 'center', justifyContent: 'space-between' }}>
+      <header style={{ background: 'rgb(var(--surface-rgb) / 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.12)', position: 'sticky', top: 0, zIndex: 50 }}>
+        <div style={{ maxWidth: '1320px', margin: '0 auto', padding: '10px 24px', minHeight: '64px', display: 'flex', flexWrap: 'wrap', rowGap: '8px', alignItems: 'center', justifyContent: 'space-between' }}>
 
           {/* Logo */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <img src="/logo-icon.png" alt="Play2Work.AI" style={{ width: '32px', height: '32px', borderRadius: '9px', display: 'block' }} />
+          <div
+            onClick={() => setMostrandoIntro(true)}
+            title="Voltar pra tela de abertura"
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+          >
+            <Logo size={32} />
             <span style={{ fontSize: '20px', fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: '800', color: '#f1f5f9' }}>Play2Work<span className="gradient-text-live">.ai</span></span>
             {DEMO_MODE && (
               <span
@@ -260,7 +288,7 @@ function App() {
               <button
                 onClick={() => setAbaAtiva('quiz')}
                 className="app-pill"
-                style={{ background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', cursor: 'pointer', color: '#c4b5fd', fontWeight: '700', fontFamily: 'inherit', maxWidth: '180px' }}
+                style={{ background: 'rgb(var(--accent-rgb) / 0.08)', border: '1px solid rgb(var(--accent-rgb) / 0.2)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', cursor: 'pointer', color: 'var(--accent-soft)', fontWeight: '700', fontFamily: 'inherit', maxWidth: '180px' }}
                 title={estudanteStatus.itinerario}
               >
                 <span style={{ flexShrink: 0 }}>🎯</span>
@@ -269,20 +297,20 @@ function App() {
             )}
             <div className="app-pill" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap' }}>
               <span>Status:</span>
-              <span style={{ color: '#a78bfa', fontWeight: '700' }}>{estudanteStatus.categoria_status}</span>
+              <span style={{ color: 'var(--accent)', fontWeight: '700' }}>{estudanteStatus.categoria_status}</span>
             </div>
             <button
               onClick={() => setAbaAtiva('ranking')}
               className="app-pill"
               title={`Liga ${estudanteStatus.liga} — veja o ranking semanal`}
-              style={{ background: 'rgba(255, 255, 255, 0.03)', border: `1px solid ${LIGA_INFO[estudanteStatus.liga]?.cor || '#cd7f32'}55`, padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit' }}
+              style={{ background: 'rgba(255, 255, 255, 0.03)', border: `1px solid ${buscarLiga(estudanteStatus.liga).cor}55`, padding: '6px 12px', alignItems: 'center', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit' }}
             >
-              <span>{LIGA_INFO[estudanteStatus.liga]?.emoji || '🥉'}</span>
-              <span style={{ color: LIGA_INFO[estudanteStatus.liga]?.cor || '#cd7f32', fontWeight: '700' }}>Liga {estudanteStatus.liga}</span>
+              <Trofeu liga={buscarLiga(estudanteStatus.liga)} tamanho={18} />
+              <span style={{ color: buscarLiga(estudanteStatus.liga).cor, fontWeight: '700' }}>Liga {estudanteStatus.liga}</span>
             </button>
             <div className="app-pill" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '20px', fontSize: '12px', display: 'flex', alignItems: 'center', padding: '4px 4px 4px 12px', gap: '6px', whiteSpace: 'nowrap' }}>
               <IconFire style={{ color: '#f97316' }} />
-              <span style={{ color: '#a78bfa', fontWeight: '700' }}>{estudanteStatus.ofensiva_dias} dias</span>
+              <span style={{ color: 'var(--accent)', fontWeight: '700' }}>{estudanteStatus.ofensiva_dias} dias</span>
               <button
                 onClick={alternarCalendario}
                 title="Ver calendário de ofensiva"
@@ -290,8 +318,8 @@ function App() {
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   width: '24px', height: '24px', borderRadius: '50%',
-                  background: calendarioAberto ? 'rgba(167,139,250,0.35)' : 'rgba(167,139,250,0.14)',
-                  border: 'none', cursor: 'pointer', color: '#c4b5fd', fontSize: '13px',
+                  background: calendarioAberto ? 'rgb(var(--accent-rgb) / 0.35)' : 'rgb(var(--accent-rgb) / 0.14)',
+                  border: 'none', cursor: 'pointer', color: 'var(--accent-soft)', fontSize: '13px',
                 }}
               >
                 <IconCalendar />
@@ -299,7 +327,7 @@ function App() {
             </div>
             <div className="app-pill" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap' }}>
               <span>Nível {estudanteStatus.nivel_gamificacao}</span>
-              <span style={{ color: '#67e8f9', fontWeight: '600' }}>{xpExibido} XP</span>
+              <span style={{ color: 'var(--accent-2)', fontWeight: '600' }}>{xpExibido} XP</span>
             </div>
 
             <button
@@ -310,7 +338,7 @@ function App() {
               style={{
                 width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
                 background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
-                color: somAtivado ? '#c4b5fd' : '#64748b', cursor: 'pointer', fontSize: '14px',
+                color: somAtivado ? 'var(--accent-soft)' : '#64748b', cursor: 'pointer', fontSize: '14px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
@@ -322,7 +350,7 @@ function App() {
               title="Sobre a conta"
               style={{
                 width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
-                background: 'linear-gradient(135deg, #7c3aed, #0e7490)', border: 'none',
+                background: 'linear-gradient(135deg, var(--accent-strong), var(--accent-2-strong))', border: 'none',
                 color: 'white', fontWeight: '800', fontSize: '13px', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
@@ -342,9 +370,9 @@ function App() {
                     top: 'calc(100% + 10px)',
                     left: 0,
                     width: '320px',
-                    background: 'rgba(10, 10, 20, 0.98)',
+                    background: 'rgb(var(--surface-rgb) / 0.98)',
                     backdropFilter: 'blur(20px)',
-                    border: '1px solid rgba(167,139,250,0.2)',
+                    border: '1px solid rgb(var(--accent-rgb) / 0.2)',
                     borderRadius: '18px',
                     padding: '20px',
                     boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
@@ -372,7 +400,7 @@ function App() {
                   fontWeight: '600',
                   cursor: 'pointer',
                   background: 'transparent',
-                  color: abaAtiva === id ? '#c4b5fd' : '#94a3b8',
+                  color: abaAtiva === id ? 'var(--accent-soft)' : '#94a3b8',
                   border: '1px solid transparent',
                 }}
               >
@@ -380,7 +408,7 @@ function App() {
                   <motion.div
                     layoutId="nav-active-pill"
                     transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-                    style={{ position: 'absolute', inset: 0, background: 'rgba(167, 139, 250, 0.2)', borderRadius: '10px', zIndex: 0 }}
+                    style={{ position: 'absolute', inset: 0, background: 'rgb(var(--accent-rgb) / 0.2)', borderRadius: '10px', zIndex: 0 }}
                   />
                 )}
                 <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -400,8 +428,8 @@ function App() {
               <IconFire style={{ color: '#f97316' }} />
               <span style={{ color: '#e2e8f0', fontWeight: '700' }}>{estudanteStatus.ofensiva_dias}</span>
               <span style={{ opacity: 0.3 }}>·</span>
-              <span style={{ color: '#67e8f9', fontWeight: '700' }}>{xpExibido} XP</span>
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(167,139,250,0.18)', color: '#c4b5fd', marginLeft: '2px' }}>
+              <span style={{ color: 'var(--accent-2)', fontWeight: '700' }}>{xpExibido} XP</span>
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: 'rgb(var(--accent-rgb) / 0.18)', color: 'var(--accent-soft)', marginLeft: '2px' }}>
                 <IconCalendar />
               </span>
             </button>
@@ -419,9 +447,9 @@ function App() {
                     right: 0,
                     width: '280px',
                     maxWidth: '85vw',
-                    background: 'rgba(10, 10, 20, 0.98)',
+                    background: 'rgb(var(--surface-rgb) / 0.98)',
                     backdropFilter: 'blur(20px)',
-                    border: '1px solid rgba(167,139,250,0.2)',
+                    border: '1px solid rgb(var(--accent-rgb) / 0.2)',
                     borderRadius: '18px',
                     padding: '18px',
                     boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
@@ -447,7 +475,7 @@ function App() {
             style={{ overflow: 'hidden' }}
           >
             <div style={{
-              maxWidth: '1200px', margin: '0 auto', padding: '14px 24px',
+              maxWidth: '1320px', margin: '0 auto', padding: '14px 24px',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', flexWrap: 'wrap',
               background: 'rgba(249,115,22,0.08)', borderBottom: '1px solid rgba(249,115,22,0.25)',
             }}>
@@ -483,8 +511,8 @@ function App() {
               exit={{ opacity: 0, x: 40, scale: 0.9 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               style={{
-                background: 'rgba(10,10,20,0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-                border: '1px solid rgba(167,139,250,0.3)', borderRadius: '14px', padding: '12px 18px',
+                background: 'rgb(var(--surface-rgb) / 0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                border: '1px solid rgb(var(--accent-rgb) / 0.3)', borderRadius: '14px', padding: '12px 18px',
                 display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
                 color: '#e2e8f0', fontSize: '13px', fontWeight: '700', maxWidth: '300px',
               }}
@@ -506,10 +534,10 @@ function App() {
           left: 0,
           right: 0,
           zIndex: 50,
-          background: 'rgba(8, 8, 18, 0.92)',
+          background: 'rgb(var(--surface-rgb) / 0.92)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          borderTop: '1px solid rgba(167, 139, 250, 0.15)',
+          borderTop: '1px solid rgb(var(--accent-rgb) / 0.15)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
       >
@@ -526,7 +554,7 @@ function App() {
       </nav>
 
       {/* Conteúdo Dinâmico das Abas */}
-      <main className="app-main-content" style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 24px', position: 'relative', zIndex: 1 }}>
+      <main className="app-main-content" style={{ maxWidth: '1320px', margin: '0 auto', padding: '40px 24px', position: 'relative', zIndex: 1 }}>
         <AnimatePresence mode="wait">
           <motion.div
             key={abaAtiva}

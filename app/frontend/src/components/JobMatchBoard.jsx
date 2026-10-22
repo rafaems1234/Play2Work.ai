@@ -105,7 +105,7 @@ const JobMatchBoard = () => {
           background: rgba(255,255,255,0.04);
           backdrop-filter: blur(18px);
           -webkit-backdrop-filter: blur(18px);
-          border: 1px solid rgba(167,139,250,0.14);
+          border: 1px solid rgb(var(--accent-rgb) / 0.14);
           border-radius: 20px;
           padding: 24px;
           display: flex;
@@ -123,7 +123,7 @@ const JobMatchBoard = () => {
           position: absolute;
           top: 0; left: 0; right: 0;
           height: 2px;
-          background: #a78bfa;
+          background: var(--accent);
           opacity: 0;
           transition: opacity 0.25s;
           z-index: 2;
@@ -133,14 +133,14 @@ const JobMatchBoard = () => {
           content: '';
           position: absolute;
           inset: 0;
-          background: radial-gradient(480px circle at var(--mx, 50%) var(--my, 50%), rgba(167,139,250,0.16), transparent 60%);
+          background: radial-gradient(480px circle at var(--mx, 50%) var(--my, 50%), rgb(var(--accent-rgb) / 0.16), transparent 60%);
           opacity: 0;
           transition: opacity 0.3s;
           pointer-events: none;
         }
 
         .job-card:hover {
-          border-color: rgba(167,139,250,0.32);
+          border-color: rgb(var(--accent-rgb) / 0.32);
         }
 
         .job-card:hover::before { opacity: 1; }
@@ -156,9 +156,9 @@ const JobMatchBoard = () => {
           gap: 4px;
           font-size: 10px;
           font-weight: 700;
-          color: #a78bfa;
-          background: rgba(167,139,250,0.12);
-          border: 1px solid rgba(167,139,250,0.3);
+          color: var(--accent);
+          background: rgb(var(--accent-rgb) / 0.12);
+          border: 1px solid rgb(var(--accent-rgb) / 0.3);
           padding: 3px 9px;
           border-radius: 99px;
           margin-bottom: 10px;
@@ -176,14 +176,14 @@ const JobMatchBoard = () => {
           cursor: pointer;
           transition: all 0.2s;
           font-family: inherit;
-          background: linear-gradient(135deg, rgba(124,58,237,0.6) 0%, rgba(14,116,144,0.5) 100%);
-          border: 1px solid rgba(167,139,250,0.3);
+          background: linear-gradient(135deg, rgb(var(--accent-strong-rgb) / 0.6) 0%, rgba(14,116,144,0.5) 100%);
+          border: 1px solid rgb(var(--accent-rgb) / 0.3);
           color: #e2e8f0;
         }
 
         .apply-btn:hover:not(:disabled) {
-          background: linear-gradient(135deg, rgba(124,58,237,0.8) 0%, rgba(14,116,144,0.7) 100%);
-          box-shadow: 0 8px 20px rgba(124,58,237,0.25);
+          background: linear-gradient(135deg, rgb(var(--accent-strong-rgb) / 0.8) 0%, rgba(14,116,144,0.7) 100%);
+          box-shadow: 0 8px 20px rgb(var(--accent-strong-rgb) / 0.25);
           transform: translateY(-1px);
         }
 
@@ -212,7 +212,7 @@ const JobMatchBoard = () => {
       `}</style>
       <SkeletonStyles />
 
-      <div style={{ maxWidth: '1060px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1240px', margin: '0 auto' }}>
         <header style={{
           marginBottom: '40px',
           display: 'flex',
@@ -220,11 +220,11 @@ const JobMatchBoard = () => {
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '20px',
-          borderBottom: '1px solid rgba(167,139,250,0.1)',
+          borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)',
           paddingBottom: '28px',
         }}>
           <div>
-            <div style={{ fontSize: '12px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>
               Match Inteligente
             </div>
             <h1 style={{ fontSize: '32px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.6px' }}>
@@ -277,7 +277,7 @@ const JobMatchBoard = () => {
                           <h2 style={{ fontSize: '16px', fontWeight: '700', color: '#e2e8f0', marginBottom: '4px', letterSpacing: '-0.2px' }}>
                             {vaga.titulo_vaga || vaga.titulo || 'Vaga de Tecnologia'}
                           </h2>
-                          <div style={{ fontSize: '14px', fontWeight: '600', color: '#a78bfa' }}>{vaga.empresa || 'Empresa Parceira'}</div>
+                          <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--accent)' }}>{vaga.empresa || 'Empresa Parceira'}</div>
                           <div style={{ fontSize: '11px', color: '#334155', marginTop: '2px', fontStyle: 'italic' }}>
                             {vaga.razao_social_real || vaga.razao_social || 'Dados Corporativos Verificados'}
                           </div>
@@ -328,7 +328,7 @@ const JobMatchBoard = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={fecharDetalhes}
-            style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(5,5,12,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+            style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgb(var(--surface-rgb) / 0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
           >
             <motion.div
               initial={{ opacity: 0, y: 16, scale: 0.98 }}
@@ -337,8 +337,8 @@ const JobMatchBoard = () => {
               onClick={(e) => e.stopPropagation()}
               style={{
                 width: '100%', maxWidth: '560px', maxHeight: '85vh', overflowY: 'auto',
-                background: 'rgba(12,12,22,0.98)', backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(167,139,250,0.2)', borderRadius: '24px', padding: '32px',
+                background: 'rgb(var(--surface-rgb) / 0.98)', backdropFilter: 'blur(20px)',
+                border: '1px solid rgb(var(--accent-rgb) / 0.2)', borderRadius: '24px', padding: '32px',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -353,11 +353,11 @@ const JobMatchBoard = () => {
 
               {detalheVaga && !carregandoDetalhe && (
                 <div>
-                  <div style={{ width: '56px', height: '56px', borderRadius: '14px', background: 'linear-gradient(135deg, #7c3aed, #0e7490)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: '800', color: 'white', marginBottom: '18px' }}>
+                  <div style={{ width: '56px', height: '56px', borderRadius: '14px', background: 'linear-gradient(135deg, var(--accent-strong), var(--accent-2-strong))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: '800', color: 'white', marginBottom: '18px' }}>
                     {detalheVaga.empresa?.charAt(0) || 'E'}
                   </div>
                   <h2 style={{ fontSize: '22px', fontWeight: '800', color: '#f1f5f9', marginBottom: '6px' }}>{detalheVaga.titulo_vaga}</h2>
-                  <div style={{ fontSize: '15px', fontWeight: '600', color: '#a78bfa', marginBottom: '16px' }}>{detalheVaga.empresa}</div>
+                  <div style={{ fontSize: '15px', fontWeight: '600', color: 'var(--accent)', marginBottom: '16px' }}>{detalheVaga.empresa}</div>
 
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
                     <span className="job-modal-tag"><IconPin /> {detalheVaga.localizacao}</span>
@@ -376,7 +376,7 @@ const JobMatchBoard = () => {
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '28px' }}>
                     {(detalheVaga.habilidades_exigidas || []).map((h) => (
-                      <span key={h} style={{ fontSize: '12px', background: 'rgba(167,139,250,0.1)', color: '#c4b5fd', padding: '4px 10px', borderRadius: '8px' }}>{h}</span>
+                      <span key={h} style={{ fontSize: '12px', background: 'rgb(var(--accent-rgb) / 0.1)', color: 'var(--accent-soft)', padding: '4px 10px', borderRadius: '8px' }}>{h}</span>
                     ))}
                   </div>
 

@@ -8,7 +8,7 @@ const NOMES_MES = [
 
 const CORES_STATUS = {
   feito: { bg: 'rgba(52,211,153,0.25)', border: 'rgba(52,211,153,0.6)' },
-  congelado: { bg: 'rgba(103,232,249,0.2)', border: 'rgba(103,232,249,0.55)' },
+  congelado: { bg: 'rgb(var(--accent-2-rgb) / 0.2)', border: 'rgb(var(--accent-2-rgb) / 0.55)' },
   perdido: { bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.35)' },
 };
 
@@ -32,7 +32,7 @@ const StreakCalendar = ({ ano, mes, dias = [] }) => {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-        <IconCalendar style={{ color: '#a78bfa' }} />
+        <IconCalendar style={{ color: 'var(--accent)' }} />
         <span style={{ fontSize: '13px', fontWeight: '700', color: '#e2e8f0' }}>{NOMES_MES[mes - 1]}</span>
       </div>
 
@@ -57,7 +57,7 @@ const StreakCalendar = ({ ano, mes, dias = [] }) => {
                 fontSize: '11px',
                 fontWeight: '600',
                 background: cores ? cores.bg : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${cores ? cores.border : ehHoje ? 'rgba(167,139,250,0.5)' : 'rgba(255,255,255,0.06)'}`,
+                border: `1px solid ${cores ? cores.border : ehHoje ? 'rgb(var(--accent-rgb) / 0.5)' : 'rgba(255,255,255,0.06)'}`,
                 color: cores ? '#e2e8f0' : '#475569',
               }}
             >

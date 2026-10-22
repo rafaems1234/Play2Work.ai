@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { IconWarning, IconLinkedIn, IconClose, IconSparkle } from './icons';
 import { apiFetch } from '../api';
-import AuroraBackground from './AuroraBackground';
+import TechBackground from './TechBackground';
 
 const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLinkedin }) => {
   const [linkedin, setLinkedin] = useState(estudante?.linkedin || '');
@@ -64,13 +64,13 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(5,5,12,0.75)', backdropFilter: 'blur(6px)', padding: '20px' }}>
-      {forcado && <AuroraBackground />}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgb(var(--surface-rgb) / 0.75)', backdropFilter: 'blur(6px)', padding: '20px' }}>
+      {forcado && <TechBackground />}
       <style>{`
         .account-input {
           width: 100%;
           background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(167,139,250,0.2);
+          border: 1px solid rgb(var(--accent-rgb) / 0.2);
           border-radius: 12px;
           padding: 12px 16px;
           color: #e2e8f0;
@@ -80,14 +80,14 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
           font-family: inherit;
           box-sizing: border-box;
         }
-        .account-input:focus { border-color: rgba(167,139,250,0.5); }
+        .account-input:focus { border-color: rgb(var(--accent-rgb) / 0.5); }
         .account-input::placeholder { color: #475569; }
 
         .account-save-btn {
           padding: 11px 18px;
           border: none;
           border-radius: 10px;
-          background: linear-gradient(135deg, #7c3aed 0%, #0e7490 100%);
+          background: linear-gradient(135deg, var(--accent-strong) 0%, var(--accent-2-strong) 100%);
           color: white;
           font-weight: 700;
           font-size: 13px;
@@ -95,7 +95,7 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
           font-family: inherit;
           transition: all 0.2s;
         }
-        .account-save-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(124,58,237,0.3); }
+        .account-save-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 20px rgb(var(--accent-strong-rgb) / 0.3); }
         .account-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       `}</style>
 
@@ -105,9 +105,9 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
         style={{
           width: '100%',
           maxWidth: '420px',
-          background: 'rgba(12,12,22,0.98)',
+          background: 'rgb(var(--surface-rgb) / 0.98)',
           backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(167,139,250,0.2)',
+          border: '1px solid rgb(var(--accent-rgb) / 0.2)',
           borderRadius: '24px',
           padding: '32px',
           position: 'relative',
@@ -118,7 +118,7 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
               {forcado ? 'Última etapa' : 'Sobre a conta'}
             </div>
             <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#f1f5f9' }}>
@@ -140,7 +140,7 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
 
         {!forcado && (
           <>
-            <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgba(167,139,250,0.1)' }}>
+            <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Nome de login</div>
               <div style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: '600', marginBottom: '10px' }}>{estudante?.nome}</div>
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>E-mail</div>

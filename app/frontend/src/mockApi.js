@@ -1,3 +1,5 @@
+import { LIGAS as LIGAS_INFO } from './ligas.js';
+
 // Modo demonstração: simula todas as rotas da API inteiramente no navegador,
 // com dados fictícios e uma "gamificação" leve simulada em memória -- pra dar
 // pra apresentar o produto rodando só o front, sem precisar subir backend
@@ -24,10 +26,10 @@ const ITINERARIOS = [
 
 const VAGAS = [
   { id: 1, titulo_vaga: 'Jovem Aprendiz - Ciência de Dados', empresa: 'Vivo Telefônica', razao_social_real: 'TELEFÔNICA BRASIL S.A.', localizacao: 'São Paulo - SP', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Python', 'SQL', 'Análise de Dados'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Você vai apoiar o time de dados da Vivo em análises de churn e consumo, aprendendo Python, SQL e visualização de dados na prática.', link_inscricao: 'https://vagas.vivo.com.br' },
-  { id: 2, titulo_vaga: 'Desenvolvedor Front-end Junior', empresa: 'TechSoluções', razao_social_real: 'Parceiro Verificado VIVO', localizacao: 'Remoto', tipo_modalidade: 'Remoto', habilidades_exigidas: ['React', 'JavaScript', 'CSS'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Squad pequeno construindo produtos web com React. Você vai revisar PRs de verdade e aprender boas práticas de front-end com mentoria semanal.', link_inscricao: 'https://techsolucoes.com/carreiras' },
+  { id: 2, titulo_vaga: 'Desenvolvedor Front-end Junior', empresa: 'TechSoluções', razao_social_real: 'Parceiro Verificado', localizacao: 'Remoto', tipo_modalidade: 'Remoto', habilidades_exigidas: ['React', 'JavaScript', 'CSS'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Squad pequeno construindo produtos web com React. Você vai revisar PRs de verdade e aprender boas práticas de front-end com mentoria semanal.', link_inscricao: 'https://techsolucoes.com/carreiras' },
   { id: 3, titulo_vaga: 'Assistente de TI', empresa: 'Suzano Papel e Celulose', razao_social_real: 'SUZANO S.A.', localizacao: 'Três Lagoas - MS', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Lógica de Programação', 'SQL'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Suporte ao time de infraestrutura de TI da unidade fabril: manutenção de estações de trabalho e apoio em chamados.', link_inscricao: 'https://suzano.gupy.io' },
   { id: 4, titulo_vaga: 'Jovem Aprendiz - Automação e Robótica', empresa: 'Bosch Manufatura', razao_social_real: 'ROBERT BOSCH LTDA', localizacao: 'Campinas - SP', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Lógica de Programação', 'Arduino', 'Trabalho em Equipe'], area_itinerario: 'Robótica e Automação', descricao_completa: 'Você vai acompanhar a equipe de automação industrial em projetos de prototipagem com Arduino e sensores.', link_inscricao: 'https://carreiras.bosch.com.br' },
-  { id: 5, titulo_vaga: 'Estagiário de Departamento Jurídico', empresa: 'Machado Advogados Associados', razao_social_real: 'Parceiro Verificado VIVO', localizacao: 'São Paulo - SP', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Comunicação', 'Organização', 'Redação'], area_itinerario: 'Ciências Jurídicas / Serviços Jurídicos', descricao_completa: 'Apoio em rotinas administrativas de um escritório de Direito Digital e LGPD.', link_inscricao: 'https://machadoadvogados.com.br/carreiras' },
+  { id: 5, titulo_vaga: 'Estagiário de Departamento Jurídico', empresa: 'Machado Advogados Associados', razao_social_real: 'Parceiro Verificado', localizacao: 'São Paulo - SP', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Comunicação', 'Organização', 'Redação'], area_itinerario: 'Ciências Jurídicas / Serviços Jurídicos', descricao_completa: 'Apoio em rotinas administrativas de um escritório de Direito Digital e LGPD.', link_inscricao: 'https://machadoadvogados.com.br/carreiras' },
   { id: 6, titulo_vaga: 'Jovem Aprendiz - Laboratório de Análises', empresa: 'Instituto Butantan', razao_social_real: 'INSTITUTO BUTANTAN', localizacao: 'São Paulo - SP', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Biologia', 'Química', 'Organização'], area_itinerario: 'Ciências da Natureza e Matemática', descricao_completa: 'Apoio em rotinas de laboratório sob supervisão de pesquisadores: preparo de amostras e registro de dados experimentais.', link_inscricao: 'https://butantan.gov.br/trabalhe-conosco' },
 ];
 
@@ -56,8 +58,7 @@ const VIDAS_MAXIMAS = 5;
 const CUSTO_MOEDAS_POR_VIDA = 50;
 const DICAS_POR_QUIZ = 2;
 const PULOS_POR_QUIZ = 2;
-const LIGA_EMOJI = { Bronze: '🥉', Prata: '🥈', Ouro: '🥇', Diamante: '💎' };
-const LIGAS = ['Bronze', 'Prata', 'Ouro', 'Diamante'];
+const LIGAS = LIGAS_INFO.map((l) => l.nome);
 
 const estado = {
   nome: 'Rafael Sozza',
@@ -79,6 +80,7 @@ const estado = {
   precisaTrocarSenha: false,
   candidaturas: new Set(),
   quizzesEnviados: 0,
+  treinouHoje: false,
   respostaEntrevistaIndex: 0,
 };
 
@@ -93,6 +95,7 @@ const atualizarCategoriaStatus = () => {
   else if (estado.xp_total < 800) estado.categoria_status = '👔 Pronto para a Dinâmica';
   else estado.categoria_status = '🚀 CONTRATADO!';
 };
+atualizarCategoriaStatus();
 
 // Depois do 2º quiz/entrevista concluído na sessão, promove de liga uma vez
 // -- garante que dá pra mostrar o toast de "subiu de liga" na apresentação
@@ -108,9 +111,17 @@ const avaliarPromocaoDemo = () => {
 };
 
 const calcularEstadoOfensiva = () => ({
-  treinou_hoje: false,
-  em_risco: estado.ofensiva_dias > 0,
+  treinou_hoje: estado.treinouHoje,
+  em_risco: estado.ofensiva_dias > 0 && !estado.treinouHoje,
 });
+
+// A ofensiva conta dias, não ações: só o primeiro treino do dia soma +1.
+const registrarTreinoDoDia = () => {
+  if (!estado.treinouHoje) {
+    estado.treinouHoje = true;
+    estado.ofensiva_dias += 1;
+  }
+};
 
 const calcularMatchVagas = () => {
   const habEstudante = new Set(estado.habilidades);
@@ -139,24 +150,68 @@ const construirCalendarioMes = (ano, mes) => {
 
 const construirRanking = () => {
   const liga = estado.liga;
+  // Grupo cheio de 30, como no backend (TAMANHO_GRUPO_LIGA): os 10 primeiros
+  // sobem, os 10 do meio ficam e os 10 últimos caem. O estudante começa
+  // logo abaixo da zona de promoção, então um quiz já faz ele subir.
+  const colegas = [
+    'Bianca Ferreira', 'Lucas Andrade', 'Júlia Martins', 'Gabriel Souza', 'Ana Clara Lima',
+    'Matheus Rocha', 'Beatriz Nunes', 'Rafael Gomes', 'Isabela Duarte', 'Guilherme Pires',
+    'Mariana Costa', 'Enzo Ribeiro', 'Laura Mendes', 'Davi Carvalho', 'Sofia Teixeira',
+    'Pedro Henrique', 'Lívia Barbosa', 'Arthur Moreira', 'Helena Castro', 'Miguel Araújo',
+    'Valentina Dias', 'Heitor Correia', 'Manuela Pinto', 'Bernardo Freitas', 'Alice Cardoso',
+    'Lorenzo Batista', 'Cecília Ramos', 'Samuel Vieira', 'Larissa Alves',
+  ];
+  const categoriaPorXp = (xp) => (xp >= 400 ? '👔 Pronto para a Dinâmica' : xp >= 150 ? '⚔️ Sobrevivente do RH' : '🌌 Na Jornada');
   const pares = [
-    { nome: 'Bianca Ferreira', xp_semanal: 240, categoria: '👔 Pronto para a Dinâmica' },
-    { nome: estado.nome, xp_semanal: estado.xp_semanal, categoria: estado.categoria_status },
-    { nome: 'Lucas Andrade', xp_semanal: 160, categoria: '⚔️ Sobrevivente do RH' },
-    { nome: 'Mariana Costa', xp_semanal: 95, categoria: '🌌 Na Jornada' },
-    { nome: 'Pedro Henrique', xp_semanal: 40, categoria: '🌌 Na Jornada' },
+    ...colegas.map((nome, i) => {
+      const xp = Math.max(31 - i, 300 - i * 12 - (i > 9 ? 25 : 0));
+      return { nome, xp_semanal: xp, categoria: categoriaPorXp(xp) };
+    }),
+    { nome: estado.nome, xp_semanal: estado.xp_semanal, categoria: estado.categoria_status, voce: true },
   ].sort((a, b) => b.xp_semanal - a.xp_semanal);
 
+  // Mesma regra de vagas_das_zonas() no backend.
   const tamanho = pares.length;
+  const vagasPromocao = Math.min(10, Math.max(1, Math.floor(tamanho / 3)));
+  const vagasRebaixamento = tamanho < 4 ? 0 : Math.min(10, Math.floor(tamanho / 3));
   const ranking = pares.map((pessoa, idx) => {
     const posicao = idx + 1;
     let zona = null;
-    if (posicao <= 3 && liga !== LIGAS[LIGAS.length - 1]) zona = 'promocao';
-    else if (tamanho >= 4 && posicao > tamanho - 3 && liga !== LIGAS[0]) zona = 'rebaixamento';
-    return { posicao, nome: pessoa.nome, xp_semanal: pessoa.xp_semanal, categoria: pessoa.categoria, zona };
+    if (posicao <= vagasPromocao && liga !== LIGAS[LIGAS.length - 1]) zona = 'promocao';
+    else if (posicao > tamanho - vagasRebaixamento && liga !== LIGAS[0]) zona = 'rebaixamento';
+    return { posicao, nome: pessoa.nome, xp_semanal: pessoa.xp_semanal, categoria: pessoa.categoria, zona, voce: Boolean(pessoa.voce) };
   });
 
-  return { liga, liga_emoji: LIGA_EMOJI[liga] || '🥉', ranking };
+  return { liga, liga_emoji: '🏆', ranking };
+};
+
+// Currículo do modo demo: sem IA, então extrai do texto digitado as frases
+// que descrevem algo que o estudante fez (curso, projeto, grêmio...) e
+// reconhece algumas habilidades comuns -- o suficiente pra demo ser coerente.
+const VERBOS_EXPERIENCIA = /(fiz|faço|participei|participo|ajudo|ajudei|organizo|organizei|trabalho|trabalhei|criei|crio|desenvolvi|monitor|voluntári|curso|projeto|grêmio|olimpíada|feira)/i;
+const HABILIDADES_CONHECIDAS = ['Python', 'SQL', 'Excel', 'Power BI', 'JavaScript', 'React', 'HTML', 'CSS', 'Arduino', 'Robótica', 'Matemática', 'Inglês', 'Espanhol', 'Redação', 'Pacote Office', 'Canva', 'Atendimento'];
+const SOFT_POR_PALAVRA = [
+  [/equipe|grupo|grêmio|time/i, 'Trabalho em Equipe'],
+  [/organiz/i, 'Organização'],
+  [/apresent|comunic|falar/i, 'Comunicação'],
+  [/lider|coorden/i, 'Liderança'],
+  [/ajud|volunt/i, 'Colaboração'],
+  [/aprend|curios|estudo|estudar/i, 'Vontade de Aprender'],
+];
+
+const montarCurriculoDemo = (texto) => {
+  const frases = texto.split(/[.;,\n]|\s+e\s+(?=(?:fiz|faço|participo|participei|ajudo|ajudei|organizo|trabalho|criei|desenvolvi))/i)
+    .map((f) => f.trim())
+    .filter((f) => f.length > 8 && VERBOS_EXPERIENCIA.test(f))
+    .map((f) => f.charAt(0).toUpperCase() + f.slice(1));
+  const textoMinusculo = texto.toLowerCase();
+  const hardDoTexto = HABILIDADES_CONHECIDAS.filter((h) => textoMinusculo.includes(h.toLowerCase()));
+  const soft = SOFT_POR_PALAVRA.filter(([re]) => re.test(texto)).map(([, nome]) => nome);
+  return {
+    experiencias: frases.slice(0, 5),
+    hard_skills: [...new Set([...hardDoTexto, ...estado.habilidades])].slice(0, 8),
+    soft_skills: soft.length ? soft : ['Trabalho em Equipe', 'Comunicação', 'Adaptabilidade'],
+  };
 };
 
 const respostaFake = (dados, status = 200) => Promise.resolve({
@@ -176,6 +231,18 @@ export const atenderRequisicaoFake = (path, options = {}) => {
   // GET /auth/me
   if (metodo === 'GET' && caminho === '/api/auth/me') {
     return respostaFake({ id: 1, nome: estado.nome, email: estado.email, linkedin: estado.linkedin, deve_trocar_senha: estado.precisaTrocarSenha });
+  }
+
+  // PUT /auth/conta
+  if (metodo === 'PUT' && caminho === '/api/auth/conta') {
+    estado.linkedin = corpo.linkedin || null;
+    return respostaFake({ id: 1, nome: estado.nome, email: estado.email, linkedin: estado.linkedin });
+  }
+
+  // POST /auth/trocar-senha
+  if (metodo === 'POST' && caminho === '/api/auth/trocar-senha') {
+    if (!corpo.nova_senha || corpo.nova_senha.length < 6) return erroFake('A nova senha precisa ter pelo menos 6 caracteres.', 400);
+    return respostaFake({ sucesso: true });
   }
 
   // GET /estudante/me/status
@@ -264,7 +331,7 @@ export const atenderRequisicaoFake = (path, options = {}) => {
     }
     quizAtivo = {
       quiz_id: proximoQuizId++,
-      tema: estado.itinerario ? `Fundamentos de ${estado.itinerario}` : 'Soft skills e trabalho em equipe',
+      tema: estado.itinerario ? `Soft skills para ${estado.itinerario}` : 'Soft skills e trabalho em equipe',
       gabarito: QUIZ_FALLBACK,
       respostas: [],
       dicas_usadas: 0,
@@ -332,7 +399,7 @@ export const atenderRequisicaoFake = (path, options = {}) => {
     if (estado.xp_total >= 300 * estado.nivel_gamificacao) estado.nivel_gamificacao += 1;
     atualizarCategoriaStatus();
     estado.moedas += Math.max(1, Math.round(xpConcedido * 0.1));
-    estado.ofensiva_dias += 1;
+    registrarTreinoDoDia();
 
     const mudancaLiga = avaliarPromocaoDemo();
     quizAtivo = null;
@@ -372,14 +439,17 @@ export const atenderRequisicaoFake = (path, options = {}) => {
 
   // POST /resume/generate
   if (metodo === 'POST' && caminho === '/api/resume/generate') {
+    const extraido = montarCurriculoDemo(corpo.habilidades_texto || '');
+    const area = estado.itinerario || 'Tecnologia';
     return respostaFake({
       sucesso: true,
       curriculo: {
         nome_candidato: estado.nome,
-        objetivo_profissional: `Busco minha primeira oportunidade pra aplicar o que venho aprendendo em ${estado.itinerario || 'tecnologia'} e crescer com dedicação.`,
-        hard_skills: estado.habilidades,
-        soft_skills: ['Trabalho em Equipe', 'Comunicação', 'Adaptabilidade'],
-        sugestao_areas_atuacao: estado.itinerario ? [estado.itinerario] : ['Atendimento ao Cliente', 'Suporte Operacional'],
+        objetivo_profissional: `Estudante do Ensino Médio em busca da primeira oportunidade como Jovem Aprendiz na área de ${area}, com vontade de aplicar na prática o que venho aprendendo e de crescer junto com a equipe.`,
+        ...extraido,
+        sugestao_areas_atuacao: estado.itinerario
+          ? [`Jovem Aprendiz em ${estado.itinerario}`, 'Suporte Operacional', 'Assistente Administrativo']
+          : ['Jovem Aprendiz', 'Atendimento ao Cliente', 'Suporte Operacional'],
       },
     }, 201);
   }
@@ -407,7 +477,7 @@ export const atenderRequisicaoFake = (path, options = {}) => {
     if (estado.xp_total >= 300 * estado.nivel_gamificacao) estado.nivel_gamificacao += 1;
     atualizarCategoriaStatus();
     if (xpConcedido > 0) estado.moedas += Math.max(1, Math.round(xpConcedido * 0.1));
-    estado.ofensiva_dias += 1;
+    if (!respostaFraca) registrarTreinoDoDia();
     const mudancaLiga = avaliarPromocaoDemo();
 
     return respostaFake({

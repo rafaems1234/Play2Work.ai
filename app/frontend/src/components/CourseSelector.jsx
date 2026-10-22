@@ -67,7 +67,7 @@ const CourseSelector = ({ aoEscolher }) => {
           text-align: left;
           padding: 24px;
           border-radius: 20px;
-          border: 1px solid rgba(167,139,250,0.15);
+          border: 1px solid rgb(var(--accent-rgb) / 0.15);
           background: rgba(255,255,255,0.04);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
@@ -79,7 +79,7 @@ const CourseSelector = ({ aoEscolher }) => {
         }
 
         .course-card:hover {
-          border-color: rgba(167,139,250,0.4);
+          border-color: rgb(var(--accent-rgb) / 0.4);
           transform: translateY(-3px);
           box-shadow: 0 16px 40px rgba(0,0,0,0.3);
         }
@@ -110,10 +110,10 @@ const CourseSelector = ({ aoEscolher }) => {
       `}</style>
       <SkeletonStyles />
 
-      <div style={{ width: '100%', maxWidth: '900px' }}>
-        <header style={{ marginBottom: '32px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', borderBottom: '1px solid rgba(167,139,250,0.1)', paddingBottom: '24px' }}>
+      <div style={{ width: '100%', maxWidth: '1060px' }}>
+        <header style={{ marginBottom: '32px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)', paddingBottom: '24px' }}>
           <div>
-            <div style={{ fontSize: '12px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>Seu Curso</div>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>Seu Curso</div>
             <h1 style={{ fontSize: '30px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.5px' }}>
               Escolha seu <span className="gradient-text-live">itinerário</span>
             </h1>
@@ -121,7 +121,7 @@ const CourseSelector = ({ aoEscolher }) => {
               É como escolher um idioma pra estudar: o curso que você seguir aqui define o tema do Quiz do Dia e o contexto das perguntas da IA Recrutadora no Simulador.
             </p>
           </div>
-          <IconGraduationCap style={{ fontSize: '28px', color: '#a78bfa', flexShrink: 0 }} />
+          <IconGraduationCap style={{ fontSize: '28px', color: 'var(--accent)', flexShrink: 0 }} />
         </header>
 
         {erro && (
@@ -133,7 +133,7 @@ const CourseSelector = ({ aoEscolher }) => {
         {carregando ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} style={{ padding: '24px', borderRadius: '20px', border: '1px solid rgba(167,139,250,0.1)' }}>
+              <div key={i} style={{ padding: '24px', borderRadius: '20px', border: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
                 <Skeleton style={{ height: '18px', width: '70%', marginBottom: '12px' }} />
                 <Skeleton style={{ height: '13px', width: '100%', marginBottom: '6px' }} />
                 <Skeleton style={{ height: '13px', width: '90%' }} />
@@ -162,7 +162,7 @@ const CourseSelector = ({ aoEscolher }) => {
                   <div style={{ fontSize: '17px', fontWeight: '800', color: '#f1f5f9', marginBottom: '8px' }}>{it.nome}</div>
                   <div style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.6 }}>{it.descricao}</div>
                   {escolhendo === it.nome && (
-                    <div style={{ marginTop: '10px', fontSize: '12px', color: '#a78bfa' }}>Selecionando...</div>
+                    <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--accent)' }}>Selecionando...</div>
                   )}
                 </motion.button>
               );

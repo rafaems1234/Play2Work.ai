@@ -13,7 +13,7 @@ export const SkeletonStyles = () => (
       position: absolute;
       inset: 0;
       transform: translateX(-100%);
-      background: linear-gradient(90deg, transparent, rgba(167,139,250,0.16), transparent);
+      background: linear-gradient(90deg, transparent, rgb(var(--accent-rgb) / 0.16), transparent);
       animation: p2wShimmer 1.6s ease-in-out infinite;
     }
     @keyframes p2wShimmer {
@@ -29,7 +29,7 @@ export const Skeleton = ({ style, className = '' }) => (
 export const JobCardSkeleton = () => (
   <div style={{
     background: 'rgba(255,255,255,0.02)',
-    border: '1px solid rgba(167,139,250,0.1)',
+    border: '1px solid rgb(var(--accent-rgb) / 0.1)',
     borderRadius: '20px',
     padding: '24px',
   }}>
@@ -53,7 +53,7 @@ export const RowSkeleton = () => (
   <div style={{
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     padding: '16px 20px', background: 'rgba(0,0,0,0.15)',
-    border: '1px solid rgba(167,139,250,0.06)', borderRadius: '14px',
+    border: '1px solid rgb(var(--accent-rgb) / 0.06)', borderRadius: '14px',
   }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
       <Skeleton style={{ height: '18px', width: '28px' }} />

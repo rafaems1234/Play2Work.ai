@@ -1,30 +1,121 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IconSparkle, IconWand, IconWarning, IconDocument, IconClipboard, IconLinkedIn } from './icons';
 import { apiFetch } from '../api';
 
-const formatarCurriculo = (dados) => {
-  const listar = (itens) => (Array.isArray(itens) && itens.length ? itens.join(', ') : '—');
+const listar = (itens) => (Array.isArray(itens) ? itens.filter(Boolean) : []);
 
-  return [
-    `Nome: ${dados.nome_candidato || '—'}`,
+const formatarCurriculoTexto = (cv, perfil) => {
+  const linhas = [
+    cv.nome_candidato || perfil.nome || '',
+    [perfil.email, perfil.linkedin].filter(Boolean).join(' · '),
     '',
-    `Objetivo profissional:`,
-    dados.objetivo_profissional || dados.objetivo_professional || '—',
+    'OBJETIVO',
+    cv.objetivo_profissional || cv.objetivo_professional || '—',
     '',
-    `Hard skills: ${listar(dados.hard_skills)}`,
-    `Soft skills: ${listar(dados.soft_skills)}`,
+    'FORMAÇÃO',
+    `Ensino Médio${perfil.itinerario ? ` — Itinerário: ${perfil.itinerario}` : ''}`,
+  ];
+  if (listar(cv.experiencias).length) {
+    linhas.push('', 'EXPERIÊNCIAS E PROJETOS', ...listar(cv.experiencias).map((e) => `• ${e}`));
+  }
+  linhas.push(
     '',
-    `Áreas de atuação sugeridas: ${listar(dados.sugestao_areas_atuacao)}`,
-  ].join('\n');
+    `COMPETÊNCIAS TÉCNICAS: ${listar(cv.hard_skills).join(', ') || '—'}`,
+    `COMPETÊNCIAS COMPORTAMENTAIS: ${listar(cv.soft_skills).join(', ') || '—'}`,
+    `ÁREAS DE INTERESSE: ${listar(cv.sugestao_areas_atuacao).join(', ') || '—'}`,
+  );
+  return linhas.join('\n');
+};
+
+// Folha A4 do currículo. Aparece na tela e, numa cópia direto no <body>
+// (#curriculo-print), é o único conteúdo impresso no PDF.
+const FolhaCurriculo = ({ cv, perfil }) => {
+  const experiencias = listar(cv.experiencias);
+  return (
+    <div className="cv-folha permitir-copia">
+      <header className="cv-cabecalho">
+        <h1>{cv.nome_candidato || perfil.nome}</h1>
+        <div className="cv-contato">
+          {perfil.email && <span>{perfil.email}</span>}
+          {perfil.linkedin && <span>{perfil.linkedin.replace(/^https?:\/\//, '')}</span>}
+        </div>
+      </header>
+
+      <section>
+        <h2>Objetivo</h2>
+        <p>{cv.objetivo_profissional || cv.objetivo_professional}</p>
+      </section>
+
+      <section>
+        <h2>Formação</h2>
+        <p>
+          <strong>Ensino Médio</strong>
+          {perfil.itinerario && <> — Itinerário formativo em {perfil.itinerario}</>}
+        </p>
+      </section>
+
+      {experiencias.length > 0 && (
+        <section>
+          <h2>Experiências e projetos</h2>
+          <ul>
+            {experiencias.map((exp) => <li key={exp}>{exp}</li>)}
+          </ul>
+        </section>
+      )}
+
+      <section className="cv-colunas">
+        <div>
+          <h2>Competências técnicas</h2>
+          <ul>{listar(cv.hard_skills).map((h) => <li key={h}>{h}</li>)}</ul>
+        </div>
+        <div>
+          <h2>Competências comportamentais</h2>
+          <ul>{listar(cv.soft_skills).map((s) => <li key={s}>{s}</li>)}</ul>
+        </div>
+      </section>
+
+      {listar(cv.sugestao_areas_atuacao).length > 0 && (
+        <section>
+          <h2>Áreas de interesse</h2>
+          <p>{listar(cv.sugestao_areas_atuacao).join(' · ')}</p>
+        </section>
+      )}
+    </div>
+  );
 };
 
 const ResumeBuilder = () => {
   const [habilidades, setHabilidades] = useState('');
-  const [curriculoGerado, setCurriculoGerado] = useState('');
+  const [curriculo, setCurriculo] = useState(null);
+  const [perfil, setPerfil] = useState({ nome: '', email: '', linkedin: '', itinerario: null });
   const [carregando, setCarregando] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
+  const [aviso, setAviso] = useState(null);
   const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    const carregarPerfil = async () => {
+      try {
+        const [respConta, respStatus] = await Promise.all([
+          apiFetch('/api/auth/me'),
+          apiFetch('/api/estudante/me/status'),
+        ]);
+        const conta = respConta.ok ? await respConta.json() : {};
+        const status = respStatus.ok ? await respStatus.json() : {};
+        setPerfil({ nome: conta.nome || status.nome || '', email: conta.email || '', linkedin: conta.linkedin || '', itinerario: status.itinerario || null });
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    carregarPerfil();
+  }, []);
+
+  const mostrarAviso = (tipo, texto) => {
+    setAviso({ tipo, texto });
+    setTimeout(() => setAviso(null), 4000);
+  };
 
   const handleGerarCurriculo = async () => {
     if (!habilidades.trim() || carregando) return;
@@ -42,7 +133,7 @@ const ResumeBuilder = () => {
 
       const dados = await response.json();
       if (dados.sucesso) {
-        setCurriculoGerado(formatarCurriculo(dados.curriculo));
+        setCurriculo(dados.curriculo);
       } else {
         throw new Error(dados.erro || 'Erro desconhecido ao gerar o currículo.');
       }
@@ -54,25 +145,46 @@ const ResumeBuilder = () => {
     }
   };
 
+  const handleBaixarPdf = () => {
+    // O título da página vira o nome sugerido do arquivo no "Salvar como PDF".
+    const tituloOriginal = document.title;
+    const nome = (curriculo?.nome_candidato || perfil.nome || 'Estudante').trim();
+    document.title = `Curriculo - ${nome}`;
+    const restaurar = () => {
+      document.title = tituloOriginal;
+      window.removeEventListener('afterprint', restaurar);
+    };
+    window.addEventListener('afterprint', restaurar);
+    window.print();
+  };
+
+  const handleCopiar = async () => {
+    try {
+      await navigator.clipboard.writeText(formatarCurriculoTexto(curriculo, perfil));
+      mostrarAviso('ok', 'Texto do currículo copiado.');
+    } catch {
+      mostrarAviso('erro', 'Não deu pra copiar automaticamente.');
+    }
+  };
+
   const handleExportarLinkedIn = async () => {
-    if (!curriculoGerado || sincronizando) return;
+    if (!curriculo || sincronizando) return;
 
     try {
       setSincronizando(true);
       const response = await apiFetch('/api/resume/export-linkedin', {
         method: 'POST',
-        body: JSON.stringify({ texto_curriculo: curriculoGerado }),
+        body: JSON.stringify({ texto_curriculo: formatarCurriculoTexto(curriculo, perfil) }),
       });
 
       if (!response.ok) throw new Error();
 
       const dados = await response.json();
-      
       const secoes = dados.secoes_atualizadas ? dados.secoes_atualizadas.join(', ') : 'Summary, Skills, TargetJobs';
-      alert(`💼 Perfil Sincronizado!\n\n${dados.mensagem || 'Dados integrados com o sandbox.'}\n\nCampos atualizados: ${secoes}`);
+      mostrarAviso('ok', `${dados.mensagem || 'Perfil sincronizado.'} Campos: ${secoes}.`);
     } catch (err) {
       console.error(err);
-      alert('⚠️ Falha ao conectar com o sandbox da API do LinkedIn.');
+      mostrarAviso('erro', 'Falha ao conectar com o sandbox da API do LinkedIn.');
     } finally {
       setSincronizando(false);
     }
@@ -85,25 +197,18 @@ const ResumeBuilder = () => {
           background: rgba(255,255,255,0.045);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(167,139,250,0.15);
+          border: 1px solid rgb(var(--accent-rgb) / 0.15);
           border-radius: 24px;
           padding: 40px;
           width: 100%;
-          max-width: 680px;
-          box-shadow: 0 0 80px rgba(124,58,237,0.06);
-          transition: all 0.3s ease;
-        }
-
-        .resume-card:hover {
-          border-color: rgba(167,139,250,0.28);
-          box-shadow: 0 0 90px rgba(103,232,249,0.08), 0 0 80px rgba(124,58,237,0.08);
-          transform: scale(1.005);
+          max-width: 900px;
+          box-shadow: 0 0 80px rgb(var(--accent-strong-rgb) / 0.06);
         }
 
         .resume-textarea {
           width: 100%;
           background: rgba(0,0,0,0.3);
-          border: 1px solid rgba(167,139,250,0.2);
+          border: 1px solid rgb(var(--accent-rgb) / 0.2);
           border-radius: 14px;
           padding: 16px 20px;
           color: #e2e8f0;
@@ -117,7 +222,7 @@ const ResumeBuilder = () => {
         }
 
         .resume-textarea::placeholder { color: #475569; }
-        .resume-textarea:focus { border-color: rgba(167,139,250,0.45); }
+        .resume-textarea:focus { border-color: rgb(var(--accent-rgb) / 0.45); }
         .resume-textarea:disabled { opacity: 0.4; }
 
         .generate-btn {
@@ -125,7 +230,7 @@ const ResumeBuilder = () => {
           padding: 16px;
           border: none;
           border-radius: 14px;
-          background: linear-gradient(135deg, #7c3aed 0%, #0e7490 100%);
+          background: linear-gradient(135deg, var(--accent-strong) 0%, var(--accent-2-strong) 100%);
           color: white;
           font-size: 15px;
           font-weight: 700;
@@ -141,7 +246,7 @@ const ResumeBuilder = () => {
 
         .generate-btn:hover:not(:disabled) {
           transform: translateY(-2px);
-          box-shadow: 0 12px 32px rgba(124,58,237,0.35);
+          box-shadow: 0 12px 32px rgb(var(--accent-strong-rgb) / 0.35);
         }
 
         .generate-btn:disabled {
@@ -159,72 +264,89 @@ const ResumeBuilder = () => {
 
         @keyframes btnSpin { to { transform: rotate(360deg); } }
 
-        .result-container {
-          margin-top: 28px;
-          background: rgba(0,0,0,0.35);
-          border: 1px solid rgba(167,139,250,0.15);
-          border-radius: 16px;
-          overflow: hidden;
-        }
+        .result-container { margin-top: 28px; }
 
         .result-header {
-          padding: 14px 20px;
-          background: rgba(167,139,250,0.08);
-          border-bottom: 1px solid rgba(167,139,250,0.12);
           display: flex;
           justify-content: space-between;
           align-items: center;
           flex-wrap: wrap;
           gap: 10px;
+          margin-bottom: 14px;
         }
 
         .result-action-btn {
-          padding: 7px 14px;
-          border-radius: 8px;
+          padding: 9px 14px;
+          border-radius: 10px;
           font-size: 12px;
           font-weight: 700;
           cursor: pointer;
           border: none;
           transition: all 0.2s;
           font-family: inherit;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
         }
+
+        .result-action-btn.pdf { background: var(--accent); color: #000; }
+        .result-action-btn.pdf:hover { background: #fff; }
 
         .result-action-btn.copy {
           background: rgba(255,255,255,0.06);
           border: 1px solid rgba(255,255,255,0.1);
           color: #94a3b8;
         }
+        .result-action-btn.copy:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
 
-        .result-action-btn.copy:hover {
-          background: rgba(255,255,255,0.1);
-          color: #e2e8f0;
-        }
-
-        .result-action-btn.linkedin {
-          background: #0a66c2;
-          color: white;
-        }
-
-        .result-action-btn.linkedin:hover:not(:disabled) {
-          background: #004182;
-          box-shadow: 0 4px 12px rgba(10,102,194,0.3);
-        }
-
+        .result-action-btn.linkedin { background: #0a66c2; color: white; }
+        .result-action-btn.linkedin:hover:not(:disabled) { background: #004182; }
         .result-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        .result-body {
-          padding: 20px;
-          font-family: 'Courier New', monospace;
+        .resume-aviso {
+          margin-bottom: 14px;
+          border-radius: 12px;
+          padding: 12px 16px;
           font-size: 13px;
-          line-height: 1.7;
-          color: #cbd5e1;
-          white-space: pre-line;
-          overflow-x: auto;
+          font-weight: 600;
         }
+        .resume-aviso.ok { background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.25); color: #6ee7b7; }
+        .resume-aviso.erro { background: rgba(239,68,68,0.07); border: 1px solid rgba(239,68,68,0.18); color: #f87171; }
+
+        /* Folha A4 */
+        .cv-folha {
+          background: #fff;
+          color: #1e293b;
+          border-radius: 6px;
+          padding: 44px 48px;
+          font-family: 'Inter', Arial, sans-serif;
+          font-size: 13.5px;
+          line-height: 1.55;
+          box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+          border-top: 6px solid var(--accent);
+        }
+        .cv-folha h1 {
+          font-family: 'Space Grotesk', 'Inter', sans-serif;
+          font-size: 30px; font-weight: 800; letter-spacing: -0.5px;
+          color: #0f172a; margin: 0 0 6px;
+        }
+        .cv-contato { display: flex; flex-wrap: wrap; gap: 4px 18px; color: #475569; font-size: 12.5px; }
+        .cv-cabecalho { padding-bottom: 18px; border-bottom: 1px solid #e2e8f0; margin-bottom: 18px; }
+        .cv-folha section { margin-bottom: 18px; break-inside: avoid; }
+        .cv-folha h2 {
+          font-family: 'Inter', Arial, sans-serif;
+          font-size: 11px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase;
+          color: var(--accent-strong); margin: 0 0 6px;
+        }
+        .cv-folha p { margin: 0; color: #334155; }
+        .cv-folha strong { color: #0f172a; }
+        .cv-folha ul { margin: 0; padding-left: 18px; color: #334155; }
+        .cv-folha li { margin-bottom: 3px; }
+        .cv-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 
         .empty-state {
           padding: 40px;
-          border: 1px dashed rgba(167,139,250,0.15);
+          border: 1px dashed rgb(var(--accent-rgb) / 0.15);
           border-radius: 16px;
           text-align: center;
           color: #475569;
@@ -241,29 +363,50 @@ const ResumeBuilder = () => {
           font-size: 13px;
           color: #f87171;
         }
+
+        @media (max-width: 600px) {
+          .resume-card { padding: 24px 18px; }
+          .cv-folha { padding: 28px 22px; }
+          .cv-colunas { grid-template-columns: 1fr; gap: 0; }
+        }
+
+        /* PDF: só a folha do currículo, em A4, sem o resto do app */
+        #curriculo-print { display: none; }
+        @media print {
+          @page { size: A4; margin: 14mm; }
+          :root, html, body { background: #fff !important; color-scheme: light; }
+          body > *:not(#curriculo-print) { display: none !important; }
+          #curriculo-print { display: block; }
+          #curriculo-print .cv-folha {
+            box-shadow: none; border-radius: 0; padding: 0 0 0 0; border-top: none;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+        }
       `}</style>
 
       <div className="resume-card">
         {/* Header */}
         <div style={{ marginBottom: '32px', display: 'flex', gap: '16px', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: '12px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>IA Generativa</div>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>IA Generativa</div>
             <h2 style={{ fontSize: '26px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.5px', marginBottom: '10px' }}>
               Gerador de <span className="gradient-text-live">Currículo</span>
             </h2>
-            <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, maxWidth: '440px' }}>
-              Não sabe como montar um currículo? Digite o que você gosta e sabe fazer — a IA formata tudo como um profissional.
+            <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, maxWidth: '480px' }}>
+              Nunca fez um currículo? Conte do seu jeito o que você sabe fazer, o que já fez na escola e do que gosta.
+              A IA monta um currículo profissional, pronto pra baixar em PDF e mandar pras vagas.
             </p>
           </div>
-          <IconSparkle style={{ fontSize: '24px', color: '#a78bfa', flexShrink: 0, marginTop: '4px' }} />
+          <IconSparkle style={{ fontSize: '24px', color: 'var(--accent)', flexShrink: 0, marginTop: '4px' }} />
         </div>
 
         {/* Input */}
         <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Suas habilidades e interesses
+          <label htmlFor="resume-texto" style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Sobre você
           </label>
           <textarea
+            id="resume-texto"
             className="resume-textarea"
             rows="5"
             placeholder="Ex: Sou bom em matemática, gosto de mexer no computador, fiz um curso de robótica na escola e ajudo a organizar os eventos do grêmio estudantil..."
@@ -284,7 +427,7 @@ const ResumeBuilder = () => {
               Estruturando seu currículo...
             </>
           ) : (
-            <><IconWand /> Gerar currículo perfeito</>
+            <><IconWand /> {curriculo ? 'Gerar de novo' : 'Gerar meu currículo'}</>
           )}
         </button>
 
@@ -294,46 +437,57 @@ const ResumeBuilder = () => {
           </div>
         )}
 
-        {!curriculoGerado && !carregando && (
+        {!curriculo && !carregando && (
           <div className="empty-state">
-            Seu currículo formatado aparecerá aqui...
+            Seu currículo formatado aparecerá aqui, pronto pra virar PDF.
           </div>
         )}
 
         <AnimatePresence>
-        {curriculoGerado && (
-          <motion.div
-            className="result-container"
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div className="result-header">
-              <span style={{ fontSize: '13px', fontWeight: '700', color: '#a78bfa', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><IconDocument /> Currículo gerado</span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  onClick={() => navigator.clipboard.writeText(curriculoGerado)}
-                  className="result-action-btn copy"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <IconClipboard /> Copiar
-                </button>
-                <button
-                  onClick={handleExportarLinkedIn}
-                  disabled={sincronizando}
-                  className="result-action-btn linkedin"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                >
-                  {sincronizando ? 'Sincronizando...' : <><IconLinkedIn /> Atualizar LinkedIn</>}
-                </button>
+          {curriculo && (
+            <motion.div
+              className="result-container"
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="result-header">
+                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><IconDocument /> Currículo pronto</span>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button onClick={handleBaixarPdf} className="result-action-btn pdf">
+                    <IconDocument /> Baixar PDF
+                  </button>
+                  <button onClick={handleCopiar} className="result-action-btn copy">
+                    <IconClipboard /> Copiar texto
+                  </button>
+                  <button onClick={handleExportarLinkedIn} disabled={sincronizando} className="result-action-btn linkedin">
+                    {sincronizando ? 'Sincronizando...' : <><IconLinkedIn /> Atualizar LinkedIn</>}
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="result-body">
-              {curriculoGerado}
-            </div>
-          </motion.div>
-        )}
+
+              <AnimatePresence>
+                {aviso && (
+                  <motion.div
+                    className={`resume-aviso ${aviso.tipo}`}
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    {aviso.texto}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <FolhaCurriculo cv={curriculo} perfil={perfil} />
+            </motion.div>
+          )}
         </AnimatePresence>
+
+        {curriculo && createPortal(
+          <div id="curriculo-print"><FolhaCurriculo cv={curriculo} perfil={perfil} /></div>,
+          document.body,
+        )}
       </div>
     </div>
   );

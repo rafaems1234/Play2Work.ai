@@ -318,6 +318,20 @@ def test_gerar_curriculo_ia(mock_gerar_ia, mock_db, mock_estudante_logado):
     assert response.json()["sucesso"] is True
 
 
+@patch("services.client", None)
+def test_curriculo_fallback_tem_todos_os_campos_da_folha():
+    # Sem Gemini configurado, o fallback precisa trazer todos os campos que a
+    # folha do currículo (ResumeBuilder) espera -- inclusive experiencias.
+    from services import AIService
+
+    curriculo = AIService.gerar_curriculo_ia("Gosto de tecnologia", "Rafael")
+
+    campos_esperados = {"nome_candidato", "objetivo_profissional", "hard_skills", "soft_skills", "experiencias", "sugestao_areas_atuacao"}
+    assert campos_esperados <= set(curriculo)
+    assert curriculo["nome_candidato"] == "Rafael"
+    assert isinstance(curriculo["experiencias"], list)
+
+
 def test_obter_ranking_semanal(mock_db, mock_estudante_logado):
     inicio_semana_atual = date.today() - timedelta(days=date.today().weekday())
     mock_estudante = MagicMock(
@@ -585,6 +599,18 @@ def test_avaliar_liga_semanal_rebaixa_ultimos_do_grupo_grande():
     resultado = AIService.avaliar_liga_semanal(ultimo, db)
 
     assert resultado == {"direcao": "desceu", "liga_anterior": "Prata", "liga_nova": "Bronze"}
+
+
+def test_avaliar_liga_semanal_grupo_cheio_10_sobem_10_descem():
+    # Grupo cheio de 30: posições 1-10 sobem, 11-20 ficam, 21-30 descem.
+    db = MagicMock()
+    grupo = [criar_mock_estudante(id=i, liga="Rubi", xp_semanal=400 - i * 10) for i in range(1, 31)]
+    db.query().filter().all.return_value = grupo
+
+    assert AIService.avaliar_liga_semanal(grupo[9], db)["liga_nova"] == "Esmeralda"   # 10º sobe
+    assert AIService.avaliar_liga_semanal(grupo[10], db) is None                      # 11º fica
+    assert AIService.avaliar_liga_semanal(grupo[19], db) is None                      # 20º fica
+    assert AIService.avaliar_liga_semanal(grupo[20], db)["liga_nova"] == "Safira"     # 21º desce
 
 
 def test_avaliar_liga_semanal_sem_mudanca_no_meio_do_grupo():

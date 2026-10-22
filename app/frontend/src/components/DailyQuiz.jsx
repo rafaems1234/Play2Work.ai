@@ -11,7 +11,7 @@ const PULOS_POR_QUIZ = 2;
 const CUSTO_VIDA_MOEDAS = 50;
 
 const dispararConfete = () => {
-  const cores = ['#a78bfa', '#67e8f9', '#7c3aed', '#34d399'];
+  const cores = ['#2e7bff', '#00e5ff', '#1652e0', '#34d399'];
   confetti({ particleCount: 120, spread: 75, origin: { y: 0.6 }, colors: cores });
 };
 
@@ -267,11 +267,11 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
       <style>{`
         .quiz-card {
           width: 100%;
-          max-width: 680px;
+          max-width: 820px;
           background: rgba(255,255,255,0.045);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(167,139,250,0.15);
+          border: 1px solid rgb(var(--accent-rgb) / 0.15);
           border-radius: 24px;
           padding: 36px;
         }
@@ -292,13 +292,13 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
           transition: color 0.2s;
         }
 
-        .quiz-back-link:hover { color: #c4b5fd; }
+        .quiz-back-link:hover { color: var(--accent-soft); }
 
         .quiz-itinerario-btn {
           text-align: left;
           padding: 14px 18px;
           border-radius: 14px;
-          border: 1px solid rgba(167,139,250,0.15);
+          border: 1px solid rgb(var(--accent-rgb) / 0.15);
           background: rgba(255,255,255,0.03);
           color: #e2e8f0;
           font-weight: 600;
@@ -309,8 +309,8 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
         }
 
         .quiz-itinerario-btn:hover {
-          border-color: rgba(167,139,250,0.4);
-          background: rgba(167,139,250,0.08);
+          border-color: rgb(var(--accent-rgb) / 0.4);
+          background: rgb(var(--accent-rgb) / 0.08);
           transform: translateY(-1px);
         }
 
@@ -319,7 +319,7 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
           text-align: left;
           padding: 14px 18px;
           border-radius: 14px;
-          border: 1px solid rgba(167,139,250,0.15);
+          border: 1px solid rgb(var(--accent-rgb) / 0.15);
           background: rgba(255,255,255,0.03);
           color: #e2e8f0;
           font-weight: 600;
@@ -330,8 +330,8 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
         }
 
         .quiz-option-btn:hover:not(:disabled) {
-          border-color: rgba(167,139,250,0.4);
-          background: rgba(167,139,250,0.08);
+          border-color: rgb(var(--accent-rgb) / 0.4);
+          background: rgb(var(--accent-rgb) / 0.08);
         }
 
         .quiz-option-btn.correct {
@@ -379,7 +379,7 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
           padding: 14px;
           border: none;
           border-radius: 14px;
-          background: linear-gradient(135deg, #7c3aed 0%, #0e7490 100%);
+          background: linear-gradient(135deg, var(--accent-strong) 0%, var(--accent-2-strong) 100%);
           color: white;
           font-weight: 700;
           font-size: 14px;
@@ -390,7 +390,7 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
 
         .quiz-next-btn:hover {
           transform: translateY(-2px);
-          box-shadow: 0 12px 32px rgba(124,58,237,0.35);
+          box-shadow: 0 12px 32px rgb(var(--accent-strong-rgb) / 0.35);
         }
 
         .quiz-next-btn:disabled {
@@ -427,8 +427,8 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
         }
 
         .quiz-tool-btn:hover:not(:disabled) {
-          border-color: rgba(167,139,250,0.4);
-          background: rgba(167,139,250,0.1);
+          border-color: rgb(var(--accent-rgb) / 0.4);
+          background: rgb(var(--accent-rgb) / 0.1);
           color: #e2e8f0;
         }
 
@@ -454,7 +454,7 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
 
         <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div>
-            <div style={{ fontSize: '12px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>Quiz do Dia</div>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>Quiz do Dia</div>
             <h2 style={{ fontSize: '26px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.5px' }}>
               Teste o que <span className="gradient-text-live">você sabe</span>
             </h2>
@@ -462,7 +462,7 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
               10 perguntas sobre o seu curso — o mesmo usado pela IA Recrutadora no Simulador. Errou, perde uma vida; acertou, ganha XP e moedas.
             </p>
           </div>
-          <IconTarget style={{ fontSize: '24px', color: '#a78bfa', flexShrink: 0, marginTop: '4px' }} />
+          <IconTarget style={{ fontSize: '24px', color: 'var(--accent)', flexShrink: 0, marginTop: '4px' }} />
         </div>
 
         {status && (
@@ -474,7 +474,7 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
             </div>
             <div className="quiz-stat"><IconCoins style={{ color: '#fbbf24' }} /> {status.moedas}</div>
             {status.congelamentos_disponiveis > 0 && (
-              <div className="quiz-stat"><IconSnowflake style={{ color: '#67e8f9' }} /> {status.congelamentos_disponiveis} congelamento{status.congelamentos_disponiveis > 1 ? 's' : ''}</div>
+              <div className="quiz-stat"><IconSnowflake style={{ color: 'var(--accent-2)' }} /> {status.congelamentos_disponiveis} congelamento{status.congelamentos_disponiveis > 1 ? 's' : ''}</div>
             )}
           </div>
         )}
@@ -498,8 +498,8 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
         )}
 
         {!quiz && !carregando && !semVidas && status?.itinerario && (
-          <div style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: '16px', padding: '22px' }}>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#67e8f9', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Seu curso atual</div>
+          <div style={{ background: 'rgb(var(--accent-rgb) / 0.06)', border: '1px solid rgb(var(--accent-rgb) / 0.2)', borderRadius: '16px', padding: '22px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Seu curso atual</div>
             <div style={{ fontSize: '18px', fontWeight: '800', color: '#f1f5f9', marginBottom: '16px' }}>{status.itinerario}</div>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button onClick={gerarQuiz} className="quiz-next-btn" style={{ margin: 0, flex: '1 1 200px' }}>
@@ -515,8 +515,8 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
         )}
 
         {!quiz && !carregando && !semVidas && !status?.itinerario && (
-          <div style={{ background: 'rgba(167,139,250,0.06)', border: '1px dashed rgba(167,139,250,0.25)', borderRadius: '16px', padding: '28px', textAlign: 'center' }}>
-            <IconGraduationCap style={{ fontSize: '30px', color: '#a78bfa', marginBottom: '12px' }} />
+          <div style={{ background: 'rgb(var(--accent-rgb) / 0.06)', border: '1px dashed rgb(var(--accent-rgb) / 0.25)', borderRadius: '16px', padding: '28px', textAlign: 'center' }}>
+            <IconGraduationCap style={{ fontSize: '30px', color: 'var(--accent)', marginBottom: '12px' }} />
             <div style={{ color: '#e2e8f0', fontWeight: '700', marginBottom: '6px' }}>Você ainda não escolheu um curso</div>
             <div style={{ color: '#64748b', fontSize: '13px', marginBottom: '18px' }}>
               O curso define o tema do Quiz do Dia e das perguntas do Simulador de Entrevista.
@@ -548,7 +548,7 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
         {quiz && !resultado && perguntaAtual && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <span style={{ fontSize: '12px', color: '#a78bfa', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{quiz.tema}</span>
+              <span style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{quiz.tema}</span>
               <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>{indiceAtual + 1} / {quiz.perguntas.length}</span>
             </div>
 
@@ -617,9 +617,9 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
                   <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    style={{ marginTop: '16px', padding: '14px 18px', background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: '14px', fontSize: '13px', color: '#94a3b8', lineHeight: 1.6, display: 'flex', gap: '8px' }}
+                    style={{ marginTop: '16px', padding: '14px 18px', background: 'rgb(var(--accent-rgb) / 0.06)', border: '1px solid rgb(var(--accent-rgb) / 0.15)', borderRadius: '14px', fontSize: '13px', color: '#94a3b8', lineHeight: 1.6, display: 'flex', gap: '8px' }}
                   >
-                    <IconSparkle style={{ color: '#a78bfa', flexShrink: 0, marginTop: '2px' }} />
+                    <IconSparkle style={{ color: 'var(--accent)', flexShrink: 0, marginTop: '2px' }} />
                     <span>{feedback.explicacao}</span>
                   </motion.div>
                 )}

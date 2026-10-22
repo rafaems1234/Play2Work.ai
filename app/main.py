@@ -46,7 +46,7 @@ def read_root():
     return {
         "status": "Online",
         "projeto": "Play2Work.AI",
-        "contexto": "Desafio dos Dados Vivo 2026"
+        "contexto": "Inclusão produtiva de jovens com IA e gamificação"
     }
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ class Estudante(Base):
     xp_semanal = Column(Integer, default=0)                 # XP acumulado na semana corrente
     semana_referencia = Column(Date, nullable=True)         # Segunda-feira da semana em que xp_semanal foi contabilizado
     categoria_status = Column(String(50), default="🌌 Na Jornada") # Status de carreira do usuário (baseado no XP total acumulado)
-    liga = Column(String(20), default="Bronze")              # Liga semanal estilo Duolingo (Bronze/Prata/Ouro/Diamante), com subida/descida a cada virada de semana
+    liga = Column(String(20), default="Bronze")              # Liga semanal (10 ligas, de Bronze a Diamante -- ver LIGAS em services.py), com subida/descida a cada virada de semana
     itinerario = Column(String(60), nullable=True)          # Trilha formativa escolhida (ex: "Tecnologia e Dados")
 
     # ❤️ Vidas, moedas e congelamento de ofensiva (estilo Duolingo)

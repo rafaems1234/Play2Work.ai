@@ -20,9 +20,8 @@ from services import (
     PULOS_POR_QUIZ,
     LIGAS,
     LIGA_EMOJI,
-    ZONA_PROMOCAO,
-    ZONA_REBAIXAMENTO,
-    TAMANHO_MINIMO_PARA_REBAIXAR,
+    TAMANHO_GRUPO_LIGA,
+    vagas_das_zonas,
 )
 from auth import hash_senha, verificar_senha, criar_token, get_estudante_atual, gerar_senha_temporaria
 from limiter import limiter
@@ -368,7 +367,7 @@ def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_
 
 
 # --- Rota Nova: Leaderboard / Liga Semanal ---
-# Mostra só quem está na mesma liga que o estudante atual (estilo Duolingo:
+# Mostra só quem está na mesma liga que o estudante atual (como numa liga de jogo:
 # você compete dentro do seu grupo, não no ranking global).
 @router.get("/ranking")
 def get_weekly_ranking(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
@@ -385,19 +384,16 @@ def get_weekly_ranking(estudante: Estudante = Depends(get_estudante_atual), db: 
     candidatos_semana_atual.sort(key=lambda est: est.xp_semanal, reverse=True)
     tamanho_grupo = len(candidatos_semana_atual)
     indice_liga_atual = LIGAS.index(liga_atual)
+    vagas_promocao, vagas_rebaixamento = vagas_das_zonas(tamanho_grupo)
 
     def zona_da_posicao(posicao: int) -> str | None:
-        if posicao <= ZONA_PROMOCAO and indice_liga_atual < len(LIGAS) - 1:
+        if posicao <= vagas_promocao and indice_liga_atual < len(LIGAS) - 1:
             return "promocao"
-        if (
-            tamanho_grupo >= TAMANHO_MINIMO_PARA_REBAIXAR
-            and posicao > tamanho_grupo - ZONA_REBAIXAMENTO
-            and indice_liga_atual > 0
-        ):
+        if posicao > tamanho_grupo - vagas_rebaixamento and indice_liga_atual > 0:
             return "rebaixamento"
         return None
 
-    ranking = candidatos_semana_atual[:10]
+    ranking = candidatos_semana_atual[:TAMANHO_GRUPO_LIGA]
 
     return {
         "liga": liga_atual,
@@ -409,6 +405,7 @@ def get_weekly_ranking(estudante: Estudante = Depends(get_estudante_atual), db: 
                 "xp_semanal": est.xp_semanal,
                 "categoria": est.categoria_status or "🌌 Na Jornada",
                 "zona": zona_da_posicao(idx + 1),
+                "voce": est.id == estudante.id,
             }
             for idx, est in enumerate(ranking)
         ],

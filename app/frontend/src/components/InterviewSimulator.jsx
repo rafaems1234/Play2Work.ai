@@ -8,7 +8,7 @@ import Typewriter from './Typewriter';
 import { tocarSomAcerto, tocarSomErro } from '../utils/sound';
 
 const dispararConfete = () => {
-  const cores = ['#a78bfa', '#67e8f9', '#7c3aed', '#34d399'];
+  const cores = ['#2e7bff', '#00e5ff', '#1652e0', '#34d399'];
   confetti({ particleCount: 130, spread: 75, origin: { y: 0.6 }, colors: cores });
   setTimeout(() => confetti({ particleCount: 60, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, colors: cores }), 150);
   setTimeout(() => confetti({ particleCount: 60, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors: cores }), 150);
@@ -136,7 +136,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
       <style>{`
         .sim-stat-card {
           background: rgba(255,255,255,0.03);
-          border: 1px solid rgba(167, 139, 250, 0.12);
+          border: 1px solid rgb(var(--accent-rgb) / 0.12);
           border-radius: 14px;
           padding: 10px 20px;
           display: flex;
@@ -155,13 +155,13 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         .sim-xp-bar-fill {
           height: 100%;
           border-radius: 99px;
-          background: linear-gradient(90deg, #a78bfa, #67e8f9);
+          background: linear-gradient(90deg, var(--accent), var(--accent-2));
           transition: width 0.6s ease;
         }
 
         .sim-msg-ai {
           background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(167,139,250,0.15);
+          border: 1px solid rgb(var(--accent-rgb) / 0.15);
           color: #cbd5e1;
           border-radius: 16px;
           border-top-left-radius: 4px;
@@ -172,8 +172,8 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         }
 
         .sim-msg-user {
-          background: rgba(167,139,250,0.16);
-          border: 1px solid rgba(167,139,250,0.3);
+          background: rgb(var(--accent-rgb) / 0.16);
+          border: 1px solid rgb(var(--accent-rgb) / 0.3);
           color: #e2e8f0;
           border-radius: 16px;
           border-top-right-radius: 4px;
@@ -198,7 +198,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         .sim-input {
           flex: 1;
           background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(167,139,250,0.2);
+          border: 1px solid rgb(var(--accent-rgb) / 0.2);
           border-radius: 12px;
           padding: 13px 18px;
           color: #e2e8f0;
@@ -209,11 +209,11 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         }
 
         .sim-input::placeholder { color: #475569; }
-        .sim-input:focus { border-color: rgba(167,139,250,0.5); }
+        .sim-input:focus { border-color: rgb(var(--accent-rgb) / 0.5); }
         .sim-input:disabled { opacity: 0.4; cursor: not-allowed; }
 
         .sim-send-btn {
-          background: linear-gradient(135deg, #7c3aed, #0e7490);
+          background: linear-gradient(135deg, var(--accent-strong), var(--accent-2-strong));
           border: none;
           border-radius: 12px;
           color: white;
@@ -228,7 +228,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
 
         .sim-send-btn:hover:not(:disabled) {
           transform: translateY(-1px);
-          box-shadow: 0 8px 20px rgba(124,58,237,0.3);
+          box-shadow: 0 8px 20px rgb(var(--accent-strong-rgb) / 0.3);
         }
 
         .sim-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -269,14 +269,14 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         }
 
         .sim-end-btn:hover {
-          background: rgba(167,139,250,0.18);
-          border-color: rgba(167,139,250,0.35);
+          background: rgb(var(--accent-rgb) / 0.18);
+          border-color: rgb(var(--accent-rgb) / 0.35);
           color: #e2e8f0;
         }
 
         .sim-complete-card {
-          background: rgba(167,139,250,0.08);
-          border: 1px solid rgba(167,139,250,0.3);
+          background: rgb(var(--accent-rgb) / 0.08);
+          border: 1px solid rgb(var(--accent-rgb) / 0.3);
           border-radius: 16px;
           padding: 20px 24px;
           text-align: center;
@@ -284,7 +284,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
 
         .sim-restart-btn {
           margin-top: 14px;
-          background: #7c3aed;
+          background: var(--accent-strong);
           border: none;
           border-radius: 10px;
           color: white;
@@ -298,20 +298,20 @@ const InterviewSimulator = ({ aoGanharXp }) => {
 
         .sim-restart-btn:hover {
           transform: translateY(-1px);
-          box-shadow: 0 8px 20px rgba(124,58,237,0.3);
+          box-shadow: 0 8px 20px rgb(var(--accent-strong-rgb) / 0.3);
         }
       `}</style>
 
       {/* Stats bar */}
-      <div style={{ maxWidth: '760px', width: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+      <div style={{ maxWidth: '920px', width: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
         <div className="sim-stat-card">
-          <div style={{ background: '#7c3aed', borderRadius: '8px', padding: '5px 10px', fontSize: '12px', fontWeight: '700', color: 'white', letterSpacing: '0.5px' }}>
+          <div style={{ background: 'var(--accent-strong)', borderRadius: '8px', padding: '5px 10px', fontSize: '12px', fontWeight: '700', color: 'white', letterSpacing: '0.5px' }}>
             NÍV {nivel}
           </div>
           <div className="sim-xp-bar-track">
             <div className="sim-xp-bar-fill" style={{ width: `${xpProgress}%` }} />
           </div>
-          <span style={{ fontSize: '12px', color: '#a78bfa', fontWeight: '700' }}>{pontosExibidos} XP</span>
+          <span style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: '700' }}>{pontosExibidos} XP</span>
         </div>
 
         <div style={{ display: 'flex', gap: '12px' }}>
@@ -335,22 +335,22 @@ const InterviewSimulator = ({ aoGanharXp }) => {
 
       {/* Chat window */}
       <div style={{
-        maxWidth: '760px',
+        maxWidth: '920px',
         width: '100%',
         background: 'rgba(255,255,255,0.04)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        border: '1px solid rgba(167,139,250,0.15)',
+        border: '1px solid rgb(var(--accent-rgb) / 0.15)',
         borderRadius: '24px',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '0 0 60px rgba(167,139,250,0.05)',
+        boxShadow: '0 0 60px rgb(var(--accent-rgb) / 0.05)',
       }}>
         {/* Header */}
         <div style={{
-          background: 'rgba(124,58,237,0.14)',
-          borderBottom: '1px solid rgba(167,139,250,0.15)',
+          background: 'rgb(var(--accent-strong-rgb) / 0.14)',
+          borderBottom: '1px solid rgb(var(--accent-rgb) / 0.15)',
           padding: '20px 24px',
           display: 'flex',
           alignItems: 'center',
@@ -397,7 +397,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
             >
               <div style={{ display: 'flex', justifyContent: msg.remetente === 'user' ? 'flex-end' : 'flex-start' }}>
                 {msg.remetente === 'ai' && (
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', marginRight: '8px', flexShrink: 0, alignSelf: 'flex-end' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--accent-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', marginRight: '8px', flexShrink: 0, alignSelf: 'flex-end' }}>
                     <IconRobot />
                   </div>
                 )}
@@ -421,7 +421,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
 
           {carregando && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', flexShrink: 0 }}><IconRobot /></div>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--accent-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', flexShrink: 0 }}><IconRobot /></div>
               <p className="sim-typing">A IA está analisando sua resposta...</p>
             </div>
           )}
@@ -442,7 +442,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
                   <IconTrophy /> Simulação concluída!
                 </div>
                 <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '6px' }}>
-                  Você ganhou <strong style={{ color: '#67e8f9' }}>{xpGanhoSessao} XP</strong> nessa sessão de prática.
+                  Você ganhou <strong style={{ color: 'var(--accent-2)' }}>{xpGanhoSessao} XP</strong> nessa sessão de prática.
                 </div>
                 <button onClick={novaSimulacao} className="sim-restart-btn">
                   Nova simulação
@@ -454,7 +454,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
               key="input"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              style={{ padding: '16px 20px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgba(167,139,250,0.1)', display: 'flex', gap: '10px' }}
+              style={{ padding: '16px 20px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgb(var(--accent-rgb) / 0.1)', display: 'flex', gap: '10px' }}
             >
               <input
                 type="text"
