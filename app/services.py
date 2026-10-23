@@ -277,7 +277,7 @@ class AIService:
             }
         
         return {
-            "analise_feedback": "Ótima resposta! Você demonstrar clareza sobre suas competências chama a atenção de forma positiva.",
+            "analise_feedback": "Ótima resposta! Demonstrar clareza sobre suas competências chama a atenção de forma positiva.",
             "xp_concedido": 35,
             "proxima_pergunta": "Excelente progresso. Como você lida com feedbacks negativos ou críticas em trabalhos em equipe?"
         }

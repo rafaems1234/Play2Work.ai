@@ -26,7 +26,7 @@ const ITINERARIOS = [
 
 const VAGAS = [
   { id: 1, titulo_vaga: 'Jovem Aprendiz - Ciência de Dados', empresa: 'Vivo Telefônica', razao_social_real: 'TELEFÔNICA BRASIL S.A.', localizacao: 'São Paulo - SP', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Python', 'SQL', 'Análise de Dados'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Você vai apoiar o time de dados da Vivo em análises de churn e consumo, aprendendo Python, SQL e visualização de dados na prática.', link_inscricao: 'https://vagas.vivo.com.br' },
-  { id: 2, titulo_vaga: 'Desenvolvedor Front-end Junior', empresa: 'TechSoluções', razao_social_real: 'Parceiro Verificado', localizacao: 'Remoto', tipo_modalidade: 'Remoto', habilidades_exigidas: ['React', 'JavaScript', 'CSS'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Squad pequeno construindo produtos web com React. Você vai revisar PRs de verdade e aprender boas práticas de front-end com mentoria semanal.', link_inscricao: 'https://techsolucoes.com/carreiras' },
+  { id: 2, titulo_vaga: 'Desenvolvedor Front-end Júnior', empresa: 'TechSoluções', razao_social_real: 'Parceiro Verificado', localizacao: 'Remoto', tipo_modalidade: 'Remoto', habilidades_exigidas: ['React', 'JavaScript', 'CSS'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Squad pequeno construindo produtos web com React. Você vai revisar PRs de verdade e aprender boas práticas de front-end com mentoria semanal.', link_inscricao: 'https://techsolucoes.com/carreiras' },
   { id: 3, titulo_vaga: 'Assistente de TI', empresa: 'Suzano Papel e Celulose', razao_social_real: 'SUZANO S.A.', localizacao: 'Três Lagoas - MS', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Lógica de Programação', 'SQL'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Suporte ao time de infraestrutura de TI da unidade fabril: manutenção de estações de trabalho e apoio em chamados.', link_inscricao: 'https://suzano.gupy.io' },
   { id: 4, titulo_vaga: 'Jovem Aprendiz - Automação e Robótica', empresa: 'Bosch Manufatura', razao_social_real: 'ROBERT BOSCH LTDA', localizacao: 'Campinas - SP', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Lógica de Programação', 'Arduino', 'Trabalho em Equipe'], area_itinerario: 'Robótica e Automação', descricao_completa: 'Você vai acompanhar a equipe de automação industrial em projetos de prototipagem com Arduino e sensores.', link_inscricao: 'https://carreiras.bosch.com.br' },
   { id: 5, titulo_vaga: 'Estagiário de Departamento Jurídico', empresa: 'Machado Advogados Associados', razao_social_real: 'Parceiro Verificado', localizacao: 'São Paulo - SP', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Comunicação', 'Organização', 'Redação'], area_itinerario: 'Ciências Jurídicas / Serviços Jurídicos', descricao_completa: 'Apoio em rotinas administrativas de um escritório de Direito Digital e LGPD.', link_inscricao: 'https://machadoadvogados.com.br/carreiras' },
@@ -69,7 +69,7 @@ const estado = {
   xp_semanal: 180,
   nivel_gamificacao: 3,
   ofensiva_dias: 6,
-  itinerario: null,
+  itinerario: 'Tecnologia e Ciência de Dados',
   categoria_status: '🌌 Na Jornada',
   liga: 'Prata',
   vidas: 4,

@@ -82,7 +82,7 @@ def popular_banco():
             ),
             models.Vaga(
                 id=2,
-                titulo_vaga="Desenvolvedor Front-end Junior",
+                titulo_vaga="Desenvolvedor Front-end Júnior",
                 empresa="TechSoluções",
                 cnpj_empresa="42541295000100",
                 localizacao="Remoto",

@@ -21,7 +21,7 @@ const LINHAS_TERMINAL = [
   { prefixo: '>', texto: 'cruzando 5 habilidades com 6 vagas...', cor: '#94a3b8' },
   { prefixo: '✓', texto: 'match 100% · Jovem Aprendiz — Ciência de Dados', cor: 'var(--accent-2)' },
   { prefixo: '✓', texto: 'quiz do dia gerado pela IA · 10 perguntas', cor: 'var(--accent-2)' },
-  { prefixo: '★', texto: '+80 XP · ofensiva de 7 dias · Liga Ouro', cor: 'var(--accent)' },
+  { prefixo: '★', texto: 'nível 3 · 270 XP · ofensiva de 6 dias · Liga Prata', cor: 'var(--accent)' },
 ];
 
 const NUMEROS = [
@@ -37,7 +37,7 @@ const MODULOS = [
   { Icon: IconRobot, titulo: 'Simule a entrevista', texto: 'Um recrutador com IA faz as perguntas que caem de verdade, avalia cada resposta e mostra onde melhorar.' },
   { Icon: IconSparkle, titulo: 'Currículo pronto', texto: 'Conte do seu jeito o que já fez na escola, em cursos e projetos. A IA formata e você baixa o PDF na hora.' },
   { Icon: IconBriefcase, titulo: 'Match com a vaga', texto: 'O mural cruza seu perfil e seu itinerário com vagas de Jovem Aprendiz da sua área e mostra o % de aderência.' },
-  { Icon: IconTrophy, titulo: 'Suba de liga', texto: '10 ligas, do Bronze ao Diamante, disputadas com a sua turma. Os 3 primeiros sobem toda semana e os 3 últimos caem.' },
+  { Icon: IconTrophy, titulo: 'Suba de liga', texto: '10 ligas, do Bronze ao Diamante, disputadas em grupos de 30. Toda semana os 10 primeiros sobem e os 10 últimos caem.' },
 ];
 
 const Numero = ({ valor, sufixo, rotulo, atraso }) => {
