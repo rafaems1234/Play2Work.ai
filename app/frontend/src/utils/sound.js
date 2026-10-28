@@ -69,6 +69,34 @@ export const tocarSomErro = () => tocarSequencia([
   { frequencia: 164.8, inicio: 0.1, duracao: 0.22, tipo: 'sawtooth', volume: 0.09 },
 ]);
 
+// Combo: a nota sobe meio tom a cada acerto seguido (até um teto), igual a
+// sensação de "esquentando" do Duolingo.
+export const tocarSomCombo = (combo) => {
+  const base = 880 * 2 ** (Math.min(combo, 10) / 12);
+  tocarSequencia([
+    { frequencia: base, inicio: 0, duracao: 0.1, tipo: 'sine', volume: 0.15 },
+    { frequencia: base * 1.5, inicio: 0.08, duracao: 0.16, tipo: 'sine', volume: 0.15 },
+  ]);
+};
+
+export const tocarSomVida = () => tocarSequencia([
+  { frequencia: 783.99, inicio: 0, duracao: 0.1, tipo: 'triangle', volume: 0.16 },
+  { frequencia: 1046.5, inicio: 0.08, duracao: 0.1, tipo: 'triangle', volume: 0.16 },
+  { frequencia: 1567.98, inicio: 0.16, duracao: 0.25, tipo: 'triangle', volume: 0.18 },
+]);
+
+export const tocarSomFimQuiz = (precisao) => (precisao >= 70
+  ? tocarSequencia([
+    { frequencia: 523.25, inicio: 0, duracao: 0.1, tipo: 'triangle', volume: 0.16 },
+    { frequencia: 783.99, inicio: 0.1, duracao: 0.1, tipo: 'triangle', volume: 0.16 },
+    { frequencia: 1046.5, inicio: 0.2, duracao: 0.1, tipo: 'triangle', volume: 0.18 },
+    { frequencia: 1318.5, inicio: 0.3, duracao: 0.35, tipo: 'triangle', volume: 0.2 },
+  ])
+  : tocarSequencia([
+    { frequencia: 440, inicio: 0, duracao: 0.14, tipo: 'triangle', volume: 0.14 },
+    { frequencia: 523.25, inicio: 0.12, duracao: 0.28, tipo: 'triangle', volume: 0.14 },
+  ]));
+
 export const tocarSomLevelUp = () => tocarSequencia([
   { frequencia: 523.25, inicio: 0, duracao: 0.12, tipo: 'triangle', volume: 0.18 },
   { frequencia: 659.25, inicio: 0.1, duracao: 0.12, tipo: 'triangle', volume: 0.18 },

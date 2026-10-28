@@ -24,6 +24,23 @@ import {
   SpeakerHigh,
   SpeakerX,
   Medal,
+  Lock,
+  PencilSimple,
+  Star,
+  Eye,
+  EyeSlash,
+  CheckCircle,
+  XCircle,
+  Check,
+  Timer,
+  SkipForward,
+  Lightbulb,
+  Barbell,
+  BookOpen,
+  ArrowsClockwise,
+  MaskHappy,
+  TrendDown,
+  Confetti,
 } from '@phosphor-icons/react';
 
 const wrap = (PhosphorIcon) => (props) => (
@@ -54,3 +71,20 @@ export const IconGraduationCap = wrap(GraduationCap);
 export const IconSpeakerHigh = wrap(SpeakerHigh);
 export const IconSpeakerX = wrap(SpeakerX);
 export const IconMedal = wrap(Medal);
+export const IconLock = wrap(Lock);
+export const IconPencil = wrap(PencilSimple);
+export const IconStar = wrap(Star);
+export const IconEye = wrap(Eye);
+export const IconEyeSlash = wrap(EyeSlash);
+export const IconCheckCircle = wrap(CheckCircle);
+export const IconXCircle = wrap(XCircle);
+export const IconCheck = wrap(Check);
+export const IconTimer = wrap(Timer);
+export const IconSkip = wrap(SkipForward);
+export const IconLightbulb = wrap(Lightbulb);
+export const IconBarbell = wrap(Barbell);
+export const IconBook = wrap(BookOpen);
+export const IconRetry = wrap(ArrowsClockwise);
+export const IconMask = wrap(MaskHappy);
+export const IconTrendDown = wrap(TrendDown);
+export const IconConfetti = wrap(Confetti);

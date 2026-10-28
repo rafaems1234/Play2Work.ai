@@ -1,18 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { IconTarget, IconTrophy, IconWarning, IconSparkle, IconHeart, IconCoins, IconSnowflake, IconGraduationCap } from './icons';
+import { IconTarget, IconWarning, IconSparkle, IconHeart, IconCoins, IconSnowflake, IconGraduationCap, IconFire, IconTimer, IconLightbulb, IconSkip, IconCheckCircle, IconXCircle } from './icons';
 import { apiFetch } from '../api';
 import { SkeletonStyles, Skeleton } from './Skeleton';
-import { tocarSomAcerto, tocarSomErro } from '../utils/sound';
+import QuizResultado from './QuizResultado';
+import { tocarSomAcerto, tocarSomErro, tocarSomCombo, tocarSomVida } from '../utils/sound';
 
 const DICAS_POR_QUIZ = 2;
 const PULOS_POR_QUIZ = 2;
 const CUSTO_VIDA_MOEDAS = 50;
+const XP_POR_ACERTO = 8;
 
-const dispararConfete = () => {
-  const cores = ['#2e7bff', '#00e5ff', '#1652e0', '#34d399'];
-  confetti({ particleCount: 120, spread: 75, origin: { y: 0.6 }, colors: cores });
+const FRASES_ACERTO = ['Mandou bem!', 'Isso aí!', 'Certíssimo!', 'Boa!', 'Na mosca!', 'Arrasou!'];
+const FRASES_ERRO = ['Quase!', 'Não foi dessa vez', 'Ops!', 'Bora aprender essa'];
+const sortear = (lista) => lista[Math.floor(Math.random() * lista.length)];
+
+// Cor/intensidade do combo: amarelo → laranja → vermelho → roxo "em chamas"
+const estiloCombo = (combo) => {
+  if (combo >= 8) return { cor: '#c084fc', rotulo: 'IMPARÁVEL', chamas: 3 };
+  if (combo >= 5) return { cor: '#f87171', rotulo: 'EM CHAMAS', chamas: 2 };
+  if (combo >= 3) return { cor: '#fb923c', rotulo: 'Pegando fogo', chamas: 1 };
+  return { cor: '#fbbf24', rotulo: 'Combo', chamas: 1 };
 };
 
 const formatarEspera = (isoData) => {
@@ -30,7 +39,7 @@ const formatarTempo = (segundos) => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
-const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
+const DailyQuiz = ({ aoGanharXp, aoVoltarMural }) => {
   const [quiz, setQuiz] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
@@ -42,13 +51,15 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
   const [indiceAtual, setIndiceAtual] = useState(0);
   const [opcaoSelecionada, setOpcaoSelecionada] = useState(null);
   const [opcoesEliminadas, setOpcoesEliminadas] = useState([]);
-  const [acertos, setAcertos] = useState(0);
   const [resultado, setResultado] = useState(null);
 
   const [dicasRestantes, setDicasRestantes] = useState(DICAS_POR_QUIZ);
   const [pulosRestantes, setPulosRestantes] = useState(PULOS_POR_QUIZ);
   const [pulosUsados, setPulosUsados] = useState(0);
   const [combo, setCombo] = useState(0);
+  const [maiorCombo, setMaiorCombo] = useState(0);
+  const [fraseFeedback, setFraseFeedback] = useState('');
+  const [avisoVida, setAvisoVida] = useState(null); // combo que acabou de render 1 vida
 
   const [inicioQuiz, setInicioQuiz] = useState(null);
   const [tempoDecorrido, setTempoDecorrido] = useState(0);
@@ -118,13 +129,14 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
       setIndiceAtual(0);
       setOpcaoSelecionada(null);
       setOpcoesEliminadas([]);
-      setAcertos(0);
       setResultado(null);
       setFeedback(null);
       setDicasRestantes(dados.dicas_disponiveis ?? DICAS_POR_QUIZ);
       setPulosRestantes(dados.pulos_disponiveis ?? PULOS_POR_QUIZ);
       setPulosUsados(0);
       setCombo(0);
+      setMaiorCombo(0);
+      setAvisoVida(null);
       setInicioQuiz(Date.now());
       setTempoDecorrido(0);
     } catch (err) {
@@ -168,7 +180,6 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
           quizzes_perfeitos_seguidos: dados.quizzes_perfeitos_seguidos,
         }));
         setSemVidas(dados.vidas <= 0);
-        if (dados.acertos === dados.total || dados.vida_bonus_ganha) dispararConfete();
       }
     } catch (err) {
       console.error(err);
@@ -188,12 +199,20 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
       if (!response.ok) throw new Error();
       setFeedback(dados);
       if (dados.correta) {
-        tocarSomAcerto();
-        setAcertos((a) => a + 1);
-        setCombo((c) => c + 1);
+        const novoCombo = dados.combo ?? combo + 1;
+        if (novoCombo >= 2) tocarSomCombo(novoCombo); else tocarSomAcerto();
+        setCombo(novoCombo);
+        setMaiorCombo((m) => Math.max(m, novoCombo));
+        setFraseFeedback(sortear(FRASES_ACERTO));
+        if (dados.ganhou_vida_combo) {
+          setTimeout(tocarSomVida, 250);
+          setAvisoVida(novoCombo);
+          if (novoCombo >= 5) confetti({ particleCount: 40, spread: 50, origin: { y: 0.35 }, colors: ['#f43f5e', '#fb7185', '#fbbf24'] });
+        }
       } else {
         tocarSomErro();
         setCombo(0);
+        setFraseFeedback(sortear(FRASES_ERRO));
       }
     } catch (err) {
       console.error(err);
@@ -221,6 +240,7 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
 
   const proximaPergunta = () => {
     setFeedback(null);
+    setAvisoVida(null);
     if (!ultimaPergunta) {
       setIndiceAtual((i) => i + 1);
       setOpcaoSelecionada(null);
@@ -441,6 +461,38 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
           font-size: 12px;
           font-weight: 800;
           color: #fbbf24;
+          display: inline-block;
+        }
+
+        .quiz-combo-quente {
+          text-shadow: 0 0 10px currentColor;
+          animation: quizComboTremor 0.6s ease-in-out infinite alternate;
+        }
+
+        @keyframes quizComboTremor {
+          0% { transform: translateY(0) scale(1); }
+          100% { transform: translateY(-1px) scale(1.06); }
+        }
+
+        .quiz-feedback {
+          margin-top: 16px;
+          padding: 14px 18px;
+          border-radius: 14px;
+          border: 1px solid;
+        }
+        .quiz-feedback.certo {
+          background: rgba(52,211,153,0.1);
+          border-color: rgba(52,211,153,0.4);
+          color: #6ee7b7;
+        }
+        .quiz-feedback.errado {
+          background: rgba(239,68,68,0.08);
+          border-color: rgba(239,68,68,0.35);
+          color: #fca5a5;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .quiz-combo-quente { animation: none; }
         }
       `}</style>
       <SkeletonStyles />
@@ -460,6 +512,7 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
             </h2>
             <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, marginTop: '8px', maxWidth: '440px' }}>
               10 perguntas sobre o seu curso — o mesmo usado pela IA Recrutadora no Simulador. Errou, perde uma vida; acertou, ganha XP e moedas.
+              {' '}<strong style={{ color: '#fb7185' }}>{status?.acertos_seguidos_para_vida ?? 5} acertos seguidos devolvem 1 vida</strong>, e cada vida perdida volta sozinha a cada {status?.minutos_para_regenerar_vida ?? 30} min.
             </p>
           </div>
           <IconTarget style={{ fontSize: '24px', color: 'var(--accent)', flexShrink: 0, marginTop: '4px' }} />
@@ -484,7 +537,7 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
             <IconHeart style={{ fontSize: '28px', color: '#f43f5e', marginBottom: '10px' }} />
             <div style={{ color: '#e2e8f0', fontWeight: '700', marginBottom: '6px' }}>Você está sem vidas</div>
             <div style={{ color: '#64748b', fontSize: '13px', marginBottom: '16px' }}>
-              {status?.proxima_vida_em ? `Próxima vida em ${formatarEspera(status.proxima_vida_em)}` : 'Aguarde a regeneração ou compre com moedas.'}
+              {status?.proxima_vida_em ? `Próxima vida em ${formatarEspera(status.proxima_vida_em)} — depois, mais 1 a cada ${status.minutos_para_regenerar_vida ?? 30} min até encher.` : 'Aguarde a regeneração ou compre com moedas.'}
             </div>
             <button
               onClick={comprarVida}
@@ -501,31 +554,22 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
           <div style={{ background: 'rgb(var(--accent-rgb) / 0.06)', border: '1px solid rgb(var(--accent-rgb) / 0.2)', borderRadius: '16px', padding: '22px' }}>
             <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Seu curso atual</div>
             <div style={{ fontSize: '18px', fontWeight: '800', color: '#f1f5f9', marginBottom: '16px' }}>{status.itinerario}</div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <button onClick={gerarQuiz} className="quiz-next-btn" style={{ margin: 0, flex: '1 1 200px' }}>
-                Começar quiz de hoje →
-              </button>
-              {aoAbrirCursos && (
-                <button onClick={aoAbrirCursos} className="quiz-itinerario-btn" style={{ flex: '0 0 auto' }}>
-                  Trocar curso
-                </button>
-              )}
-            </div>
+            <button onClick={gerarQuiz} className="quiz-next-btn" style={{ margin: 0 }}>
+              Começar quiz de hoje →
+            </button>
           </div>
         )}
 
         {!quiz && !carregando && !semVidas && !status?.itinerario && (
           <div style={{ background: 'rgb(var(--accent-rgb) / 0.06)', border: '1px dashed rgb(var(--accent-rgb) / 0.25)', borderRadius: '16px', padding: '28px', textAlign: 'center' }}>
             <IconGraduationCap style={{ fontSize: '30px', color: 'var(--accent)', marginBottom: '12px' }} />
-            <div style={{ color: '#e2e8f0', fontWeight: '700', marginBottom: '6px' }}>Você ainda não escolheu um curso</div>
+            <div style={{ color: '#e2e8f0', fontWeight: '700', marginBottom: '6px' }}>Seu itinerário ainda não foi cadastrado</div>
             <div style={{ color: '#64748b', fontSize: '13px', marginBottom: '18px' }}>
-              O curso define o tema do Quiz do Dia e das perguntas do Simulador de Entrevista.
+              Quem define o itinerário é a escola. Enquanto isso, você pode treinar com perguntas gerais de soft skills.
             </div>
-            {aoAbrirCursos && (
-              <button onClick={aoAbrirCursos} className="quiz-next-btn" style={{ maxWidth: '260px', margin: '0 auto' }}>
-                Escolher meu curso
-              </button>
-            )}
+            <button onClick={gerarQuiz} className="quiz-next-btn" style={{ maxWidth: '260px', margin: '0 auto' }}>
+              Treinar soft skills →
+            </button>
           </div>
         )}
 
@@ -552,29 +596,46 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
               <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>{indiceAtual + 1} / {quiz.perguntas.length}</span>
             </div>
 
+            {/* Barra de progresso: enche a cada pergunta e esquenta de cor com o combo */}
+            <div style={{ height: '10px', borderRadius: '99px', background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: '14px' }}>
+              <motion.div
+                animate={{
+                  width: `${((indiceAtual + (feedback ? 1 : 0)) / quiz.perguntas.length) * 100}%`,
+                  backgroundColor: combo >= 2 ? estiloCombo(combo).cor : '#34d399',
+                }}
+                transition={{ type: 'spring', stiffness: 140, damping: 20 }}
+                style={{ height: '100%', borderRadius: '99px' }}
+              />
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace' }}>⏱ {formatarTempo(tempoDecorrido)}</span>
+                <span style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><IconTimer /> {formatarTempo(tempoDecorrido)}</span>
                 <AnimatePresence>
                   {combo >= 2 && (
                     <motion.span
                       key={combo}
-                      initial={{ opacity: 0, scale: 0.6 }}
-                      animate={{ opacity: 1, scale: 1 }}
+                      initial={{ opacity: 0, scale: 0.4, rotate: -8 }}
+                      animate={{ opacity: 1, scale: [1.35, 1], rotate: 0 }}
                       exit={{ opacity: 0, scale: 0.6 }}
-                      className="quiz-combo-badge"
+                      transition={{ duration: 0.35 }}
+                      className={`quiz-combo-badge ${combo >= 5 ? 'quiz-combo-quente' : ''}`}
+                      style={{ color: estiloCombo(combo).cor }}
                     >
-                      🔥 Combo x{combo}
+                      <span style={{ display: 'inline-flex', verticalAlign: '-2px', marginRight: '4px' }}>
+                        {Array.from({ length: estiloCombo(combo).chamas }).map((_, i) => <IconFire key={i} />)}
+                      </span>
+                      {estiloCombo(combo).rotulo} x{combo}
                     </motion.span>
                   )}
                 </AnimatePresence>
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button onClick={usarDica} disabled={dicasRestantes <= 0 || opcaoSelecionada !== null} className="quiz-tool-btn">
-                  💡 Dica ({dicasRestantes})
+                  <IconLightbulb style={{ verticalAlign: '-2px' }} /> Dica ({dicasRestantes})
                 </button>
                 <button onClick={pularPergunta} disabled={pulosRestantes <= 0 || opcaoSelecionada !== null} className="quiz-tool-btn">
-                  ⏭ Pular ({pulosRestantes})
+                  <IconSkip style={{ verticalAlign: '-2px' }} /> Pular ({pulosRestantes})
                 </button>
               </div>
             </div>
@@ -615,14 +676,48 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
 
                 {feedback && (
                   <motion.div
-                    initial={{ opacity: 0, y: 8 }}
+                    initial={{ opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
-                    style={{ marginTop: '16px', padding: '14px 18px', background: 'rgb(var(--accent-rgb) / 0.06)', border: '1px solid rgb(var(--accent-rgb) / 0.15)', borderRadius: '14px', fontSize: '13px', color: '#94a3b8', lineHeight: 1.6, display: 'flex', gap: '8px' }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+                    className={`quiz-feedback ${feedback.correta ? 'certo' : 'errado'}`}
                   >
-                    <IconSparkle style={{ color: 'var(--accent)', flexShrink: 0, marginTop: '2px' }} />
-                    <span>{feedback.explicacao}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '16px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        {feedback.correta ? <IconCheckCircle /> : <IconXCircle />} {fraseFeedback}
+                      </span>
+                      {feedback.correta && (
+                        <motion.span
+                          initial={{ opacity: 0, y: 10, scale: 0.6 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{ delay: 0.1, type: 'spring', stiffness: 400 }}
+                          style={{ fontSize: '13px', fontWeight: '800', color: '#fbbf24' }}
+                        >
+                          +{XP_POR_ACERTO} XP
+                        </motion.span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', fontSize: '13px', color: '#cbd5e1', lineHeight: 1.6 }}>
+                      <IconSparkle style={{ flexShrink: 0, marginTop: '3px', opacity: 0.8 }} />
+                      <span>{feedback.explicacao}</span>
+                    </div>
                   </motion.div>
                 )}
+
+                <AnimatePresence>
+                  {avisoVida && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.5 }}
+                      animate={{ opacity: 1, scale: [1.15, 1] }}
+                      exit={{ opacity: 0 }}
+                      style={{ marginTop: '10px', padding: '10px 14px', borderRadius: '12px', background: 'rgba(244,63,94,0.12)', border: '1px solid rgba(244,63,94,0.35)', color: '#fda4af', fontSize: '13px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                    >
+                      <motion.span animate={{ scale: [1, 1.35, 1] }} transition={{ repeat: 2, duration: 0.5 }} style={{ display: 'inline-flex', color: '#f43f5e' }}>
+                        <IconHeart />
+                      </motion.span>
+                      Combo x{avisoVida}! +1 vida recuperada
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             </AnimatePresence>
 
@@ -634,37 +729,14 @@ const DailyQuiz = ({ aoGanharXp, aoAbrirCursos, aoVoltarMural }) => {
           </div>
         )}
 
-        {resultado && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            style={{ textAlign: 'center', padding: '20px 0' }}
-          >
-            <IconTrophy style={{ fontSize: '40px', color: '#fbbf24', marginBottom: '14px' }} />
-            <h3 style={{ fontSize: '22px', fontWeight: '800', color: '#f1f5f9', marginBottom: '8px' }}>
-              Você acertou {resultado.acertos} de {resultado.total}!
-            </h3>
-            <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '8px' }}>
-              Tempo: {formatarTempo(tempoDecorrido)} · Pulos usados: {pulosUsados}
-            </p>
-            <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '8px' }}>
-              +{resultado.xp_concedido} XP · Nível {resultado.nivel_atual} · {resultado.categoria_status}
-            </p>
-            {resultado.vida_bonus_ganha ? (
-              <p style={{ color: '#f43f5e', fontSize: '13px', fontWeight: '700', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                <IconHeart /> 5 quizzes perfeitos seguidos! Ganhou 1 vida de bônus
-              </p>
-            ) : (
-              acertos === resultado.total && (
-                <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '20px' }}>
-                  {resultado.quizzes_perfeitos_seguidos}/5 quizzes perfeitos seguidos pra ganhar vida de bônus
-                </p>
-              )
-            )}
-            <button onClick={reiniciar} className="quiz-next-btn" style={{ maxWidth: '260px', margin: '0 auto' }}>
-              Fazer outro quiz
-            </button>
-          </motion.div>
+        {resultado && resultado.total !== undefined && (
+          <QuizResultado
+            resultado={resultado}
+            tempoSegundos={tempoDecorrido}
+            maiorCombo={maiorCombo}
+            pulosUsados={pulosUsados}
+            aoRefazer={reiniciar}
+          />
         )}
       </div>
     </div>

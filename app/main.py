@@ -6,6 +6,7 @@ from slowapi import _rate_limit_exceeded_handler
 import models
 from database import engine
 from routes import router  # Garanta que o arquivo routes.py exista nesta mesma pasta
+from admin_routes import router as admin_router
 from limiter import limiter
 
 logging.basicConfig(
@@ -39,6 +40,7 @@ app.add_middleware(
 # Acoplamento de Rotas Modulares
 # REMOVIDO: A linha duplicada que reincluía o router
 app.include_router(router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 
 # Rota de checagem inicial de status
 @app.get("/api/status", tags=["Status"])

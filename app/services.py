@@ -2,6 +2,8 @@ import os
 import json
 import logging
 import asyncio
+import random
+import time
 import httpx
 from datetime import date, datetime, timedelta
 from dotenv import load_dotenv
@@ -9,12 +11,15 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from google import genai
-from models import Estudante, Vaga, AtividadeDiaria
+from google.genai import errors as genai_errors
+from models import Estudante, Vaga, AtividadeDiaria, QuizSessao
+from nomes import escolher_nome_exibicao
 from schemas import CurriculoIaSchema, AvaliacaoEntrevistaSchema, QuizSchema
 
 # ❤️ Configuração do sistema de vidas/moedas/congelamento de ofensiva
 VIDAS_MAXIMAS = 5
-HORAS_PARA_REGENERAR_VIDA = 2
+MINUTOS_PARA_REGENERAR_VIDA = 30  # cada vida perdida volta sozinha, uma a cada 30 min, até encher
+ACERTOS_SEGUIDOS_PARA_VIDA = 5   # combo de 5 acertos seguidos no quiz devolve 1 vida (sem anúncio nem moeda)
 CUSTO_MOEDAS_POR_VIDA = 50
 MOEDAS_POR_XP = 0.1              # 1 moeda a cada 10 XP ganho
 DIAS_OFENSIVA_POR_CONGELAMENTO = 7  # a cada 7 dias seguidos, ganha 1 congelamento de graça
@@ -105,7 +110,154 @@ ITINERARIOS_QUIZ = {
             "Técnicas de estudo para vestibular e ENEM",
         ],
     },
+    "Recursos Humanos e Gestão de Pessoas": {
+        "descricao": "Recrutamento e seleção, departamento pessoal, legislação trabalhista básica (CLT), comunicação e clima organizacional.",
+        "temas": [
+            "Recrutamento e seleção: como funciona um processo seletivo por dentro",
+            "Departamento pessoal: admissão, folha de ponto e documentos",
+            "Noções de CLT e direitos do Jovem Aprendiz",
+            "Comunicação interna, feedback e clima organizacional",
+            "Treinamento, integração (onboarding) e desenvolvimento de pessoas",
+        ],
+    },
 }
+
+# Banco de questões por itinerário (+ "Geral" com soft skills). Fica dentro
+# do front porque o modo demonstração (mockApi.js) sorteia do mesmo arquivo --
+# uma fonte só pras duas pontas, sem lista duplicada pra manter em sincronia.
+CAMINHO_BANCO_QUESTOES = os.path.join(os.path.dirname(__file__), "frontend", "src", "data", "banco_questoes.json")
+with open(CAMINHO_BANCO_QUESTOES, encoding="utf-8") as _arquivo_banco:
+    BANCO_QUESTOES = json.load(_arquivo_banco)
+
+PERGUNTAS_POR_QUIZ = 10
+PERGUNTAS_GERAIS_POR_QUIZ = 2   # dos 10, quantos vêm de soft skills gerais (o resto é da área do itinerário)
+SESSOES_RECENTES_SEM_REPETIR = 5  # perguntas vistas nos últimos N quizzes ficam por último no sorteio
+
+
+def _embaralhar_opcoes(pergunta: dict, rng: random.Random) -> dict:
+    """Muda a ordem das alternativas (e o índice da certa junto) -- decorar 'é a letra B' não funciona."""
+    ordem = list(range(len(pergunta["opcoes"])))
+    rng.shuffle(ordem)
+    return {
+        "pergunta": pergunta["pergunta"],
+        "opcoes": [pergunta["opcoes"][i] for i in ordem],
+        "resposta_correta_index": ordem.index(pergunta["resposta_correta_index"]),
+        "explicacao": pergunta.get("explicacao", ""),
+    }
+
+
+def _sortear_do_grupo(grupo: list[dict], quantidade: int, perguntas_recentes: set[str], rng: random.Random) -> list[dict]:
+    ineditas = [p for p in grupo if p["pergunta"] not in perguntas_recentes]
+    repetidas = [p for p in grupo if p["pergunta"] in perguntas_recentes]
+    rng.shuffle(ineditas)
+    rng.shuffle(repetidas)
+    return (ineditas + repetidas)[:quantidade]
+
+
+def sortear_perguntas_do_banco(itinerario: str | None, perguntas_recentes: set[str], rng: random.Random | None = None) -> list[dict]:
+    """
+    Monta o quiz a partir do banco: a maior parte da área do itinerário e
+    um pouco de soft skills gerais. Perguntas que o aluno viu nos últimos
+    quizzes só entram se as inéditas acabarem, e as alternativas são
+    embaralhadas a cada quiz.
+    """
+    rng = rng or random.Random()
+    da_area = BANCO_QUESTOES.get(itinerario or "", [])
+    qtd_gerais = PERGUNTAS_GERAIS_POR_QUIZ if da_area else PERGUNTAS_POR_QUIZ
+    escolhidas = _sortear_do_grupo(da_area, PERGUNTAS_POR_QUIZ - qtd_gerais, perguntas_recentes, rng)
+    escolhidas += _sortear_do_grupo(BANCO_QUESTOES["Geral"], PERGUNTAS_POR_QUIZ - len(escolhidas), perguntas_recentes, rng)
+    rng.shuffle(escolhidas)
+    return [_embaralhar_opcoes(p, rng) for p in escolhidas]
+
+
+def combo_final(respostas: list[dict]) -> int:
+    """Acertos seguidos no fim da lista de respostas (erro ou pulo zera)."""
+    combo = 0
+    for resposta in respostas:
+        combo = combo + 1 if resposta.get("correta") else 0
+    return combo
+
+
+def vidas_ganhas_por_combo(respostas: list[dict]) -> int:
+    """Cada vez que o combo chega a um múltiplo de ACERTOS_SEGUIDOS_PARA_VIDA, vale 1 vida."""
+    vidas, combo = 0, 0
+    for resposta in respostas:
+        combo = combo + 1 if resposta.get("correta") else 0
+        if combo and combo % ACERTOS_SEGUIDOS_PARA_VIDA == 0:
+            vidas += 1
+    return vidas
+
+
+def gerar_nome_exibicao(db: Session, nome_completo: str, ignorar_id: int | None = None) -> str:
+    """Busca os nomes de exibição já usados com o mesmo primeiro nome e escolhe um livre."""
+    primeiro = (nome_completo.split() or ["Aluno"])[0].lower()
+    consulta = db.query(Estudante.nome_exibicao).filter(func.lower(Estudante.nome_exibicao).like(f"{primeiro}%"))
+    if ignorar_id is not None:
+        consulta = consulta.filter(Estudante.id != ignorar_id)
+    ocupados = {nome.lower() for (nome,) in consulta.all() if nome}
+    return escolher_nome_exibicao(nome_completo, ocupados)
+
+
+# Pesos da nota de desempenho usada pela escola (painel admin) pra
+# selecionar quem indicar pra uma vaga. Somam 100, então a nota final já
+# sai em 0-100 e cada parcela é explicável no painel ("por que esse aluno?").
+PESOS_DESEMPENHO = {
+    "habilidades": 35,   # % das habilidades exigidas pela vaga que o aluno tem
+    "itinerario": 20,    # itinerário do aluno é a área da vaga
+    "quiz": 25,          # taxa de acerto nos quizzes concluídos (validados no servidor)
+    "engajamento": 15,   # XP total, relativo ao aluno com mais XP
+    "constancia": 5,     # ofensiva atual (dias seguidos), satura em OFENSIVA_PARA_CONSTANCIA_MAXIMA
+}
+OFENSIVA_PARA_CONSTANCIA_MAXIMA = 30
+
+
+def calcular_desempenho_para_vaga(estudante: Estudante, vaga: Vaga, taxa_acerto_quiz: float | None, xp_maximo: int) -> dict:
+    """
+    Nota de 0 a 100 de quão indicado o aluno é pra essa vaga, combinando o
+    desempenho na plataforma (quiz, XP, ofensiva) com a aderência à vaga
+    (habilidades e itinerário). Função pura -- quem chama já traz a taxa de
+    acerto e o XP máximo da base, pra dar pra ranquear muitos alunos com
+    poucas consultas.
+    """
+    hab_vaga = set(vaga.habilidades_exigidas or [])
+    hab_estudante = set(estudante.habilidades or [])
+    fracoes = {
+        "habilidades": len(hab_vaga & hab_estudante) / len(hab_vaga) if hab_vaga else 0.0,
+        "itinerario": 1.0 if estudante.itinerario and estudante.itinerario == vaga.area_itinerario else 0.0,
+        "quiz": taxa_acerto_quiz or 0.0,
+        "engajamento": min(1.0, (estudante.xp_total or 0) / xp_maximo) if xp_maximo > 0 else 0.0,
+        "constancia": min(1.0, (estudante.ofensiva_dias or 0) / OFENSIVA_PARA_CONSTANCIA_MAXIMA),
+    }
+    detalhes = {chave: round(fracao * PESOS_DESEMPENHO[chave], 1) for chave, fracao in fracoes.items()}
+    return {
+        "pontuacao": round(sum(detalhes.values())),
+        "detalhes": detalhes,
+        "habilidades_em_comum": sorted(hab_vaga & hab_estudante),
+    }
+
+
+def taxas_de_acerto_quiz(db: Session, estudante_ids: list[int]) -> dict[int, float | None]:
+    """
+    Taxa de acerto de cada aluno somando todos os quizzes concluídos (pulos
+    não contam nem como acerto nem como erro). None = ainda não concluiu
+    nenhum quiz. As respostas são as que o servidor registrou em
+    /quiz/responder, não o que o cliente declarou.
+    """
+    acertos = {eid: 0 for eid in estudante_ids}
+    respondidas = {eid: 0 for eid in estudante_ids}
+    if estudante_ids:
+        sessoes = db.query(QuizSessao).filter(
+            QuizSessao.estudante_id.in_(estudante_ids),
+            QuizSessao.concluido.is_(True),
+        ).all()
+        for sessao in sessoes:
+            for resposta in sessao.respostas or []:
+                if resposta.get("pulou"):
+                    continue
+                respondidas[sessao.estudante_id] += 1
+                if resposta.get("correta"):
+                    acertos[sessao.estudante_id] += 1
+    return {eid: (acertos[eid] / respondidas[eid] if respondidas[eid] else None) for eid in estudante_ids}
 
 # Garante que GEMINI_API_KEY esteja carregada mesmo se este módulo for
 # importado antes de database.py (que também carrega o .env)
@@ -117,6 +269,36 @@ try:
     client = genai.Client()
 except Exception:
     client = None
+
+# Modelo do plano gratuito do Google AI Studio. O gemini-2.5-flash deixou de
+# aceitar chaves novas (404) e o 3.8-flash só libera 5 pedidos/min no plano
+# grátis, então o padrão é o 3.5-flash-lite; dá pra trocar sem mexer no
+# código definindo GEMINI_MODEL no .env.
+MODELO_GEMINI = os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite"
+TENTATIVAS_GEMINI = 2   # 503 ("alta demanda") costuma passar em segundos
+
+
+def gerar_json_gemini(prompt: str, schema) -> dict:
+    """
+    Chama o Gemini pedindo JSON no formato do schema. Repete uma vez se o
+    modelo estiver sobrecarregado (503). Cota estourada (429) não repete --
+    só gastaria mais cota -- e sobe na hora pra quem chamou cair no fallback.
+    """
+    for tentativa in range(1, TENTATIVAS_GEMINI + 1):
+        try:
+            response = client.models.generate_content(
+                model=MODELO_GEMINI,
+                contents=prompt,
+                config={
+                    'response_mime_type': 'application/json',
+                    'response_schema': schema,
+                },
+            )
+            return json.loads(response.text)
+        except genai_errors.APIError as e:
+            if e.code != 503 or tentativa == TENTATIVAS_GEMINI:
+                raise
+            time.sleep(2)
 
 class AIService:
     """
@@ -207,16 +389,7 @@ class AIService:
 
         if client:
             try:
-                # 🌟 CORRIGIDO: Passando a configuração de schema de forma nativa e limpa para a SDK
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=prompt,
-                    config={
-                        'response_mime_type': 'application/json',
-                        'response_schema': CurriculoIaSchema,
-                    },
-                )
-                return json.loads(response.text)
+                return gerar_json_gemini(prompt, CurriculoIaSchema)
             except Exception as e:
                 logger.warning("Falha ao gerar currículo via Gemini, usando fallback: %s", e)
 
@@ -255,16 +428,7 @@ class AIService:
 
         if client:
             try:
-                # 🌟 CORRIGIDO: Passando a configuração de schema de forma nativa e limpa para a SDK
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=prompt,
-                    config={
-                        'response_mime_type': 'application/json',
-                        'response_schema': AvaliacaoEntrevistaSchema,
-                    },
-                )
-                return json.loads(response.text)
+                return gerar_json_gemini(prompt, AvaliacaoEntrevistaSchema)
             except Exception as e:
                 logger.warning("Falha ao avaliar resposta via Gemini, usando fallback: %s", e)
 
@@ -293,145 +457,35 @@ class AIService:
         return temas[date.today().toordinal() % len(temas)]
 
     @staticmethod
-    def gerar_quiz_ia(tema: str, itinerario: str | None = None) -> dict:
+    def gerar_quiz_ia(tema: str, itinerario: str | None = None, perguntas_recentes: set[str] | None = None) -> dict:
         """
         Gera um quiz de 10 perguntas de múltipla escolha sobre o tema do dia,
         no mesmo padrão de JSON estrito usado no currículo e na entrevista.
+        Sem IA (ou se ela falhar), sorteia do banco de questões da área.
+        Nos dois casos, as perguntas dos últimos quizzes do aluno são
+        evitadas pra não repetir.
         """
+        perguntas_recentes = perguntas_recentes or set()
         contexto_trilha = f' O estudante está seguindo o itinerário formativo "{itinerario}", então contextualize os exemplos para essa área.' if itinerario else ''
+        evitar = ''
+        if perguntas_recentes:
+            lista = "\n".join(f"- {p}" for p in sorted(perguntas_recentes)[:30])
+            evitar = f"\n        Não repita nem reformule estas perguntas, que o estudante já respondeu recentemente:\n{lista}"
         prompt = f"""
         Atue como um instrutor de preparação para o primeiro emprego de jovens aprendizes.
         Crie um quiz de exatamente 10 perguntas de múltipla escolha (4 alternativas cada,
         só uma correta) sobre o tema: "{tema}".{contexto_trilha}
         As perguntas devem ser objetivas, práticas e adequadas para jovens sem experiência
-        prévia de mercado de trabalho. Evite pegadinhas — o objetivo é ensinar, não confundir.
+        prévia de mercado de trabalho. Evite pegadinhas — o objetivo é ensinar, não confundir.{evitar}
         """
 
         if client:
             try:
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=prompt,
-                    config={
-                        'response_mime_type': 'application/json',
-                        'response_schema': QuizSchema,
-                    },
-                )
-                return json.loads(response.text)
+                return gerar_json_gemini(prompt, QuizSchema)
             except Exception as e:
-                logger.warning("Falha ao gerar quiz via Gemini, usando fallback: %s", e)
+                logger.warning("Falha ao gerar quiz via Gemini, usando banco de questões: %s", e)
 
-        # Fallback estático caso a API falhe ou não tenha chave configurada
-        return {
-            "tema": tema,
-            "perguntas": [
-                {
-                    "pergunta": "Você chega 10 minutos atrasado para uma reunião online importante. Qual a melhor atitude?",
-                    "opcoes": [
-                        "Entrar sem avisar e fingir que não houve atraso",
-                        "Entrar, pedir desculpas rapidamente e focar no que está sendo dito",
-                        "Não entrar mais, já que já perdeu o começo",
-                        "Mandar mensagem culpando o trânsito ou a internet em detalhes",
-                    ],
-                    "resposta_correta_index": 1,
-                    "explicacao": "Reconhecer o atraso com objetividade e seguir em frente demonstra profissionalismo sem gerar mais atrito.",
-                },
-                {
-                    "pergunta": "Qual dessas é uma soft skill valorizada por recrutadores?",
-                    "opcoes": ["Comunicação clara", "Velocidade de digitação", "Memorização de fórmulas", "Uso avançado de planilhas"],
-                    "resposta_correta_index": 0,
-                    "explicacao": "Soft skills são competências comportamentais — comunicação clara é uma das mais buscadas em qualquer área.",
-                },
-                {
-                    "pergunta": "Você recebeu um feedback negativo do seu líder. O que fazer?",
-                    "opcoes": [
-                        "Ignorar, já que é só opinião",
-                        "Discutir na hora para provar que está certo",
-                        "Ouvir com atenção e perguntar como pode melhorar",
-                        "Evitar aquele líder daí em diante",
-                    ],
-                    "resposta_correta_index": 2,
-                    "explicacao": "Feedback é uma ferramenta de crescimento — ouvir e buscar melhorar é o que diferencia profissionais em evolução.",
-                },
-                {
-                    "pergunta": "Num e-mail profissional, o que é mais adequado?",
-                    "opcoes": [
-                        "Escrever tudo em letras maiúsculas para dar ênfase",
-                        "Usar linguagem informal e gírias",
-                        "Ser claro, objetivo e educado, com saudação e assinatura",
-                        "Enviar sem assunto para ser mais rápido",
-                    ],
-                    "resposta_correta_index": 2,
-                    "explicacao": "Clareza, objetividade e educação são a base de uma comunicação profissional eficaz por e-mail.",
-                },
-                {
-                    "pergunta": "Você tem 3 tarefas para hoje e pouco tempo. Qual a melhor estratégia?",
-                    "opcoes": [
-                        "Fazer todas ao mesmo tempo",
-                        "Priorizar a mais urgente/importante primeiro",
-                        "Fazer a mais fácil só para riscar da lista",
-                        "Esperar até o fim do dia para decidir",
-                    ],
-                    "resposta_correta_index": 1,
-                    "explicacao": "Priorizar por urgência e importância é a base de uma boa gestão de tempo.",
-                },
-                {
-                    "pergunta": "Um colega te pede ajuda numa tarefa enquanto você está no meio de outra urgente. O que fazer?",
-                    "opcoes": [
-                        "Ignorar o pedido sem responder",
-                        "Parar tudo imediatamente pra ajudar",
-                        "Explicar a situação e combinar um horário pra ajudar depois",
-                        "Ajudar só parte do tempo, sem avisar nada",
-                    ],
-                    "resposta_correta_index": 2,
-                    "explicacao": "Comunicar a situação com transparência e negociar um horário mostra organização sem deixar o colega no vácuo.",
-                },
-                {
-                    "pergunta": "Qual desses é um exemplo de escuta ativa numa reunião?",
-                    "opcoes": [
-                        "Mexer no celular enquanto o outro fala",
-                        "Interromper pra dar sua opinião",
-                        "Fazer perguntas e resumir o que entendeu",
-                        "Ficar calado sem demonstrar reação",
-                    ],
-                    "resposta_correta_index": 2,
-                    "explicacao": "Escuta ativa envolve confirmar entendimento — perguntar e resumir mostra que você realmente está prestando atenção.",
-                },
-                {
-                    "pergunta": "Você cometeu um erro num relatório que já foi enviado. Qual a melhor atitude?",
-                    "opcoes": [
-                        "Esperar alguém perceber",
-                        "Avisar o responsável e propor a correção",
-                        "Corrigir sem falar nada pra ninguém notar",
-                        "Culpar quem revisou antes de você",
-                    ],
-                    "resposta_correta_index": 1,
-                    "explicacao": "Assumir o erro e propor solução rapidamente é o que constrói confiança profissional — esconder só piora.",
-                },
-                {
-                    "pergunta": "Numa entrevista de emprego, o que passa mais credibilidade?",
-                    "opcoes": [
-                        "Dizer que não tem nenhum ponto fraco",
-                        "Dar exemplos concretos de situações reais",
-                        "Falar mal do emprego anterior",
-                        "Responder tudo de forma genérica",
-                    ],
-                    "resposta_correta_index": 1,
-                    "explicacao": "Exemplos concretos e reais são muito mais convincentes do que respostas genéricas ou decoradas.",
-                },
-                {
-                    "pergunta": "O que caracteriza um bom trabalho em equipe?",
-                    "opcoes": [
-                        "Cada um cuidar só da própria parte, sem se comunicar",
-                        "Compartilhar informações e ajudar quando possível",
-                        "Competir pra aparecer mais que os colegas",
-                        "Esperar que o líder resolva tudo sozinho",
-                    ],
-                    "resposta_correta_index": 1,
-                    "explicacao": "Comunicação e colaboração são a base de qualquer equipe que funciona bem de verdade.",
-                },
-            ],
-        }
+        return {"tema": tema, "perguntas": sortear_perguntas_do_banco(itinerario, perguntas_recentes)}
 
     @staticmethod
     def calcular_categoria_status(xp_total: int) -> str:
@@ -578,7 +632,7 @@ class AIService:
         if agora < estudante.proxima_vida_em:
             return
 
-        intervalo = timedelta(hours=HORAS_PARA_REGENERAR_VIDA)
+        intervalo = timedelta(minutes=MINUTOS_PARA_REGENERAR_VIDA)
         tempo_desde_a_marca = agora - estudante.proxima_vida_em
         vidas_regeneradas = 1 + int(tempo_desde_a_marca / intervalo)
 
@@ -614,7 +668,16 @@ class AIService:
             return
         estudante.vidas -= 1
         if estudante.proxima_vida_em is None:
-            estudante.proxima_vida_em = datetime.utcnow() + timedelta(hours=HORAS_PARA_REGENERAR_VIDA)
+            estudante.proxima_vida_em = datetime.utcnow() + timedelta(minutes=MINUTOS_PARA_REGENERAR_VIDA)
+
+    @staticmethod
+    def ganhar_vidas(estudante: Estudante, quantidade: int) -> int:
+        """Devolve até 'quantidade' vidas respeitando o teto. Retorna quantas entraram de fato."""
+        ganhas = max(0, min(quantidade, VIDAS_MAXIMAS - estudante.vidas))
+        estudante.vidas += ganhas
+        if estudante.vidas >= VIDAS_MAXIMAS:
+            estudante.proxima_vida_em = None
+        return ganhas
 
     @staticmethod
     def conceder_moedas_por_xp(estudante: Estudante, xp_concedido: int) -> None:

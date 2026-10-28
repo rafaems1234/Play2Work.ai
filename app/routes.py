@@ -21,9 +21,15 @@ from services import (
     LIGAS,
     LIGA_EMOJI,
     TAMANHO_GRUPO_LIGA,
+    SESSOES_RECENTES_SEM_REPETIR,
+    ACERTOS_SEGUIDOS_PARA_VIDA,
+    MINUTOS_PARA_REGENERAR_VIDA,
     vagas_das_zonas,
+    combo_final,
+    vidas_ganhas_por_combo,
+    gerar_nome_exibicao,
 )
-from auth import hash_senha, verificar_senha, criar_token, get_estudante_atual, gerar_senha_temporaria
+from auth import hash_senha, verificar_senha, criar_token, get_estudante_atual, gerar_senha_temporaria, normalizar_cpf
 from limiter import limiter
 
 logger = logging.getLogger(__name__)
@@ -46,6 +52,9 @@ class RegistroRequest(BaseModel):
 class LoginRequest(BaseModel):
     nome: str
     senha: str
+
+class EntrarCpfRequest(BaseModel):
+    cpf: str = Field(min_length=11, max_length=14)
 
 class PerguntaSegurancaRequest(BaseModel):
     email: EmailStr
@@ -107,6 +116,7 @@ def registrar(request: Request, data: RegistroRequest, db: Session = Depends(get
     # O que desempata na hora de entrar é a senha (ver /auth/login).
     novo_estudante = Estudante(
         nome=data.nome,
+        nome_exibicao=gerar_nome_exibicao(db, data.nome),
         email=data.email,
         linkedin=data.linkedin,
         senha_hash=hash_senha(data.senha),
@@ -144,6 +154,24 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
         "token": token,
         "estudante": {"id": estudante.id, "nome": estudante.nome, "email": estudante.email},
         "deve_trocar_senha": bool(estudante.precisa_trocar_senha),
+    }
+
+
+# Login do aluno: a "senha" é o próprio CPF, cadastrado pela escola no painel
+# admin -- nada pra decorar nem resetar. Decisão de produto consciente: CPF não
+# é segredo (aparece em matrícula, boleto...), então quem souber o CPF de um
+# colega entra na conta dele. O rate limit por IP segura chute em massa.
+@router.post("/auth/entrar")
+@limiter.limit("10/minute")
+def entrar_com_cpf(request: Request, data: EntrarCpfRequest, db: Session = Depends(get_db)):
+    cpf = normalizar_cpf(data.cpf)
+    estudante = db.query(Estudante).filter(Estudante.cpf == cpf).first() if len(cpf) == 11 else None
+    if not estudante:
+        raise HTTPException(status_code=401, detail="Senha não encontrada. Confira o CPF digitado ou fale com a coordenação.")
+
+    return {
+        "token": criar_token(estudante.id),
+        "estudante": {"id": estudante.id, "nome": estudante.nome, "email": estudante.email},
     }
 
 
@@ -255,6 +283,7 @@ def minhas_candidaturas(estudante: Estudante = Depends(get_estudante_atual), db:
             "titulo_vaga": c.vaga.titulo_vaga,
             "empresa": c.vaga.empresa,
             "status": c.status,
+            "indicada_pela_escola": bool(c.indicada_pela_escola),
             "criada_em": c.criada_em.isoformat() if c.criada_em else None,
         }
         for c in candidaturas
@@ -268,10 +297,10 @@ def get_job_detail(vaga_id: int, estudante: Estudante = Depends(get_estudante_at
     if not vaga:
         raise HTTPException(status_code=404, detail="Vaga não encontrada")
 
-    ja_candidatado = db.query(Candidatura).filter(
+    candidatura = db.query(Candidatura).filter(
         Candidatura.estudante_id == estudante.id,
         Candidatura.vaga_id == vaga_id,
-    ).first() is not None
+    ).first()
 
     return {
         "id": vaga.id,
@@ -283,7 +312,8 @@ def get_job_detail(vaga_id: int, estudante: Estudante = Depends(get_estudante_at
         "area_itinerario": vaga.area_itinerario,
         "descricao_completa": vaga.descricao_completa,
         "link_inscricao": vaga.link_inscricao,
-        "ja_candidatado": ja_candidatado,
+        "ja_candidatado": candidatura is not None,
+        "indicado_pela_escola": bool(candidatura and candidatura.indicada_pela_escola),
     }
 
 
@@ -401,7 +431,7 @@ def get_weekly_ranking(estudante: Estudante = Depends(get_estudante_atual), db: 
         "ranking": [
             {
                 "posicao": idx + 1,
-                "nome": est.nome,
+                "nome": est.nome_exibicao or est.nome,  # nunca dois iguais no ranking
                 "xp_semanal": est.xp_semanal,
                 "categoria": est.categoria_status or "🌌 Na Jornada",
                 "zona": zona_da_posicao(idx + 1),
@@ -423,15 +453,13 @@ def get_itinerarios():
     }
 
 
-# --- Rota Nova: Escolher (ou trocar de) itinerário formativo ---
+# --- Rota Nova: Escolher itinerário formativo (bloqueada pro aluno) ---
+# O itinerário é o curso que o aluno faz na escola: quem cadastra é a escola,
+# no painel admin (PUT /admin/estudantes/{id}). Se o aluno pudesse trocar,
+# poderia pular pra área de uma vaga só pra subir no ranking de indicação.
 @router.post("/itinerario/escolher")
-def escolher_itinerario(data: EscolherItinerarioRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
-    if data.itinerario not in ITINERARIOS_QUIZ:
-        raise HTTPException(status_code=400, detail="Itinerário inválido")
-
-    estudante.itinerario = data.itinerario
-    db.commit()
-    return {"itinerario": estudante.itinerario}
+def escolher_itinerario(data: EscolherItinerarioRequest, estudante: Estudante = Depends(get_estudante_atual)):
+    raise HTTPException(status_code=403, detail="O itinerário é definido pela escola. Fale com a coordenação se estiver errado.")
 
 
 # --- Rota Nova: Gerar o Quiz do Dia ---
@@ -454,14 +482,26 @@ def generate_quiz(estudante: Estudante = Depends(get_estudante_atual), db: Sessi
         )
     db.commit()
 
+    # Perguntas dos últimos quizzes do aluno -- o sorteio (ou a IA) evita repetir
+    sessoes_recentes = db.query(QuizSessao).filter(
+        QuizSessao.estudante_id == estudante.id,
+    ).order_by(QuizSessao.criado_em.desc()).limit(SESSOES_RECENTES_SEM_REPETIR).all()
+    perguntas_recentes = {
+        item["pergunta"]
+        for sessao_antiga in sessoes_recentes
+        for item in (sessao_antiga.gabarito or [])
+        if item.get("pergunta")
+    }
+
     tema = AIService.tema_quiz_do_dia(estudante.itinerario)
-    quiz = AIService.gerar_quiz_ia(tema, estudante.itinerario)
+    quiz = AIService.gerar_quiz_ia(tema, estudante.itinerario, perguntas_recentes)
 
     sessao = QuizSessao(
         estudante_id=estudante.id,
         tema=quiz["tema"],
         gabarito=[
             {
+                "pergunta": p["pergunta"],
                 "resposta_correta_index": p["resposta_correta_index"],
                 "explicacao": p.get("explicacao", ""),
             }
@@ -483,6 +523,7 @@ def generate_quiz(estudante: Estudante = Depends(get_estudante_atual), db: Sessi
         "perguntas": perguntas_publicas,
         "dicas_disponiveis": DICAS_POR_QUIZ,
         "pulos_disponiveis": PULOS_POR_QUIZ,
+        "acertos_seguidos_para_vida": ACERTOS_SEGUIDOS_PARA_VIDA,
     }
 
 
@@ -525,10 +566,15 @@ def responder_quiz(data: ResponderQuizRequest, estudante: Estudante = Depends(ge
     db.commit()
 
     gabarito_pergunta = sessao.gabarito[data.indice_pergunta]
+    combo = combo_final(sessao.respostas)
     return {
         "correta": None if registro["pulou"] else registro["correta"],
         "resposta_correta_index": gabarito_pergunta["resposta_correta_index"],
         "explicacao": gabarito_pergunta["explicacao"],
+        "combo": combo,
+        # A vida entra de fato no /quiz/submit (junto com as perdidas por erro),
+        # aqui só avisa o front pra comemorar na hora.
+        "ganhou_vida_combo": combo > 0 and combo % ACERTOS_SEGUIDOS_PARA_VIDA == 0,
     }
 
 
@@ -577,6 +623,9 @@ def submit_quiz(data: QuizSubmitRequest, estudante: Estudante = Depends(get_estu
         AIService.regenerar_vidas(estudante)
         for _ in range(errados):
             AIService.perder_vida(estudante)
+        # Combo de acertos seguidos devolve vida -- depois das perdas, pra
+        # recuperar justamente as que o aluno perdeu errando no mesmo quiz.
+        vidas_recuperadas_combo = AIService.ganhar_vidas(estudante, vidas_ganhas_por_combo(sessao.respostas))
 
         vida_bonus_ganha = AIService.avaliar_bonus_por_desempenho(estudante, acertos, total)
         mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
@@ -596,6 +645,8 @@ def submit_quiz(data: QuizSubmitRequest, estudante: Estudante = Depends(get_estu
             "congelamentos_disponiveis": estudante.congelamentos_disponiveis,
             "quizzes_perfeitos_seguidos": estudante.quizzes_perfeitos_seguidos,
             "vida_bonus_ganha": vida_bonus_ganha,
+            "vidas_recuperadas_combo": vidas_recuperadas_combo,
+            "proxima_vida_em": estudante.proxima_vida_em.isoformat() if estudante.proxima_vida_em else None,
             "liga": estudante.liga,
             "mudanca_liga": mudanca_liga,
         }
@@ -616,6 +667,8 @@ def get_status_gamificacao(estudante: Estudante = Depends(get_estudante_atual), 
     return {
         "vidas": estudante.vidas,
         "vidas_maximas": VIDAS_MAXIMAS,
+        "minutos_para_regenerar_vida": MINUTOS_PARA_REGENERAR_VIDA,
+        "acertos_seguidos_para_vida": ACERTOS_SEGUIDOS_PARA_VIDA,
         "proxima_vida_em": estudante.proxima_vida_em.isoformat() if estudante.proxima_vida_em else None,
         "moedas": estudante.moedas,
         "congelamentos_disponiveis": estudante.congelamentos_disponiveis,
@@ -626,6 +679,7 @@ def get_status_gamificacao(estudante: Estudante = Depends(get_estudante_atual), 
         "ofensiva_em_risco": estado_ofensiva["em_risco"],
         "itinerario": estudante.itinerario,
         "nome": estudante.nome,
+        "nome_exibicao": estudante.nome_exibicao or estudante.nome,
         "xp_total": estudante.xp_total,
         "nivel_gamificacao": estudante.nivel_gamificacao,
         "categoria_status": estudante.categoria_status,

@@ -1,6 +1,7 @@
 import sys
 import os
 from datetime import date, timedelta
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 # Evita UnicodeEncodeError ao imprimir emojis no console padrão do Windows (cp1252)
@@ -14,11 +15,25 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from database import SessionLocal, engine
 from auth import hash_senha
 import models
+from nomes import escolher_nome_exibicao
 
 # Senha de demonstração do estudante de teste (id=1). Só pra facilitar login
 # local -- não use isso em produção.
 SENHA_DEMO = "play2work123"
 RESPOSTA_SEGURANCA_DEMO = "sozza"
+
+# Login do aluno: a senha é o CPF. CPFs fictícios (só com os dígitos
+# verificadores certos, pra passar na validação do cadastro).
+CPF_DEMO = "52998224725"
+NASCIMENTO_DEMO = date(2008, 3, 15)
+
+
+def gerar_cpf_ficticio(base9: str) -> str:
+    digitos = base9
+    for tamanho in (9, 10):
+        soma = sum(int(digitos[i]) * (tamanho + 1 - i) for i in range(tamanho))
+        digitos += str((soma * 10) % 11 % 10)
+    return digitos
 
 def popular_banco():
     # 1. Cria as tabelas se não existirem no PostgreSQL
@@ -33,7 +48,17 @@ def popular_banco():
         db.query(models.Curriculo).delete()
         db.query(models.Vaga).delete()
         db.query(models.Estudante).delete()
+        db.query(models.Turma).delete()
         db.commit()
+
+        print("🏫 Inserindo turmas...")
+        turmas = [
+            models.Turma(id=1, nome="2º A", turno="Manhã"),
+            models.Turma(id=2, nome="3º A", turno="Manhã"),
+            models.Turma(id=3, nome="3º B", turno="Tarde"),
+        ]
+        db.add_all(turmas)
+        db.flush()
 
         ontem = date.today() - timedelta(days=1)
 
@@ -43,6 +68,9 @@ def popular_banco():
         estudante_teste = models.Estudante(
             id=1,
             nome="Rafael Sozza",
+            nome_exibicao="Rafael S.",
+            cpf=CPF_DEMO,
+            data_nascimento=NASCIMENTO_DEMO,
             email="rafael@escola.com",
             linkedin="https://linkedin.com/in/rafael-sozza",
             senha_hash=hash_senha(SENHA_DEMO),
@@ -58,10 +86,52 @@ def popular_banco():
             ultimo_treino=ontem,
             missoes_diarias_concluidas=2,
             habilidades=habilidades_estudante,
+            itinerario="Tecnologia e Ciência de Dados",
+            turma_id=2,
         )
         db.add(estudante_teste)
 
-        print("💼 Inserindo vagas (cobrindo os 4 itinerários)...")
+        print("👥 Inserindo colegas de turma (todos os itinerários)...")
+        # (nome, turma, itinerário, xp, ofensiva, habilidades, taxa de acerto no quiz em %)
+        colegas = [
+            ("Bianca Ferreira", 2, "Tecnologia e Ciência de Dados", 640, 18, ["Python", "SQL", "Análise de Dados", "Comunicação"], 90),
+            ("Lucas Andrade", 3, "Tecnologia e Ciência de Dados", 210, 3, ["JavaScript", "React", "CSS"], 60),
+            ("Júlia Martins", 2, "Robótica e Automação", 480, 12, ["Arduino", "Lógica de Programação", "Trabalho em Equipe"], 80),
+            ("Gabriel Souza", 1, "Robótica e Automação", 150, 1, ["Arduino", "Matemática"], 50),
+            ("Ana Clara Lima", 2, "Ciências Jurídicas / Serviços Jurídicos", 560, 21, ["Comunicação", "Organização", "Redação", "LGPD"], 90),
+            ("Matheus Rocha", 3, "Ciências Jurídicas / Serviços Jurídicos", 320, 6, ["Redação", "Atendimento"], 70),
+            ("Beatriz Nunes", 3, "Recursos Humanos e Gestão de Pessoas", 590, 15, ["Comunicação", "Organização", "Pacote Office", "Atendimento"], 80),
+            ("Isabela Duarte", 1, "Recursos Humanos e Gestão de Pessoas", 260, 4, ["Comunicação", "Trabalho em Equipe"], 70),
+            ("Guilherme Pires", 1, "Ciências da Natureza e Matemática", 410, 9, ["Biologia", "Química", "Matemática"], 80),
+            ("Mariana Costa", 3, "Ciências da Natureza e Matemática", 180, 2, ["Biologia", "Organização"], 60),
+            # Outro Rafael com sobrenome em S: vira "Rafael Si." no ranking, não um segundo "Rafael S."
+            ("Rafael Silva", 1, "Tecnologia e Ciência de Dados", 300, 5, ["Python", "Excel"], 70),
+        ]
+        inicio_semana = date.today() - timedelta(days=date.today().weekday())
+        nomes_usados = {"rafael s."}
+        for idx, (nome, turma_id, itinerario, xp, ofensiva, habilidades, taxa) in enumerate(colegas, start=2):
+            nome_exibicao = escolher_nome_exibicao(nome, nomes_usados)
+            nomes_usados.add(nome_exibicao.lower())
+            email = nome.lower().replace(" ", ".").replace("ú", "u").replace("á", "a") + "@escola.com"
+            db.add(models.Estudante(
+                id=idx, nome=nome, nome_exibicao=nome_exibicao, email=email, turma_id=turma_id, itinerario=itinerario,
+                cpf=gerar_cpf_ficticio(f"{idx}{idx}{idx}{idx + 3}{idx + 5}{idx}{idx}{idx}{idx}"[-9:].rjust(9, "1")),
+                data_nascimento=date(2007 + idx % 2, 1 + idx % 12, 1 + idx * 2),
+                xp_total=xp, xp_semanal=xp // 3, semana_referencia=inicio_semana,
+                nivel_gamificacao=1 + xp // 300, ofensiva_dias=ofensiva, ultimo_treino=ontem,
+                habilidades=habilidades, liga="Bronze",
+            ))
+            # 1 quiz concluído de 10 perguntas com a taxa de acerto do aluno,
+            # pra a nota de desempenho do painel da escola ter dado real
+            acertos = taxa // 10
+            db.add(models.QuizSessao(
+                estudante_id=idx, tema="Quiz de demonstração", concluido=True,
+                gabarito=[{"resposta_correta_index": 0, "explicacao": ""}] * 10,
+                respostas=[{"pulou": False, "correta": i < acertos} for i in range(10)],
+            ))
+        db.flush()
+
+        print("💼 Inserindo vagas (cobrindo os 5 itinerários)...")
         vagas = [
             models.Vaga(
                 id=1,
@@ -161,11 +231,60 @@ def popular_banco():
                 ),
                 link_inscricao="https://butantan.gov.br/trabalhe-conosco",
             ),
+            models.Vaga(
+                id=7,
+                titulo_vaga="Jovem Aprendiz - Assistente Jurídico",
+                empresa="Defensoria Parceira (Programa Jovem Cidadão)",
+                localizacao="Três Lagoas - MS",
+                tipo_modalidade="Presencial",
+                habilidades_exigidas=["Redação", "Organização", "Atendimento", "LGPD"],
+                area_itinerario="Ciências Jurídicas / Serviços Jurídicos",
+                descricao_completa=(
+                    "Apoio no atendimento ao público, triagem e digitalização de "
+                    "documentos, controle de prazos e organização de processos, sempre "
+                    "com sigilo e supervisão de um servidor."
+                ),
+            ),
+            models.Vaga(
+                id=8,
+                titulo_vaga="Jovem Aprendiz - Recursos Humanos",
+                empresa="Suzano Papel e Celulose",
+                cnpj_empresa="16404287000116",
+                localizacao="Três Lagoas - MS",
+                tipo_modalidade="Presencial",
+                habilidades_exigidas=["Comunicação", "Organização", "Pacote Office", "Atendimento"],
+                area_itinerario="Recursos Humanos e Gestão de Pessoas",
+                descricao_completa=(
+                    "Você vai apoiar o time de RH em recrutamento e seleção (triagem de "
+                    "currículos, agendamento de entrevistas), integração de novos "
+                    "colaboradores e rotinas de departamento pessoal."
+                ),
+                link_inscricao="https://suzano.gupy.io",
+            ),
+            models.Vaga(
+                id=9,
+                titulo_vaga="Auxiliar de Departamento Pessoal (Aprendiz)",
+                empresa="Contabilidade Horizonte",
+                localizacao="Campo Grande - MS",
+                tipo_modalidade="Híbrido",
+                habilidades_exigidas=["Organização", "Pacote Office", "Comunicação"],
+                area_itinerario="Recursos Humanos e Gestão de Pessoas",
+                descricao_completa=(
+                    "Apoio em admissões, conferência de folha de ponto, organização de "
+                    "documentos de funcionários e atendimento a dúvidas sobre férias e benefícios."
+                ),
+            ),
         ]
 
         db.add_all(vagas)
         db.commit()
-        print(f"🚀 Banco de dados populado com sucesso! (login demo: 'Rafael Sozza' / {SENHA_DEMO} | resposta de segurança: '{RESPOSTA_SEGURANCA_DEMO}')")
+
+        # Os registros acima usam ids fixos; sem isso, o primeiro aluno/vaga/
+        # turma cadastrado pelo painel da escola tentaria reusar o id 1.
+        for tabela in ("turmas", "estudantes", "vagas"):
+            db.execute(text(f"SELECT setval(pg_get_serial_sequence('{tabela}', 'id'), (SELECT MAX(id) FROM {tabela}))"))
+        db.commit()
+        print(f"🚀 Banco de dados populado com sucesso! Senha do aluno demo (CPF): {CPF_DEMO}")
 
     except Exception as e:
         db.rollback()

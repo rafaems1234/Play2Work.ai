@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IconPin, IconBuilding, IconWarning, IconClose, IconSparkle } from './icons';
+import { IconPin, IconBuilding, IconWarning, IconClose, IconSparkle, IconTarget, IconStar, IconCheck } from './icons';
 import { apiFetch } from '../api';
 import { SkeletonStyles, JobCardSkeleton } from './Skeleton';
 
@@ -85,7 +85,7 @@ const JobMatchBoard = () => {
       setDetalheVaga((prev) => ({ ...prev, ja_candidatado: true }));
     } catch (err) {
       console.error(err);
-      setMensagemAplicacao('⚠️ Falha ao registrar a candidatura. Tente de novo.');
+      setMensagemAplicacao('Falha ao registrar a candidatura. Tente de novo.');
     } finally {
       setAplicando(false);
     }
@@ -271,7 +271,7 @@ const JobMatchBoard = () => {
                     onClick={() => abrirDetalhes(vaga.id)}
                   >
                     <div style={{ position: 'relative', zIndex: 1 }}>
-                      {vaga.combina_com_curso && <div className="curso-badge">🎯 Combina com seu curso</div>}
+                      {vaga.combina_com_curso && <div className="curso-badge"><IconTarget style={{ verticalAlign: '-2px' }} /> Combina com seu curso</div>}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '16px' }}>
                         <div style={{ flex: 1 }}>
                           <h2 style={{ fontSize: '16px', fontWeight: '700', color: '#e2e8f0', marginBottom: '4px', letterSpacing: '-0.2px' }}>
@@ -362,7 +362,7 @@ const JobMatchBoard = () => {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
                     <span className="job-modal-tag"><IconPin /> {detalheVaga.localizacao}</span>
                     <span className="job-modal-tag"><IconBuilding /> {detalheVaga.tipo_modalidade}</span>
-                    {detalheVaga.area_itinerario && <span className="job-modal-tag">🎯 {detalheVaga.area_itinerario}</span>}
+                    {detalheVaga.area_itinerario && <span className="job-modal-tag"><IconTarget style={{ verticalAlign: '-2px' }} /> {detalheVaga.area_itinerario}</span>}
                   </div>
 
                   {detalheVaga.descricao_completa && (
@@ -380,6 +380,12 @@ const JobMatchBoard = () => {
                     ))}
                   </div>
 
+                  {detalheVaga.indicado_pela_escola && (
+                    <div style={{ marginBottom: '16px', padding: '12px 16px', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.35)', borderRadius: '12px', color: '#fcd34d', fontSize: '13px', fontWeight: '700' }}>
+                      <IconStar style={{ verticalAlign: '-2px' }} /> A escola te indicou pra essa vaga pelo seu desempenho na plataforma!
+                    </div>
+                  )}
+
                   {mensagemAplicacao && (
                     <div style={{ marginBottom: '16px', padding: '12px 16px', background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)', borderRadius: '12px', color: '#6ee7b7', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <IconSparkle /> {mensagemAplicacao}
@@ -391,7 +397,7 @@ const JobMatchBoard = () => {
                     disabled={aplicando || detalheVaga.ja_candidatado}
                     className="apply-btn"
                   >
-                    {detalheVaga.ja_candidatado ? '✓ Você já se candidatou' : aplicando ? 'Enviando...' : 'Aplicar pra essa vaga'}
+                    {detalheVaga.indicado_pela_escola ? <><IconCheck style={{ verticalAlign: '-2px' }} /> Indicado pela escola</> : detalheVaga.ja_candidatado ? <><IconCheck style={{ verticalAlign: '-2px' }} /> Você já se candidatou</> : aplicando ? 'Enviando...' : 'Aplicar pra essa vaga'}
                   </button>
                 </div>
               )}

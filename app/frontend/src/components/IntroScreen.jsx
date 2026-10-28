@@ -25,14 +25,14 @@ const LINHAS_TERMINAL = [
 ];
 
 const NUMEROS = [
-  { valor: 4, sufixo: '', rotulo: 'itinerários formativos' },
+  { valor: 5, sufixo: '', rotulo: 'itinerários formativos' },
   { valor: 10, sufixo: '', rotulo: 'perguntas por dia, geradas por IA' },
   { valor: 6, sufixo: '', rotulo: 'passos até a primeira vaga' },
   { valor: 100, sufixo: '%', rotulo: 'gamificado, do quiz à vaga' },
 ];
 
 const MODULOS = [
-  { Icon: IconGraduationCap, titulo: 'Escolha seu itinerário', texto: 'Ciência de Dados, Robótica, Jurídico ou Natureza e Matemática: o curso que você já faz na escola vira o ponto de partida.' },
+  { Icon: IconGraduationCap, titulo: 'Escolha seu itinerário', texto: 'Ciência de Dados, Robótica, Jurídico, RH ou Natureza e Matemática: o curso que você faz na escola, cadastrado pela coordenação, vira o ponto de partida.' },
   { Icon: IconQuiz, titulo: 'Treine todo dia', texto: 'Quiz diário sobre a sua área, com vidas, dicas, combos e ofensiva. Cinco minutos por dia que viram hábito.' },
   { Icon: IconRobot, titulo: 'Simule a entrevista', texto: 'Um recrutador com IA faz as perguntas que caem de verdade, avalia cada resposta e mostra onde melhorar.' },
   { Icon: IconSparkle, titulo: 'Currículo pronto', texto: 'Conte do seu jeito o que já fez na escola, em cursos e projetos. A IA formata e você baixa o PDF na hora.' },
@@ -90,7 +90,7 @@ const Terminal = () => {
   );
 };
 
-const IntroScreen = ({ aoEntrar }) => {
+const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
   useEffect(() => {
     const aoTeclar = (e) => {
       if (e.key === 'Enter') aoEntrar();
@@ -288,6 +288,11 @@ const IntroScreen = ({ aoEntrar }) => {
                 Como funciona
               </button>
               <span className="intro-dica-tecla">ou aperte <kbd>Enter</kbd></span>
+              {aoAbrirAdmin && (
+                <button className="intro-btn-sec" onClick={aoAbrirAdmin}>
+                  Área da escola
+                </button>
+              )}
             </motion.div>
           </div>
 

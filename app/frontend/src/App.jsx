@@ -11,12 +11,14 @@ import StreakCalendar from './components/StreakCalendar';
 import AccountSettings from './components/AccountSettings';
 import TechBackground from './components/TechBackground';
 import IntroScreen from './components/IntroScreen';
+import LoginAluno from './components/LoginAluno';
+import AdminPanel from './components/AdminPanel';
 import Logo from './components/Logo';
 import Trofeu from './components/Trofeu';
 import { buscarLiga } from './ligas';
-import { IconBriefcase, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconGraduationCap, IconSpeakerHigh, IconSpeakerX } from './components/icons';
+import { IconBriefcase, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconGraduationCap, IconSpeakerHigh, IconSpeakerX, IconTarget, IconMask, IconConfetti, IconTrendDown } from './components/icons';
 import { useCountUp } from './hooks/useCountUp';
-import { apiFetch, DEMO_MODE } from './api';
+import { apiFetch, DEMO_MODE, obterToken, limparToken, aoExpirarSessao } from './api';
 import { somEstaAtivado, definirSomAtivado, tocarSomLevelUp, tocarSomLiga } from './utils/sound';
 
 const TABS = [
@@ -41,7 +43,9 @@ function App() {
   const [contaInfo, setContaInfo] = useState({ nome: '', email: '', linkedin: '' });
   const [contaAberta, setContaAberta] = useState(false);
 
-  const [mostrandoIntro, setMostrandoIntro] = useState(true);
+  // intro → login (se ainda não entrou) → app. '#admin' na URL abre direto o painel da escola.
+  const [tela, setTela] = useState(() => (window.location.hash === '#admin' ? 'admin' : 'intro'));
+  const [logado, setLogado] = useState(() => Boolean(obterToken('aluno')));
   const [abaAtiva, setAbaAtiva] = useState('vagas');
   const [estudanteStatus, setEstudanteStatus] = useState({
     nome: '',
@@ -74,9 +78,9 @@ function App() {
   };
 
   const [toasts, setToasts] = useState([]);
-  const adicionarToast = (emoji, texto) => {
+  const adicionarToast = (Icone, cor, texto) => {
     const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, emoji, texto }]);
+    setToasts((prev) => [...prev, { id, Icone, cor, texto }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
   };
 
@@ -103,16 +107,16 @@ function App() {
     ) {
       dispararConfeteLevelUp();
       tocarSomLevelUp();
-      adicionarToast('🎉', `Nível ${novosDados.nivel_gamificacao} alcançado!`);
+      adicionarToast(IconConfetti, '#fbbf24', `Nível ${novosDados.nivel_gamificacao} alcançado!`);
     }
 
     if (novosDados.mudanca_liga) {
       const { direcao, liga_nova } = novosDados.mudanca_liga;
       const subiu = direcao === 'subiu';
       tocarSomLiga(subiu);
-      const emoji = subiu ? '🏆' : '📉';
       adicionarToast(
-        emoji,
+        subiu ? IconTrophy : IconTrendDown,
+        subiu ? '#fbbf24' : '#f87171',
         subiu ? `Você subiu para a Liga ${liga_nova}!` : `Você caiu para a Liga ${liga_nova}. Bora recuperar!`,
       );
     }
@@ -146,7 +150,29 @@ function App() {
     }
   };
 
+  useEffect(() => aoExpirarSessao((papel) => {
+    if (papel === 'aluno') {
+      setLogado(false);
+      setTela((atual) => (atual === 'app' ? 'login' : atual));
+    }
+  }), []);
+
+  const sair = () => {
+    limparToken('aluno');
+    setLogado(false);
+    setContaAberta(false);
+    setAbaAtiva('vagas');
+    setTela('login');
+  };
+
+  const abrirTela = (nova) => {
+    setTela(nova);
+    window.history.replaceState(null, '', nova === 'admin' ? '#admin' : window.location.pathname);
+    window.scrollTo(0, 0);
+  };
+
   useEffect(() => {
+    if (!logado) return;
     const carregarConta = async () => {
       try {
         const response = await apiFetch('/api/auth/me');
@@ -161,7 +187,7 @@ function App() {
     };
     carregarConta();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [logado]);
 
   const alternarCalendario = async () => {
     const abrindo = !calendarioAberto;
@@ -179,10 +205,30 @@ function App() {
     }
   };
 
-  if (mostrandoIntro) {
+  if (tela === 'admin') {
     return (
       <MotionConfig reducedMotion="user">
-        <IntroScreen aoEntrar={() => { setMostrandoIntro(false); window.scrollTo(0, 0); }} />
+        <AdminPanel aoSair={() => abrirTela('intro')} />
+      </MotionConfig>
+    );
+  }
+
+  if (tela === 'intro') {
+    return (
+      <MotionConfig reducedMotion="user">
+        <IntroScreen aoEntrar={() => abrirTela(logado ? 'app' : 'login')} aoAbrirAdmin={() => abrirTela('admin')} />
+      </MotionConfig>
+    );
+  }
+
+  if (tela === 'login' || !logado) {
+    return (
+      <MotionConfig reducedMotion="user">
+        <LoginAluno
+          aoEntrar={() => { setLogado(true); abrirTela('app'); }}
+          aoVoltar={() => abrirTela('intro')}
+          aoAbrirAdmin={() => abrirTela('admin')}
+        />
       </MotionConfig>
     );
   }
@@ -266,7 +312,7 @@ function App() {
 
           {/* Logo */}
           <div
-            onClick={() => setMostrandoIntro(true)}
+            onClick={() => abrirTela('intro')}
             title="Voltar pra tela de abertura"
             style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
           >
@@ -277,7 +323,7 @@ function App() {
                 title="Todos os dados nesta tela são fictícios, gerados no navegador -- não há backend/banco de dados rodando."
                 style={{ fontSize: '10px', fontWeight: '800', color: '#fbbf24', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)', padding: '3px 9px', borderRadius: '99px', textTransform: 'uppercase', letterSpacing: '0.5px' }}
               >
-                🎭 Demonstração
+                <IconMask style={{ verticalAlign: '-2px' }} /> Demonstração
               </span>
             )}
           </div>
@@ -291,7 +337,7 @@ function App() {
                 style={{ background: 'rgb(var(--accent-rgb) / 0.08)', border: '1px solid rgb(var(--accent-rgb) / 0.2)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', cursor: 'pointer', color: 'var(--accent-soft)', fontWeight: '700', fontFamily: 'inherit', maxWidth: '180px' }}
                 title={estudanteStatus.itinerario}
               >
-                <span style={{ flexShrink: 0 }}>🎯</span>
+                <IconTarget style={{ flexShrink: 0 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{estudanteStatus.itinerario}</span>
               </button>
             )}
@@ -517,7 +563,7 @@ function App() {
                 color: '#e2e8f0', fontSize: '13px', fontWeight: '700', maxWidth: '300px',
               }}
             >
-              <span style={{ fontSize: '18px' }}>{toast.emoji}</span>
+              <toast.Icone style={{ fontSize: '18px', color: toast.cor, flexShrink: 0 }} />
               {toast.texto}
             </motion.div>
           ))}
@@ -568,13 +614,10 @@ function App() {
             {abaAtiva === 'quiz' && (
               <DailyQuiz
                 aoGanharXp={atualizarDadosUsuario}
-                aoAbrirCursos={() => setAbaAtiva('curso')}
                 aoVoltarMural={() => setAbaAtiva('vagas')}
               />
             )}
-            {abaAtiva === 'curso' && (
-              <CourseSelector aoEscolher={(itinerario) => atualizarDadosUsuario({ itinerario })} />
-            )}
+            {abaAtiva === 'curso' && <CourseSelector />}
             {abaAtiva === 'curriculo' && <ResumeBuilder />}
             {abaAtiva === 'ranking' && <WeeklyLeaderboard />}
           </motion.div>
@@ -587,6 +630,7 @@ function App() {
             estudante={contaInfo}
             aoFechar={() => setContaAberta(false)}
             aoAtualizarLinkedin={(linkedin) => setContaInfo((prev) => ({ ...prev, linkedin }))}
+            aoSair={sair}
           />
         )}
       </AnimatePresence>

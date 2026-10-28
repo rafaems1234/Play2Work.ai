@@ -1,6 +1,7 @@
 import sys
 import os
-from datetime import date, timedelta
+import random
+from datetime import date, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock, AsyncMock
@@ -10,9 +11,20 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 from main import app
 from database import get_db
-from auth import get_estudante_atual, hash_senha
+from auth import get_estudante_atual, hash_senha, criar_token, criar_token_admin, cpf_valido, normalizar_cpf
 from limiter import limiter
-from services import AIService
+from services import (
+    AIService,
+    BANCO_QUESTOES,
+    ITINERARIOS_QUIZ,
+    PERGUNTAS_POR_QUIZ,
+    PERGUNTAS_GERAIS_POR_QUIZ,
+    PESOS_DESEMPENHO,
+    calcular_desempenho_para_vaga,
+    escolher_nome_exibicao,
+    sortear_perguntas_do_banco,
+    vidas_ganhas_por_combo,
+)
 
 client = TestClient(app=app)
 
@@ -51,6 +63,7 @@ def criar_mock_estudante(**overrides):
     padrao = dict(
         id=1,
         nome="Gabriel",
+        nome_exibicao=None,
         email="gabriel@escola.com",
         xp_total=100,
         xp_semanal=50,
@@ -240,12 +253,78 @@ def test_trocar_senha_atual_incorreta(mock_db, mock_estudante_logado):
     assert resposta.status_code == 401
 
 
-def test_rota_sem_estudante_unico_retorna_404(mock_db):
-    # Sem tela de login, todas as rotas operam sobre o único estudante da
-    # base (ver ESTUDANTE_UNICO_ID em auth.py); se ele não existir, 404.
+def test_rota_do_aluno_exige_token(mock_db):
+    assert client.get("/api/estudante/me/status").status_code == 401
+
+
+def test_token_de_admin_nao_abre_rotas_do_aluno(mock_db):
+    response = client.get("/api/estudante/me/status", headers={"Authorization": f"Bearer {criar_token_admin()}"})
+    assert response.status_code == 401
+
+
+def test_token_de_aluno_identifica_o_aluno(mock_db):
+    estudante = criar_mock_estudante(id=7, nome="Ana")
+    mock_db.query().filter().first.return_value = estudante
+    response = client.get("/api/estudante/me/status", headers={"Authorization": f"Bearer {criar_token(7)}"})
+    assert response.status_code == 200
+    assert response.json()["nome"] == "Ana"
+
+
+def test_entrar_com_cpf_como_senha(mock_db):
+    estudante = criar_mock_estudante(cpf="52998224725")
+    mock_db.query().filter().first.return_value = estudante
+
+    # aceita CPF com pontuação
+    response = client.post("/api/auth/entrar", json={"cpf": "529.982.247-25"})
+    assert response.status_code == 200
+    assert response.json()["token"]
+
+
+def test_entrar_com_cpf_inexistente_falha(mock_db):
     mock_db.query().filter().first.return_value = None
-    response = client.get("/api/estudante/me/status")
-    assert response.status_code == 404
+    response = client.post("/api/auth/entrar", json={"cpf": "52998224725"})
+    assert response.status_code == 401
+
+
+def test_entrar_tem_rate_limit(mock_db):
+    mock_db.query().filter().first.return_value = None
+    respostas = [client.post("/api/auth/entrar", json={"cpf": "52998224725"}) for _ in range(11)]
+    assert respostas[-1].status_code == 429
+
+
+def test_nome_exibicao_nunca_repete():
+    ocupados = set()
+    nomes = []
+    for nome in ["Rafael Sozza", "Rafael Silva", "Rafael Souza", "Rafael Vieira Sozza", "Rafael Sozza"]:
+        escolhido = escolher_nome_exibicao(nome, ocupados)
+        ocupados.add(escolhido.lower())
+        nomes.append(escolhido)
+    assert nomes == ["Rafael S.", "Rafael Si.", "Rafael So.", "Rafael Soz.", "Rafael Sozz."]
+    assert len(set(nomes)) == len(nomes)
+
+
+def test_nome_exibicao_usa_nome_do_meio_e_depois_numera():
+    ocupados = {"ana l.", "ana li.", "ana lim.", "ana lima"}
+    assert escolher_nome_exibicao("Ana Clara Lima", ocupados) == "Ana C. Lima"
+    assert escolher_nome_exibicao("Ana Lima", ocupados) == "Ana Lima 2"
+    assert escolher_nome_exibicao("Bia", set()) == "Bia"
+
+
+def test_ranking_mostra_nome_de_exibicao(mock_db, mock_estudante_logado):
+    hoje = date.today()
+    inicio_semana = hoje - timedelta(days=hoje.weekday())
+    mock_estudante_logado.liga = "Bronze"
+    colega = criar_mock_estudante(id=2, nome="Rafael Silva", nome_exibicao="Rafael Si.", xp_semanal=80, semana_referencia=inicio_semana)
+    mock_db.query().filter().all.return_value = [colega]
+    response = client.get("/api/ranking")
+    assert response.json()["ranking"][0]["nome"] == "Rafael Si."
+
+
+def test_cpf_valido():
+    assert cpf_valido("52998224725")
+    assert not cpf_valido("52998224726")   # dígito verificador errado
+    assert not cpf_valido("11111111111")   # sequência repetida
+    assert normalizar_cpf("529.982.247-25") == "52998224725"
 
 
 def test_login_tem_rate_limit(mock_db):
@@ -336,6 +415,7 @@ def test_obter_ranking_semanal(mock_db, mock_estudante_logado):
     inicio_semana_atual = date.today() - timedelta(days=date.today().weekday())
     mock_estudante = MagicMock(
         nome="Rafael",
+        nome_exibicao=None,  # aluno antigo sem nome de exibição: cai no nome
         xp_semanal=150,
         categoria_status="🌌 Na Jornada",
         semana_referencia=inicio_semana_atual,
@@ -452,16 +532,13 @@ def test_submeter_quiz(mock_db, mock_estudante_logado):
     assert response.json()["acertos"] == 4
 
 
-def test_escolher_itinerario(mock_db, mock_estudante_logado):
+def test_aluno_nao_pode_trocar_itinerario(mock_db, mock_estudante_logado):
+    # Itinerário é cadastrado pela escola no painel admin -- o aluno só vê
+    mock_estudante_logado.itinerario = "Tecnologia e Ciência de Dados"
     response = client.post("/api/itinerario/escolher", json={"itinerario": "Robótica e Automação"})
 
-    assert response.status_code == 200
-    assert response.json()["itinerario"] == "Robótica e Automação"
-
-
-def test_escolher_itinerario_invalido(mock_db, mock_estudante_logado):
-    response = client.post("/api/itinerario/escolher", json={"itinerario": "Curso Inexistente"})
-    assert response.status_code == 400
+    assert response.status_code == 403
+    assert mock_estudante_logado.itinerario == "Tecnologia e Ciência de Dados"
 
 
 def test_status_gamificacao(mock_db, mock_estudante_logado):
@@ -507,19 +584,20 @@ def test_comprar_vida_sem_moedas_suficientes(mock_db, mock_estudante_logado):
 def test_quiz_pular_nao_custa_vida(mock_db, mock_estudante_logado):
     mock_estudante_logado.vidas = 5
 
-    # 10 perguntas: 6 acertos, 2 pulos, 2 erros reais -> só os 2 erros custam vida
-    sessao = criar_mock_quiz_sessao(total=10, acertos=6, pulos=2)
+    # 8 perguntas: 4 acertos, 2 pulos, 2 erros reais -> só os 2 erros custam vida
+    # (4 acertos seguidos não chegam a fechar um combo de vida)
+    sessao = criar_mock_quiz_sessao(total=8, acertos=4, pulos=2)
     mock_db.query().filter().first.return_value = sessao
 
     response = client.post("/api/quiz/submit", json={"quiz_id": 99})
 
     assert response.status_code == 200
     assert response.json()["vidas"] == 3
-    assert response.json()["xp_concedido"] == 48  # 6 acertos * 8 XP
+    assert response.json()["xp_concedido"] == 32  # 4 acertos * 8 XP
 
 
 def test_quiz_perfeito_5_vezes_seguidas_da_vida_bonus(mock_db, mock_estudante_logado):
-    mock_estudante_logado.vidas = 3
+    mock_estudante_logado.vidas = 2  # +1 do combo de 5 acertos, +1 do bônus de 5 quizzes perfeitos
     mock_estudante_logado.quizzes_perfeitos_seguidos = 4
 
     sessao = criar_mock_quiz_sessao(total=5, acertos=5)
@@ -545,6 +623,139 @@ def test_quiz_imperfeito_reseta_sequencia_de_perfeitos(mock_db, mock_estudante_l
     assert response.status_code == 200
     assert response.json()["vida_bonus_ganha"] is False
     assert response.json()["quizzes_perfeitos_seguidos"] == 0
+
+
+def test_combo_de_5_acertos_devolve_vida_perdida_no_mesmo_quiz(mock_db, mock_estudante_logado):
+    mock_estudante_logado.vidas = 5
+    # 7 perguntas: 5 acertos seguidos e 2 erros -> perde 2, recupera 1 pelo combo
+    sessao = criar_mock_quiz_sessao(total=7, acertos=5)
+    mock_db.query().filter().first.return_value = sessao
+
+    response = client.post("/api/quiz/submit", json={"quiz_id": 99})
+
+    assert response.status_code == 200
+    assert response.json()["vidas_recuperadas_combo"] == 1
+    assert response.json()["vidas"] == 4
+
+
+def test_quiz_responder_avisa_quando_combo_fecha_vida(mock_db, mock_estudante_logado):
+    sessao = criar_mock_quiz_sessao(total=6, acertos=4, ja_respondidas=4)
+    mock_db.query().filter().first.return_value = sessao
+
+    resposta = client.post("/api/quiz/responder", json={"quiz_id": 99, "indice_pergunta": 4, "opcao_selecionada": 0})
+
+    assert resposta.json()["combo"] == 5
+    assert resposta.json()["ganhou_vida_combo"] is True
+
+
+def test_vidas_ganhas_por_combo_erro_ou_pulo_zera_sequencia():
+    acerto, erro, pulo = {"correta": True, "pulou": False}, {"correta": False, "pulou": False}, {"correta": False, "pulou": True}
+    assert vidas_ganhas_por_combo([acerto] * 4 + [erro] + [acerto] * 4) == 0
+    assert vidas_ganhas_por_combo([acerto] * 4 + [pulo] + [acerto] * 5) == 1
+    assert vidas_ganhas_por_combo([acerto] * 10) == 2
+
+
+def test_regenera_uma_vida_a_cada_30_minutos():
+    agora = datetime.utcnow()
+    estudante = criar_mock_estudante(vidas=0, proxima_vida_em=agora - timedelta(minutes=61))
+    AIService.regenerar_vidas(estudante)
+    # a marca venceu há 61 min: a 1ª vida + mais 2 intervalos completos de 30 min
+    assert estudante.vidas == 3
+    assert estudante.proxima_vida_em is not None
+
+
+def test_banco_de_questoes_sorteia_da_area_e_evita_repetidas():
+    itinerario = "Recursos Humanos e Gestão de Pessoas"
+    rng = random.Random(42)
+    primeiro = sortear_perguntas_do_banco(itinerario, set(), rng)
+    assert len(primeiro) == PERGUNTAS_POR_QUIZ
+    perguntas_da_area = {p["pergunta"] for p in BANCO_QUESTOES[itinerario]}
+    assert sum(p["pergunta"] in perguntas_da_area for p in primeiro) == PERGUNTAS_POR_QUIZ - PERGUNTAS_GERAIS_POR_QUIZ
+
+    vistas = {p["pergunta"] for p in primeiro}
+    segundo = sortear_perguntas_do_banco(itinerario, vistas, rng)
+    assert not vistas & {p["pergunta"] for p in segundo}
+
+
+def test_banco_de_questoes_embaralha_opcoes_sem_perder_a_resposta_certa():
+    originais = {p["pergunta"]: p for grupo in BANCO_QUESTOES.values() for p in grupo}
+    for p in sortear_perguntas_do_banco("Tecnologia e Ciência de Dados", set(), random.Random(7)):
+        original = originais[p["pergunta"]]
+        assert p["opcoes"][p["resposta_correta_index"]] == original["opcoes"][original["resposta_correta_index"]]
+
+
+def test_banco_de_questoes_bem_formado():
+    for itinerario, perguntas in BANCO_QUESTOES.items():
+        assert itinerario == "Geral" or itinerario in ITINERARIOS_QUIZ
+        for p in perguntas:
+            assert len(p["opcoes"]) == 4 and 0 <= p["resposta_correta_index"] < 4, p["pergunta"]
+    for itinerario in ITINERARIOS_QUIZ:
+        assert len(BANCO_QUESTOES[itinerario]) >= 2 * PERGUNTAS_POR_QUIZ, itinerario
+
+
+# ----------------------------------------------------------------------
+# PAINEL DA ESCOLA (ADMIN)
+# ----------------------------------------------------------------------
+
+def test_admin_rotas_exigem_token(mock_db):
+    assert client.get("/api/admin/estudantes").status_code == 401
+    assert client.get("/api/admin/estudantes", headers={"Authorization": "Bearer lixo"}).status_code == 401
+
+
+def test_token_de_aluno_nao_abre_painel_admin(mock_db):
+    response = client.get("/api/admin/turmas", headers={"Authorization": f"Bearer {criar_token(1)}"})
+    assert response.status_code == 401
+
+
+def test_admin_login(mock_db):
+    with patch("admin_routes.ADMIN_SENHA", "segredo-escola"):
+        assert client.post("/api/admin/login", json={"senha": "errada"}).status_code == 401
+        response = client.post("/api/admin/login", json={"senha": "segredo-escola"})
+    assert response.status_code == 200
+    token = response.json()["token"]
+
+    mock_db.query().order_by().all.return_value = []
+    mock_db.query().group_by().all.return_value = []
+    assert client.get("/api/admin/turmas", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+
+def test_admin_login_desativado_sem_senha_configurada(mock_db):
+    with patch("admin_routes.ADMIN_SENHA", None):
+        assert client.post("/api/admin/login", json={"senha": "qualquer"}).status_code == 503
+
+
+ADMIN_HEADERS = lambda: {"Authorization": f"Bearer {criar_token_admin()}"}  # noqa: E731
+NOVO_ALUNO = {"nome": "Fulano", "cpf": "529.982.247-25", "email": "f@escola.com"}
+
+
+def test_admin_cadastrar_aluno_rejeita_itinerario_invalido(mock_db):
+    response = client.post("/api/admin/estudantes", headers=ADMIN_HEADERS(), json={**NOVO_ALUNO, "itinerario": "Curso Inexistente"})
+    assert response.status_code == 400
+
+
+def test_admin_cadastrar_aluno_rejeita_cpf_invalido(mock_db):
+    mock_db.query().filter().first.return_value = None
+    response = client.post("/api/admin/estudantes", headers=ADMIN_HEADERS(), json={**NOVO_ALUNO, "cpf": "123.456.789-00"})
+    assert response.status_code == 400
+
+
+def test_admin_cadastrar_aluno_rejeita_cpf_repetido(mock_db):
+    mock_db.query().filter().first.return_value = criar_mock_estudante(id=3, nome="Outro aluno")
+    response = client.post("/api/admin/estudantes", headers=ADMIN_HEADERS(), json=NOVO_ALUNO)
+    assert response.status_code == 409
+
+
+def test_desempenho_para_vaga_soma_as_parcelas():
+    vaga = MagicMock(habilidades_exigidas=["Comunicação", "Organização"], area_itinerario="Recursos Humanos e Gestão de Pessoas")
+    perfeito = criar_mock_estudante(habilidades=["Comunicação", "Organização"], itinerario="Recursos Humanos e Gestão de Pessoas", xp_total=500, ofensiva_dias=30)
+    resultado = calcular_desempenho_para_vaga(perfeito, vaga, taxa_acerto_quiz=1.0, xp_maximo=500)
+    assert resultado["pontuacao"] == 100
+
+    iniciante = criar_mock_estudante(habilidades=["Comunicação"], itinerario="Robótica e Automação", xp_total=0, ofensiva_dias=0)
+    resultado = calcular_desempenho_para_vaga(iniciante, vaga, taxa_acerto_quiz=None, xp_maximo=500)
+    assert resultado["detalhes"]["itinerario"] == 0
+    assert resultado["pontuacao"] == round(PESOS_DESEMPENHO["habilidades"] / 2)
+    assert resultado["habilidades_em_comum"] == ["Comunicação"]
 
 
 def test_ranking_ignora_xp_de_semana_anterior(mock_db, mock_estudante_logado):

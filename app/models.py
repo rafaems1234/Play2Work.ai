@@ -3,6 +3,22 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship
 from database import Base
 
+class Turma(Base):
+    """
+    Modelo que representa a tabela 'turmas'.
+    Agrupa os estudantes como a escola organiza (ex: "3º A - Manhã"), pra
+    gestão no painel admin e pra filtrar a seleção de candidatos por turma.
+    """
+    __tablename__ = 'turmas'
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(60), nullable=False, unique=True)
+    turno = Column(String(20), nullable=True)               # Manhã, Tarde, Noite, Integral
+    criada_em = Column(DateTime, server_default=func.now())
+
+    estudantes = relationship("Estudante", back_populates="turma")
+
+
 class Estudante(Base):
     """
     Modelo que representa a tabela 'estudantes'.
@@ -13,6 +29,9 @@ class Estudante(Base):
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String(100), nullable=False, index=True)   # Nome de login -- não é único: se repetir, o login desempata pela senha
     email = Column(String(100), unique=True, nullable=False, index=True)  # Usado só no cadastro e na recuperação de senha
+    nome_exibicao = Column(String(60), unique=True, nullable=True)  # "Rafael S." -- único, é o que aparece no ranking (ver gerar_nome_exibicao)
+    cpf = Column(String(11), unique=True, nullable=True, index=True)  # Só dígitos -- login do aluno é CPF + data de nascimento (cadastrado pela escola)
+    data_nascimento = Column(Date, nullable=True)
     linkedin = Column(String(255), nullable=True)            # URL do perfil do LinkedIn (opcional, coletado no cadastro)
     senha_hash = Column(String(255), nullable=True)          # Hash bcrypt da senha (nulo = conta antiga sem login)
     precisa_trocar_senha = Column(Boolean, default=False)    # True = está numa senha temporária de reset, força troca no próximo passo
@@ -32,6 +51,7 @@ class Estudante(Base):
     categoria_status = Column(String(50), default="🌌 Na Jornada") # Status de carreira do usuário (baseado no XP total acumulado)
     liga = Column(String(20), default="Bronze")              # Liga semanal (10 ligas, de Bronze a Diamante -- ver LIGAS em services.py), com subida/descida a cada virada de semana
     itinerario = Column(String(60), nullable=True)          # Trilha formativa escolhida (ex: "Tecnologia e Dados")
+    turma_id = Column(Integer, ForeignKey('turmas.id', ondelete="SET NULL"), nullable=True, index=True)  # Turma da escola (gestão no painel admin)
 
     # ❤️ Vidas, moedas e congelamento de ofensiva (estilo Duolingo)
     vidas = Column(Integer, default=5)                       # Vidas atuais (máx. VIDAS_MAXIMAS)
@@ -51,6 +71,7 @@ class Estudante(Base):
     curriculos = relationship("Curriculo", back_populates="estudante", cascade="all, delete-orphan")
     atividades_diarias = relationship("AtividadeDiaria", back_populates="estudante", cascade="all, delete-orphan")
     candidaturas = relationship("Candidatura", back_populates="estudante", cascade="all, delete-orphan")
+    turma = relationship("Turma", back_populates="estudantes")
 
 
 class Vaga(Base):
@@ -124,6 +145,8 @@ class Candidatura(Base):
     estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False)
     vaga_id = Column(Integer, ForeignKey('vagas.id', ondelete="CASCADE"), nullable=False)
     status = Column(String(20), default="enviada")  # enviada | em_analise | recusada | aprovada
+    indicada_pela_escola = Column(Boolean, nullable=False, default=False, server_default="false")  # True = a escola selecionou o aluno pelo desempenho (painel admin)
+    pontuacao_indicacao = Column(Integer, nullable=True)    # Nota de desempenho (0-100) no momento da indicação
     criada_em = Column(DateTime, server_default=func.now())
 
     estudante = relationship("Estudante", back_populates="candidaturas")

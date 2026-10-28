@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { IconGraduationCap, IconWarning } from './icons';
+import { IconGraduationCap, IconWarning, IconCheck } from './icons';
 import { apiFetch } from '../api';
 import { Skeleton, SkeletonStyles } from './Skeleton';
 
@@ -14,12 +14,12 @@ const cardVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
 };
 
-const CourseSelector = ({ aoEscolher }) => {
+// O itinerário é o curso que o aluno faz na escola: quem cadastra é a escola
+// (painel admin). Aqui o aluno só vê o dele em destaque e conhece os outros.
+const CourseSelector = () => {
   const [itinerarios, setItinerarios] = useState([]);
   const [atual, setAtual] = useState(null);
   const [carregando, setCarregando] = useState(true);
-  const [escolhendo, setEscolhendo] = useState(null);
-  const [erro, setErro] = useState(null);
 
   useEffect(() => {
     const carregar = async () => {
@@ -40,26 +40,6 @@ const CourseSelector = ({ aoEscolher }) => {
     carregar();
   }, []);
 
-  const escolher = async (nome) => {
-    try {
-      setEscolhendo(nome);
-      setErro(null);
-      const response = await apiFetch('/api/itinerario/escolher', {
-        method: 'POST',
-        body: JSON.stringify({ itinerario: nome }),
-      });
-      if (!response.ok) throw new Error('Não foi possível selecionar o curso.');
-      const dados = await response.json();
-      setAtual(dados.itinerario);
-      if (aoEscolher) aoEscolher(dados.itinerario);
-    } catch (err) {
-      console.error(err);
-      setErro(err.message);
-    } finally {
-      setEscolhendo(null);
-    }
-  };
-
   return (
     <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
       <style>{`
@@ -71,27 +51,17 @@ const CourseSelector = ({ aoEscolher }) => {
           background: rgba(255,255,255,0.04);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
-          cursor: pointer;
           font-family: inherit;
-          transition: all 0.2s;
           position: relative;
           overflow: hidden;
-        }
-
-        .course-card:hover {
-          border-color: rgb(var(--accent-rgb) / 0.4);
-          transform: translateY(-3px);
-          box-shadow: 0 16px 40px rgba(0,0,0,0.3);
+          opacity: 0.55;
         }
 
         .course-card.ativo {
           border-color: rgba(52,211,153,0.5);
           background: rgba(52,211,153,0.06);
-        }
-
-        .course-card:disabled {
-          cursor: default;
-          opacity: 0.6;
+          opacity: 1;
+          grid-column: 1 / -1;
         }
 
         .course-badge {
@@ -115,24 +85,24 @@ const CourseSelector = ({ aoEscolher }) => {
           <div>
             <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>Seu Curso</div>
             <h1 style={{ fontSize: '30px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.5px' }}>
-              Escolha seu <span className="gradient-text-live">itinerário</span>
+              Seu <span className="gradient-text-live">itinerário</span>
             </h1>
-            <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, marginTop: '8px', maxWidth: '480px' }}>
-              É como escolher um idioma pra estudar: o curso que você seguir aqui define o tema do Quiz do Dia e o contexto das perguntas da IA Recrutadora no Simulador.
+            <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, marginTop: '8px', maxWidth: '520px' }}>
+              É o curso que você faz na escola, cadastrado pela coordenação. Ele define o tema do Quiz do Dia, o contexto da IA Recrutadora no Simulador e as vagas pra que a escola pode te indicar. Está errado? Fale com a coordenação.
             </p>
           </div>
           <IconGraduationCap style={{ fontSize: '28px', color: 'var(--accent)', flexShrink: 0 }} />
         </header>
 
-        {erro && (
-          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '16px', padding: '16px', textAlign: 'center', color: '#f87171', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-            <IconWarning /> {erro}
+        {!carregando && !atual && (
+          <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: '16px', padding: '16px', textAlign: 'center', color: '#fbbf24', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '14px' }}>
+            <IconWarning /> Seu itinerário ainda não foi cadastrado pela escola.
           </div>
         )}
 
         {carregando ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
-            {Array.from({ length: 4 }).map((_, i) => (
+            {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} style={{ padding: '24px', borderRadius: '20px', border: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
                 <Skeleton style={{ height: '18px', width: '70%', marginBottom: '12px' }} />
                 <Skeleton style={{ height: '13px', width: '100%', marginBottom: '6px' }} />
@@ -147,24 +117,18 @@ const CourseSelector = ({ aoEscolher }) => {
             initial="hidden"
             animate="visible"
           >
-            {itinerarios.map((it) => {
+            {[...itinerarios].sort((a, b) => (b.nome === atual) - (a.nome === atual)).map((it) => {
               const ativo = it.nome === atual;
               return (
-                <motion.button
+                <motion.div
                   key={it.nome}
                   variants={cardVariants}
-                  onClick={() => escolher(it.nome)}
-                  disabled={escolhendo === it.nome}
                   className={`course-card ${ativo ? 'ativo' : ''}`}
-                  whileHover={{ scale: ativo ? 1 : 1.01 }}
                 >
-                  {ativo && <div className="course-badge">✓ Curso atual</div>}
-                  <div style={{ fontSize: '17px', fontWeight: '800', color: '#f1f5f9', marginBottom: '8px' }}>{it.nome}</div>
+                  {ativo && <div className="course-badge"><IconCheck /> Seu curso · definido pela escola</div>}
+                  <div style={{ fontSize: ativo ? '22px' : '17px', fontWeight: '800', color: '#f1f5f9', marginBottom: '8px' }}>{it.nome}</div>
                   <div style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.6 }}>{it.descricao}</div>
-                  {escolhendo === it.nome && (
-                    <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--accent)' }}>Selecionando...</div>
-                  )}
-                </motion.button>
+                </motion.div>
               );
             })}
           </motion.div>

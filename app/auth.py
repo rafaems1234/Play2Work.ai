@@ -4,7 +4,7 @@ import logging
 import datetime
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -22,11 +22,6 @@ JWT_EXPIRA_HORAS = 24 * 7  # token válido por 7 dias
 # próprio segredo e tokens emitidos por um worker virariam 401 aleatório
 # nos outros -- um jeito de mascarar em vez de resolver a configuração.
 JWT_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
-
-# Login foi removido: o app roda sem tela de autenticação, então todas as
-# rotas passam a operar sempre sobre esse estudante único.
-ESTUDANTE_UNICO_ID = 1
-
 
 def gerar_senha_temporaria() -> str:
     """Senha temporária legível pra mostrar na tela no fluxo de 'esqueci minha senha'."""
@@ -49,21 +44,85 @@ def criar_token(estudante_id: int) -> str:
     agora = datetime.datetime.now(datetime.timezone.utc)
     payload = {
         "sub": str(estudante_id),
+        "papel": "aluno",
         "iat": agora,
         "exp": agora + datetime.timedelta(hours=JWT_EXPIRA_HORAS),
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
+# Senha do painel da escola (admin). Opcional: sem ela, POST /admin/login
+# responde 503 e o painel fica fechado -- melhor que subir com uma senha
+# padrão conhecida.
+ADMIN_SENHA = os.environ.get("ADMIN_SENHA")
+JWT_EXPIRA_HORAS_ADMIN = 12
+
+
+def normalizar_cpf(cpf: str) -> str:
+    """Aceita com ou sem pontuação ('123.456.789-09' ou '12345678909') e devolve só os dígitos."""
+    return "".join(ch for ch in cpf if ch.isdigit())
+
+
+def cpf_valido(cpf: str) -> bool:
+    """Confere os dois dígitos verificadores -- pega erro de digitação no cadastro."""
+    if len(cpf) != 11 or not cpf.isdigit() or cpf == cpf[0] * 11:
+        return False
+    for tamanho in (9, 10):
+        soma = sum(int(cpf[i]) * (tamanho + 1 - i) for i in range(tamanho))
+        digito = (soma * 10) % 11 % 10
+        if digito != int(cpf[tamanho]):
+            return False
+    return True
+
+
+def criar_token_admin() -> str:
+    agora = datetime.datetime.now(datetime.timezone.utc)
+    payload = {
+        "sub": "admin",
+        "papel": "admin",
+        "iat": agora,
+        "exp": agora + datetime.timedelta(hours=JWT_EXPIRA_HORAS_ADMIN),
+    }
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def _payload_do_token(authorization: str | None) -> dict | None:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return None
+    try:
+        return jwt.decode(authorization[7:], JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+
+
+def get_admin_atual(authorization: str | None = Header(default=None)) -> None:
+    """
+    Protege as rotas /admin/*: exige 'Authorization: Bearer <token>' emitido
+    por /admin/login, com papel 'admin' (token de aluno não serve).
+    """
+    payload = _payload_do_token(authorization)
+    if not payload or payload.get("papel") != "admin":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Acesso restrito à escola. Faça login no painel.")
+
+
 def get_estudante_atual(
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> Estudante:
     """
-    Não há mais tela de login: todas as rotas operam sempre sobre o mesmo
-    estudante (ESTUDANTE_UNICO_ID), sem depender de token.
+    Aluno identificado pelo token emitido em /auth/entrar (CPF como senha)
+    ou /auth/login. Token de admin não serve aqui.
     """
-    estudante = db.query(Estudante).filter(Estudante.id == ESTUDANTE_UNICO_ID).first()
-    if not estudante:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estudante não encontrado")
+    erro = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessão expirada. Entre de novo com seu CPF.")
+    payload = _payload_do_token(authorization)
+    if not payload or payload.get("papel", "aluno") != "aluno":
+        raise erro
+    try:
+        estudante_id = int(payload["sub"])
+    except (KeyError, ValueError):
+        raise erro
 
+    estudante = db.query(Estudante).filter(Estudante.id == estudante_id).first()
+    if not estudante:
+        raise erro
     return estudante

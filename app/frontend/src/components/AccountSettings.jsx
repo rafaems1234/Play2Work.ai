@@ -1,19 +1,14 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { IconWarning, IconLinkedIn, IconClose, IconSparkle } from './icons';
+import { IconLinkedIn, IconClose, IconCheck } from './icons';
 import { apiFetch } from '../api';
 import TechBackground from './TechBackground';
 
-const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLinkedin }) => {
+const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLinkedin, aoSair }) => {
   const [linkedin, setLinkedin] = useState(estudante?.linkedin || '');
-  const [senhaAtual, setSenhaAtual] = useState('');
-  const [novaSenha, setNovaSenha] = useState('');
   const [salvandoPerfil, setSalvandoPerfil] = useState(false);
-  const [trocandoSenha, setTrocandoSenha] = useState(false);
   const [erroPerfil, setErroPerfil] = useState(null);
-  const [erroSenha, setErroSenha] = useState(null);
   const [sucessoPerfil, setSucessoPerfil] = useState(false);
-  const [sucessoSenha, setSucessoSenha] = useState(false);
 
   const salvarPerfil = async (e) => {
     e.preventDefault();
@@ -33,33 +28,6 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
       setErroPerfil(err.message);
     } finally {
       setSalvandoPerfil(false);
-    }
-  };
-
-  const salvarSenha = async (e) => {
-    e.preventDefault();
-    try {
-      setTrocandoSenha(true);
-      setErroSenha(null);
-      const response = await apiFetch('/api/auth/trocar-senha', {
-        method: 'POST',
-        body: JSON.stringify({ senha_atual: senhaAtual, nova_senha: novaSenha }),
-      });
-      const dados = await response.json();
-      if (!response.ok) throw new Error(dados.detail || 'Não foi possível trocar a senha.');
-
-      setSucessoSenha(true);
-      if (forcado) {
-        setTimeout(() => aoFechar(true), 900);
-      } else {
-        setSenhaAtual('');
-        setNovaSenha('');
-        setTimeout(() => setSucessoSenha(false), 2000);
-      }
-    } catch (err) {
-      setErroSenha(err.message);
-    } finally {
-      setTrocandoSenha(false);
     }
   };
 
@@ -141,7 +109,7 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
         {!forcado && (
           <>
             <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
-              <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Nome de login</div>
+              <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Nome</div>
               <div style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: '600', marginBottom: '10px' }}>{estudante?.nome}</div>
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>E-mail</div>
               <div style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: '600' }}>{estudante?.email}</div>
@@ -164,7 +132,7 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
                   />
                 </div>
                 <button type="submit" disabled={salvandoPerfil} className="account-save-btn">
-                  {salvandoPerfil ? '...' : sucessoPerfil ? '✓' : 'Salvar'}
+                  {salvandoPerfil ? '...' : sucessoPerfil ? <IconCheck /> : 'Salvar'}
                 </button>
               </div>
               {erroPerfil && <div style={{ color: '#f87171', fontSize: '12px', marginTop: '8px' }}>{erroPerfil}</div>}
@@ -172,38 +140,16 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
           </>
         )}
 
-        <form onSubmit={salvarSenha}>
-          <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            {forcado ? 'Nova senha' : 'Trocar senha'}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <input
-              type="password"
-              placeholder="Senha atual"
-              className="account-input"
-              value={senhaAtual}
-              onChange={(e) => setSenhaAtual(e.target.value)}
-              required
-            />
-            <input
-              type="password"
-              placeholder="Nova senha (mín. 6 caracteres)"
-              className="account-input"
-              value={novaSenha}
-              onChange={(e) => setNovaSenha(e.target.value)}
-              minLength={6}
-              required
-            />
-            {erroSenha && (
-              <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', padding: '10px 14px', fontSize: '12px', color: '#f87171', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <IconWarning /> {erroSenha}
-              </div>
-            )}
-            <button type="submit" disabled={trocandoSenha} className="account-save-btn" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-              {trocandoSenha ? 'Salvando...' : sucessoSenha ? '✓ Senha atualizada' : (<><IconSparkle /> {forcado ? 'Confirmar e continuar' : 'Atualizar senha'}</>)}
-            </button>
-          </div>
-        </form>
+        <p style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.6, marginBottom: '14px' }}>
+          Sua senha é o seu CPF. Nome, e-mail, turma e itinerário são cadastrados pela escola — se algo estiver errado, fale com a coordenação.
+        </p>
+        <button
+          type="button"
+          onClick={aoSair}
+          style={{ width: '100%', padding: '11px', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#fca5a5', fontWeight: '700', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          Sair da conta
+        </button>
       </motion.div>
     </div>
   );
