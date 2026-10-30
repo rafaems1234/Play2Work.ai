@@ -1,0 +1,134 @@
+[
+  {
+    "id": "cliente-irritado",
+    "titulo": "Cliente irritado no balcão",
+    "cenario": "Você está no atendimento e um cliente chega alterado: o pedido dele atrasou pela segunda vez. Ele levanta a voz e diz que a empresa é uma bagunça. Seu supervisor está em reunião.",
+    "opcoes": [
+      { "texto": "Respondo no mesmo tom: não fui eu que atrasei o pedido.", "consequencia": "A discussão esquenta, o cliente pede pra falar com o gerente e sai prometendo nunca mais voltar. Mesmo sem culpa, o tom de quem atende define como a empresa é vista.", "competencias": { "empatia_cooperacao": 15, "autoconhecimento": 20, "comunicacao": 25 } },
+      { "texto": "Escuto sem interromper, peço desculpas pelo transtorno, confiro a situação do pedido no sistema e digo exatamente o que vou fazer e quando ele terá retorno.", "consequencia": "O cliente se acalma ao perceber que alguém está cuidando do problema. Você não prometeu o que não podia cumprir e registrou o caso pro supervisor.", "competencias": { "empatia_cooperacao": 95, "comunicacao": 95, "autoconhecimento": 90, "responsabilidade": 90 } },
+      { "texto": "Digo que não posso fazer nada e peço que ele volte quando o supervisor estiver livre.", "consequencia": "O cliente se sente ignorado. Você tinha como pelo menos consultar o pedido e registrar a reclamação.", "competencias": { "responsabilidade": 35, "empatia_cooperacao": 35, "comunicacao": 40 } },
+      { "texto": "Interrompo a reunião do supervisor na hora pra ele resolver.", "consequencia": "O problema é resolvido, mas o supervisor estava numa reunião importante e podia ter sido acionado depois de você colher as informações. Saber quando escalar também é uma habilidade.", "competencias": { "responsabilidade": 55, "pensamento_critico": 40, "empatia_cooperacao": 65 } }
+    ]
+  },
+  {
+    "id": "colega-nao-faz-a-parte",
+    "titulo": "Colega que não faz a parte dele",
+    "cenario": "Num trabalho em dupla com prazo pra sexta, seu colega some e não responde as mensagens. Faltam dois dias e a parte dele ainda não começou.",
+    "opcoes": [
+      { "texto": "Faço tudo sozinho e não falo nada pra ninguém.", "consequencia": "O trabalho sai, mas você se sobrecarrega e o problema vai se repetir. Ninguém soube que a dupla não funcionou.", "competencias": { "responsabilidade": 70, "empatia_cooperacao": 40, "comunicacao": 25 } },
+      { "texto": "Reclamo dele no grupo da turma.", "consequencia": "Expor o colega publicamente cria um conflito maior e não resolve o prazo.", "competencias": { "empatia_cooperacao": 15, "comunicacao": 25, "autoconhecimento": 30 } },
+      { "texto": "Procuro ele pessoalmente, pergunto se está tudo bem e combinamos o que cada um entrega até quando. Se não der certo, aviso o professor antes do prazo.", "consequencia": "Você descobre que ele estava com um problema em casa. Vocês redividem o trabalho e o professor fica sabendo a tempo de ajudar se for preciso.", "competencias": { "empatia_cooperacao": 95, "comunicacao": 90, "responsabilidade": 90, "pensamento_critico": 80 } },
+      { "texto": "Entrego só a minha parte e deixo a dele em branco.", "consequencia": "A dupla toda perde nota. Num trabalho em equipe, o resultado é de todos.", "competencias": { "empatia_cooperacao": 20, "responsabilidade": 40, "trabalho_projeto_vida": 35 } }
+    ]
+  },
+  {
+    "id": "pedido-errado-do-chefe",
+    "titulo": "O chefe pediu algo errado",
+    "cenario": "Seu supervisor pede pra você lançar no sistema uma venda com data de ontem, \"porque esqueceram de registrar\". Você percebe que isso faria o relatório do mês fechar diferente do real.",
+    "opcoes": [
+      { "texto": "Faço sem perguntar: quem manda é ele.", "consequencia": "Se for uma irregularidade, você também responde por ela. Obedecer não tira a sua responsabilidade.", "competencias": { "responsabilidade": 20, "pensamento_critico": 20, "argumentacao": 15 } },
+      { "texto": "Pergunto com educação se esse lançamento com data retroativa está dentro do procedimento, e peço que ele confirme por escrito ou me mostre como a empresa registra esses casos.", "consequencia": "Ele explica que existe um campo de 'ajuste' próprio pra isso, que deixa o histórico registrado. Você fez a coisa certa sem acusar ninguém.", "competencias": { "responsabilidade": 95, "argumentacao": 90, "comunicacao": 85, "pensamento_critico": 95 } },
+      { "texto": "Recuso e conto pros colegas que o chefe quer fraudar o relatório.", "consequencia": "Você acusou antes de entender. Podia haver um procedimento correto, e agora a relação com o supervisor ficou abalada.", "competencias": { "responsabilidade": 50, "comunicacao": 20, "empatia_cooperacao": 20 } },
+      { "texto": "Digo que vou fazer e não faço.", "consequencia": "O problema continua lá e ainda pode parecer que a falha foi sua.", "competencias": { "responsabilidade": 25, "comunicacao": 20, "argumentacao": 20 } }
+    ]
+  },
+  {
+    "id": "atraso-onibus",
+    "titulo": "O ônibus atrasou",
+    "cenario": "Você entra às 8h. São 7h40, o ônibus quebrou no caminho e vai demorar. Você vai chegar uns 40 minutos atrasado no primeiro mês de trabalho.",
+    "opcoes": [
+      { "texto": "Não aviso: chegando eu explico.", "consequencia": "Sua equipe fica sem saber se você vem. Chegar atrasado acontece; não avisar pesa muito mais.", "competencias": { "responsabilidade": 25, "comunicacao": 20 } },
+      { "texto": "Mando mensagem pro meu responsável na hora, explico o que aconteceu, digo o horário previsto e, ao chegar, pergunto como compensar.", "consequencia": "Seu supervisor agradece o aviso e reorganiza a manhã. Ele percebe que pode contar com você mesmo quando algo dá errado.", "competencias": { "responsabilidade": 95, "comunicacao": 95, "trabalho_projeto_vida": 85 } },
+      { "texto": "Falto o dia todo: já perdi o horário mesmo.", "consequencia": "Uma falta sem justificativa no contrato de aprendizagem é muito mais grave que um atraso avisado.", "competencias": { "responsabilidade": 15, "trabalho_projeto_vida": 20, "autoconhecimento": 30 } },
+      { "texto": "Peço pra um colega bater meu ponto.", "consequencia": "Isso é fraude de registro de ponto e pode causar demissão por justa causa, pros dois.", "competencias": { "responsabilidade": 5, "empatia_cooperacao": 20, "trabalho_projeto_vida": 10 } }
+    ]
+  },
+  {
+    "id": "erro-proprio",
+    "titulo": "Você cometeu um erro",
+    "cenario": "Você percebe que enviou pra um cliente uma planilha com o valor errado ontem. Ninguém notou ainda.",
+    "opcoes": [
+      { "texto": "Fico quieto e torço pra ninguém perceber.", "consequencia": "O cliente percebe na semana seguinte e a confiança na empresa cai. Quando descobrem quem enviou, a omissão pesa mais que o erro.", "competencias": { "responsabilidade": 15, "autoconhecimento": 25, "comunicacao": 20 } },
+      { "texto": "Conto pro meu supervisor o que aconteceu, já levo a planilha corrigida e pergunto se eu mesmo aviso o cliente.", "consequencia": "Seu supervisor agradece a transparência e o erro é corrigido em uma hora. Assumir e trazer a solução é o que se espera de um profissional.", "competencias": { "responsabilidade": 95, "autoconhecimento": 90, "comunicacao": 90, "pensamento_critico": 80 } },
+      { "texto": "Mando a planilha certa pro cliente sem avisar ninguém da empresa.", "consequencia": "A intenção foi boa, mas o cliente ficou confuso com duas versões e a empresa ficou sem saber o que foi enviado.", "competencias": { "responsabilidade": 60, "comunicacao": 35, "empatia_cooperacao": 45 } },
+      { "texto": "Digo que o sistema deu problema.", "consequencia": "Culpar o sistema faz a equipe de TI perder tempo procurando um defeito que não existe.", "competencias": { "responsabilidade": 10, "argumentacao": 20, "empatia_cooperacao": 20 } }
+    ]
+  },
+  {
+    "id": "foto-no-trabalho",
+    "titulo": "Foto do ambiente de trabalho",
+    "cenario": "No seu primeiro dia, você quer postar uma foto da sala com a tela do computador aparecendo. Na tela tem uma lista de clientes com nome e telefone.",
+    "opcoes": [
+      { "texto": "Posto: todo mundo posta foto do trabalho.", "consequencia": "Você expôs dados pessoais de clientes. Pela LGPD, isso é um incidente de segurança e a empresa pode ser multada.", "competencias": { "cultura_digital": 10, "responsabilidade": 20 } },
+      { "texto": "Antes de postar qualquer coisa, pergunto qual é a política da empresa sobre fotos, e nunca mostro telas, documentos ou dados de clientes.", "consequencia": "Você descobre que a empresa permite fotos só em áreas comuns. Cuidar dos dados dos outros é parte de ser um bom profissional.", "competencias": { "cultura_digital": 95, "responsabilidade": 95, "pensamento_critico": 85 } },
+      { "texto": "Posto e apago depois de alguns minutos.", "consequencia": "Alguns minutos bastam pra alguém salvar a imagem. O que vai pra internet não volta.", "competencias": { "cultura_digital": 20, "responsabilidade": 30 } },
+      { "texto": "Desfoco a tela no aplicativo e posto.", "consequencia": "Melhor que nada, mas você não sabia se a empresa permite fotos lá dentro. Perguntar antes evita problemas.", "competencias": { "cultura_digital": 60, "responsabilidade": 55, "pensamento_critico": 60 } }
+    ]
+  },
+  {
+    "id": "nao-sei-fazer",
+    "titulo": "Uma tarefa que você não sabe fazer",
+    "cenario": "Pedem pra você montar um relatório numa ferramenta que você nunca usou. O prazo é amanhã de manhã e todo mundo parece ocupado.",
+    "opcoes": [
+      { "texto": "Digo que sei e tento descobrir sozinho de madrugada.", "consequencia": "O relatório sai com erros e atrasado. Fingir que sabe custa mais caro que perguntar.", "competencias": { "autoconhecimento": 20, "comunicacao": 25, "responsabilidade": 40 } },
+      { "texto": "Falo com sinceridade que nunca usei a ferramenta, pergunto onde encontro um tutorial ou um exemplo pronto, tento sozinho e combino de mostrar uma prévia no meio da tarde.", "consequencia": "Seu supervisor te manda um modelo antigo. Com a prévia, ele corrige o rumo cedo e o relatório sai no prazo.", "competencias": { "autoconhecimento": 95, "conhecimento": 85, "comunicacao": 90, "responsabilidade": 85 } },
+      { "texto": "Recuso a tarefa: não é da minha função.", "consequencia": "Aprender ferramentas novas é justamente o objetivo da aprendizagem. A recusa passa a impressão de falta de interesse.", "competencias": { "trabalho_projeto_vida": 20, "empatia_cooperacao": 30, "conhecimento": 25 } },
+      { "texto": "Peço pra um colega fazer pra mim.", "consequencia": "A tarefa sai, mas você não aprendeu e o colega ficou sobrecarregado.", "competencias": { "conhecimento": 25, "empatia_cooperacao": 40, "autoconhecimento": 45 } }
+    ]
+  },
+  {
+    "id": "discordancia-reuniao",
+    "titulo": "Você discorda numa reunião",
+    "cenario": "Na reunião da equipe, decidem mudar o horário de atendimento. Você acha que vai prejudicar os clientes que só podem vir depois das 17h, e tem dados do último mês que mostram isso.",
+    "opcoes": [
+      { "texto": "Fico quieto: sou só o aprendiz.", "consequencia": "A mudança é aprovada e as reclamações aparecem. Sua informação podia ter ajudado a equipe.", "competencias": { "argumentacao": 20, "comunicacao": 25, "autoconhecimento": 40 } },
+      { "texto": "Peço a palavra, mostro os números de atendimento depois das 17h e sugiro testar o novo horário por duas semanas antes de decidir.", "consequencia": "A equipe aceita o teste. Você discordou com fatos e com uma proposta, sem desmerecer ninguém.", "competencias": { "argumentacao": 95, "comunicacao": 90, "pensamento_critico": 95, "empatia_cooperacao": 80 } },
+      { "texto": "Digo que a ideia é ruim e que quem pensou nisso não conhece os clientes.", "consequencia": "Você tinha razão nos dados, mas o tom fez a equipe se fechar à sua opinião.", "competencias": { "argumentacao": 40, "comunicacao": 20, "empatia_cooperacao": 15 } },
+      { "texto": "Reclamo depois com os colegas no corredor.", "consequencia": "A crítica fora da reunião não muda nada e ainda cria um clima ruim.", "competencias": { "argumentacao": 15, "comunicacao": 20, "empatia_cooperacao": 25 } }
+    ]
+  },
+  {
+    "id": "colega-discriminado",
+    "titulo": "Piada com um colega",
+    "cenario": "Um grupo de colegas começa a fazer piadas sobre o sotaque e a cidade de origem de um aprendiz novo. Ele ri sem graça e fica isolado no almoço.",
+    "opcoes": [
+      { "texto": "Rio junto pra não ficar de fora.", "consequencia": "O novo colega se sente cada vez mais excluído. Rir junto reforça o comportamento.", "competencias": { "empatia_cooperacao": 10, "responsabilidade": 20, "autoconhecimento": 30 } },
+      { "texto": "Chamo o colega novo pra almoçar comigo, e, com calma, digo pro grupo que essas piadas incomodam. Se continuar, levo ao RH.", "consequencia": "O colega se sente acolhido e as piadas diminuem. Respeito à diversidade é uma regra do ambiente de trabalho, não um favor.", "competencias": { "empatia_cooperacao": 95, "responsabilidade": 90, "comunicacao": 85, "repertorio_cultural": 85 } },
+      { "texto": "Não faço nada: não é comigo.", "consequencia": "Ficar em silêncio também é uma escolha. O ambiente continua ruim pra ele.", "competencias": { "empatia_cooperacao": 25, "responsabilidade": 30 } },
+      { "texto": "Respondo com uma piada sobre os colegas.", "consequencia": "Vira uma troca de ofensas e o problema cresce.", "competencias": { "empatia_cooperacao": 30, "comunicacao": 20, "autoconhecimento": 25 } }
+    ]
+  },
+  {
+    "id": "golpe-email",
+    "titulo": "Um e-mail estranho",
+    "cenario": "Chega um e-mail que parece ser do banco da empresa pedindo pra você clicar num link e confirmar a senha do sistema financeiro, \"senão a conta será bloqueada hoje\".",
+    "opcoes": [
+      { "texto": "Clico logo: parece urgente.", "consequencia": "Era um golpe (phishing). Os criminosos tiveram acesso ao sistema financeiro da empresa.", "competencias": { "cultura_digital": 5, "pensamento_critico": 10, "responsabilidade": 30 } },
+      { "texto": "Não clico, não respondo, aviso o responsável pela TI ou meu supervisor e encaminho o e-mail como suspeito.", "consequencia": "A TI confirma o golpe e avisa toda a empresa. Banco nunca pede senha por e-mail, e a urgência é a isca.", "competencias": { "cultura_digital": 95, "pensamento_critico": 95, "responsabilidade": 90, "comunicacao": 75 } },
+      { "texto": "Apago o e-mail e não falo nada.", "consequencia": "Você se protegeu, mas outros colegas receberam o mesmo e-mail. Avisar teria protegido todos.", "competencias": { "cultura_digital": 65, "pensamento_critico": 70, "empatia_cooperacao": 40 } },
+      { "texto": "Respondo perguntando se é verdade.", "consequencia": "Responder confirma pros golpistas que o seu e-mail é ativo, e eles vão tentar de novo.", "competencias": { "cultura_digital": 25, "pensamento_critico": 30 } }
+    ]
+  },
+  {
+    "id": "feedback-negativo",
+    "titulo": "Um feedback difícil",
+    "cenario": "Na avaliação do mês, sua supervisora diz que você tem se distraído com o celular e que isso atrasou duas entregas. Você fica chateado.",
+    "opcoes": [
+      { "texto": "Digo que todo mundo usa celular e que ela está pegando no meu pé.", "consequencia": "A conversa vira uma defesa e você perde a chance de melhorar antes da próxima avaliação.", "competencias": { "autoconhecimento": 15, "comunicacao": 25, "trabalho_projeto_vida": 30 } },
+      { "texto": "Respiro, agradeço o retorno, reconheço o que faz sentido, pergunto o que ela espera ver no próximo mês e combino deixar o celular guardado no horário de tarefas.", "consequencia": "No mês seguinte as entregas saem no prazo, e ela comenta a sua evolução na avaliação final. Feedback é uma ferramenta, não um ataque.", "competencias": { "autoconhecimento": 95, "trabalho_projeto_vida": 90, "comunicacao": 90, "responsabilidade": 85 } },
+      { "texto": "Fico calado e saio chateado, sem mudar nada.", "consequencia": "Sem conversa nem mudança, a mesma crítica volta na próxima avaliação.", "competencias": { "autoconhecimento": 35, "comunicacao": 25, "trabalho_projeto_vida": 35 } },
+      { "texto": "Peço demissão: não preciso disso.", "consequencia": "Uma decisão tomada no calor da emoção pode custar a vaga e a experiência que você estava construindo.", "competencias": { "autoconhecimento": 10, "trabalho_projeto_vida": 10 } }
+    ]
+  },
+  {
+    "id": "proposta-de-carreira",
+    "titulo": "Duas propostas",
+    "cenario": "Faltando dois meses pro fim do contrato de aprendizagem, outra empresa te oferece um emprego com salário um pouco maior, mas em outra área. Sua empresa atual sinalizou que pode te efetivar.",
+    "opcoes": [
+      { "texto": "Aceito a outra na hora e saio sem avisar.", "consequencia": "Sair sem cumprir o combinado quebra a confiança e pode deixar uma referência ruim no seu histórico.", "competencias": { "trabalho_projeto_vida": 30, "responsabilidade": 20, "pensamento_critico": 30 } },
+      { "texto": "Comparo as duas pensando no que quero aprender, no plano de carreira, no deslocamento e nos benefícios, converso com meu responsável e com a coordenação do PAP, e decido sem quebrar o contrato atual.", "consequencia": "Você decide com informação e com quem conhece o seu caminho. Seja qual for a escolha, você sai com boa referência.", "competencias": { "trabalho_projeto_vida": 95, "pensamento_critico": 95, "autoconhecimento": 85, "responsabilidade": 85 } },
+      { "texto": "Escolho só pelo salário.", "consequencia": "Salário importa, mas sozinho não mostra se a vaga combina com o que você quer construir.", "competencias": { "trabalho_projeto_vida": 45, "pensamento_critico": 40 } },
+      { "texto": "Uso a outra proposta pra pressionar minha empresa a me efetivar já, com prazo de um dia.", "consequencia": "Negociar é válido, mas um ultimato de um dia costuma soar como ameaça.", "competencias": { "argumentacao": 45, "comunicacao": 40, "trabalho_projeto_vida": 50 } }
+    ]
+  }
+]

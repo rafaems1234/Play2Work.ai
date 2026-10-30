@@ -36,7 +36,7 @@ const MODULOS = [
   { Icon: IconQuiz, titulo: 'Treine todo dia', texto: 'Quiz diário sobre a sua área, com vidas, dicas, combos e ofensiva. Cinco minutos por dia que viram hábito.' },
   { Icon: IconRobot, titulo: 'Simule a entrevista', texto: 'Um recrutador com IA faz as perguntas que caem de verdade, avalia cada resposta e mostra onde melhorar.' },
   { Icon: IconSparkle, titulo: 'Currículo pronto', texto: 'Conte do seu jeito o que já fez na escola, em cursos e projetos. A IA formata e você baixa o PDF na hora.' },
-  { Icon: IconBriefcase, titulo: 'Match com a vaga', texto: 'O mural cruza seu perfil e seu itinerário com vagas de Jovem Aprendiz da sua área e mostra o % de aderência.' },
+  { Icon: IconBriefcase, titulo: 'Indicação pela escola', texto: 'Seu mapa de competências mostra o que você já demonstrou, e a coordenação usa ele pra te indicar às vagas de Jovem Aprendiz.' },
   { Icon: IconTrophy, titulo: 'Suba de liga', texto: '10 ligas, do Bronze ao Diamante, disputadas em grupos de 30. Toda semana os 10 primeiros sobem e os 10 últimos caem.' },
 ];
 

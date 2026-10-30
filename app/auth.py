@@ -13,7 +13,12 @@ from models import Estudante
 logger = logging.getLogger(__name__)
 
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRA_HORAS = 24 * 7  # token válido por 7 dias
+# Sessão do aluno: curta de propósito. Nos laboratórios da escola o mesmo
+# computador passa de aluno pra aluno -- com 7 dias, quem sentasse depois
+# entrava na conta de quem usou antes. 4h cobre um turno de aula; o front
+# ainda guarda o token só na aba (sessionStorage), então fechar o navegador
+# já encerra a sessão. Ajustável por JWT_EXPIRA_HORAS_ALUNO no .env.
+JWT_EXPIRA_HORAS = int(os.environ.get("JWT_EXPIRA_HORAS_ALUNO") or 4)
 
 # Mesmo padrão de DATABASE_URL em database.py: falha explicitamente no
 # import se não estiver configurada, em vez de gerar um segredo aleatório

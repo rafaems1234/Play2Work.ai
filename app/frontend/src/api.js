@@ -14,9 +14,21 @@ const ROTAS_DE_LOGIN = ['/api/auth/entrar', '/api/admin/login'];
 
 const papelDaRota = (path) => (path.startsWith('/api/admin') ? 'admin' : 'aluno');
 
+// O login do aluno fica só na aba (sessionStorage): no laboratório da escola o
+// computador passa de aluno pra aluno, e fechar o navegador tem que encerrar a
+// sessão. O do painel continua no localStorage (computador da coordenação).
+const armazenamento = (papel) => (papel === 'aluno' ? sessionStorage : localStorage);
+
+try {
+  // Versões antigas guardavam o token do aluno no localStorage por 7 dias
+  localStorage.removeItem(CHAVES_TOKEN.aluno);
+} catch {
+  // sem acesso ao storage -- nada a limpar
+}
+
 export const obterToken = (papel) => {
   try {
-    return localStorage.getItem(CHAVES_TOKEN[papel]);
+    return armazenamento(papel).getItem(CHAVES_TOKEN[papel]);
   } catch {
     return null;
   }
@@ -24,16 +36,16 @@ export const obterToken = (papel) => {
 
 export const salvarToken = (papel, token) => {
   try {
-    localStorage.setItem(CHAVES_TOKEN[papel], token);
+    armazenamento(papel).setItem(CHAVES_TOKEN[papel], token);
   } catch {
-    // sem localStorage (modo privado) -- a sessão dura só até recarregar a página
+    // sem storage (modo privado) -- a sessão dura só até recarregar a página
   }
   tokensEmMemoria[papel] = token;
 };
 
 export const limparToken = (papel) => {
   try {
-    localStorage.removeItem(CHAVES_TOKEN[papel]);
+    armazenamento(papel).removeItem(CHAVES_TOKEN[papel]);
   } catch {
     // nada a limpar
   }
@@ -58,7 +70,8 @@ export const apiFetch = async (path, options = {}) => {
     : await fetch(`${API_BASE_URL}${path}`, {
       ...options,
       headers: {
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        // FormData (upload de arquivo): o navegador monta o Content-Type com o boundary
+        ...(options.body && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options.headers,
       },
@@ -69,4 +82,38 @@ export const apiFetch = async (path, options = {}) => {
     ouvintesSessaoExpirada.forEach((callback) => callback(papel));
   }
   return resposta;
+};
+
+// Mensagem de erro do FastAPI ('detail') pra mostrar na tela
+export const lerErro = async (resposta, padrao) => {
+  try {
+    const dados = await resposta.json();
+    if (typeof dados.detail === 'string') return dados.detail;
+    if (Array.isArray(dados.detail)) return 'Confira os campos preenchidos.';
+  } catch {
+    // resposta sem JSON
+  }
+  return padrao;
+};
+
+// Arquivos protegidos (certificado, material da aula) só saem com o token,
+// então não dá pra usar um <a href> direto: baixa com apiFetch e entrega pro navegador.
+export const baixarArquivo = async (path, nomeArquivo) => {
+  const resposta = await apiFetch(path);
+  if (!resposta.ok) return lerErro(resposta, 'Não foi possível baixar o arquivo.');
+  const url = URL.createObjectURL(await resposta.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = nomeArquivo;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return null;
+};
+
+// Mesmo esquema, pra tocar um áudio da aula num <audio>
+export const urlDeArquivo = async (path) => {
+  const resposta = await apiFetch(path);
+  return resposta.ok ? URL.createObjectURL(await resposta.blob()) : null;
 };

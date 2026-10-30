@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IconSparkle, IconWand, IconWarning, IconDocument, IconClipboard, IconLinkedIn } from './icons';
-import { apiFetch } from '../api';
-
-const listar = (itens) => (Array.isArray(itens) ? itens.filter(Boolean) : []);
+import { IconSparkle, IconWand, IconWarning, IconDocument, IconClipboard, IconLinkedIn, IconCheckCircle } from './icons';
+import { apiFetch, urlDeArquivo } from '../api';
+import { FolhaCurriculo, ESTILOS_FOLHA, Imprimir, listar } from './FolhaCurriculo';
+import { dataHoraIsoParaBr } from '../utils/formatos';
 
 const formatarCurriculoTexto = (cv, perfil) => {
   const linhas = [
@@ -29,66 +28,15 @@ const formatarCurriculoTexto = (cv, perfil) => {
   return linhas.join('\n');
 };
 
-// Folha A4 do currículo. Aparece na tela e, numa cópia direto no <body>
-// (#curriculo-print), é o único conteúdo impresso no PDF.
-const FolhaCurriculo = ({ cv, perfil }) => {
-  const experiencias = listar(cv.experiencias);
-  return (
-    <div className="cv-folha permitir-copia">
-      <header className="cv-cabecalho">
-        <h1>{cv.nome_candidato || perfil.nome}</h1>
-        <div className="cv-contato">
-          {perfil.email && <span>{perfil.email}</span>}
-          {perfil.linkedin && <span>{perfil.linkedin.replace(/^https?:\/\//, '')}</span>}
-        </div>
-      </header>
-
-      <section>
-        <h2>Objetivo</h2>
-        <p>{cv.objetivo_profissional || cv.objetivo_professional}</p>
-      </section>
-
-      <section>
-        <h2>Formação</h2>
-        <p>
-          <strong>Ensino Médio</strong>
-          {perfil.itinerario && <> — Itinerário formativo em {perfil.itinerario}</>}
-        </p>
-      </section>
-
-      {experiencias.length > 0 && (
-        <section>
-          <h2>Experiências e projetos</h2>
-          <ul>
-            {experiencias.map((exp) => <li key={exp}>{exp}</li>)}
-          </ul>
-        </section>
-      )}
-
-      <section className="cv-colunas">
-        <div>
-          <h2>Competências técnicas</h2>
-          <ul>{listar(cv.hard_skills).map((h) => <li key={h}>{h}</li>)}</ul>
-        </div>
-        <div>
-          <h2>Competências comportamentais</h2>
-          <ul>{listar(cv.soft_skills).map((s) => <li key={s}>{s}</li>)}</ul>
-        </div>
-      </section>
-
-      {listar(cv.sugestao_areas_atuacao).length > 0 && (
-        <section>
-          <h2>Áreas de interesse</h2>
-          <p>{listar(cv.sugestao_areas_atuacao).join(' · ')}</p>
-        </section>
-      )}
-    </div>
-  );
-};
-
-const ResumeBuilder = () => {
+const ResumeBuilder = ({ aoGerar }) => {
   const [habilidades, setHabilidades] = useState('');
   const [curriculo, setCurriculo] = useState(null);
+  const [geradoEm, setGeradoEm] = useState(null);
+  const [imprimindo, setImprimindo] = useState(false);
+  // Foto no currículo: escolha do aluno, desligada por padrão
+  const [temFoto, setTemFoto] = useState(false);
+  const [fotoNoCurriculo, setFotoNoCurriculo] = useState(false);
+  const [fotoUrl, setFotoUrl] = useState(null);
   const [perfil, setPerfil] = useState({ nome: '', email: '', linkedin: '', itinerario: null });
   const [carregando, setCarregando] = useState(false);
   const [sincronizando, setSincronizando] = useState(false);
@@ -98,12 +46,24 @@ const ResumeBuilder = () => {
   useEffect(() => {
     const carregarPerfil = async () => {
       try {
-        const [respConta, respStatus] = await Promise.all([
+        const [respConta, respStatus, respAtual, respPerfil] = await Promise.all([
           apiFetch('/api/auth/me'),
           apiFetch('/api/estudante/me/status'),
+          apiFetch('/api/resume/atual'),
+          apiFetch('/api/estudante/me/perfil'),
         ]);
+        if (respPerfil.ok) setTemFoto(Boolean((await respPerfil.json()).tem_foto));
         const conta = respConta.ok ? await respConta.json() : {};
         const status = respStatus.ok ? await respStatus.json() : {};
+        // Abre com o último currículo salvo (e o texto que gerou ele), pra
+        // o aluno só ajustar em vez de começar do zero
+        const atual = respAtual.ok ? await respAtual.json() : {};
+        setFotoNoCurriculo(Boolean(atual.foto_no_curriculo));
+        if (atual.curriculo) {
+          setCurriculo(atual.curriculo);
+          setGeradoEm(atual.gerado_em);
+          setHabilidades((texto) => texto || atual.texto_original || '');
+        }
         setPerfil({ nome: conta.nome || status.nome || '', email: conta.email || '', linkedin: conta.linkedin || '', itinerario: status.itinerario || null });
       } catch (err) {
         console.error(err);
@@ -111,6 +71,20 @@ const ResumeBuilder = () => {
     };
     carregarPerfil();
   }, []);
+
+  useEffect(() => {
+    if (!temFoto || !fotoNoCurriculo) { setFotoUrl(null); return undefined; }
+    let ativo = true;
+    let criada = null;
+    urlDeArquivo('/api/estudante/me/foto').then((u) => { if (ativo) { criada = u; setFotoUrl(u); } });
+    return () => { ativo = false; if (criada) URL.revokeObjectURL(criada); };
+  }, [temFoto, fotoNoCurriculo]);
+
+  const alternarFoto = async (incluir) => {
+    setFotoNoCurriculo(incluir);
+    const resposta = await apiFetch('/api/estudante/me/preferencias-curriculo', { method: 'PUT', body: JSON.stringify({ foto_no_curriculo: incluir }) });
+    if (!resposta.ok) setFotoNoCurriculo(!incluir);
+  };
 
   const mostrarAviso = (tipo, texto) => {
     setAviso({ tipo, texto });
@@ -134,6 +108,8 @@ const ResumeBuilder = () => {
       const dados = await response.json();
       if (dados.sucesso) {
         setCurriculo(dados.curriculo);
+        setGeradoEm(dados.gerado_em || new Date().toISOString());
+        aoGerar?.();
       } else {
         throw new Error(dados.erro || 'Erro desconhecido ao gerar o currículo.');
       }
@@ -145,18 +121,7 @@ const ResumeBuilder = () => {
     }
   };
 
-  const handleBaixarPdf = () => {
-    // O título da página vira o nome sugerido do arquivo no "Salvar como PDF".
-    const tituloOriginal = document.title;
-    const nome = (curriculo?.nome_candidato || perfil.nome || 'Estudante').trim();
-    document.title = `Curriculo - ${nome}`;
-    const restaurar = () => {
-      document.title = tituloOriginal;
-      window.removeEventListener('afterprint', restaurar);
-    };
-    window.addEventListener('afterprint', restaurar);
-    window.print();
-  };
+  const handleBaixarPdf = () => setImprimindo(true);
 
   const handleCopiar = async () => {
     try {
@@ -313,37 +278,6 @@ const ResumeBuilder = () => {
         .resume-aviso.ok { background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.25); color: #6ee7b7; }
         .resume-aviso.erro { background: rgba(239,68,68,0.07); border: 1px solid rgba(239,68,68,0.18); color: #f87171; }
 
-        /* Folha A4 */
-        .cv-folha {
-          background: #fff;
-          color: #1e293b;
-          border-radius: 6px;
-          padding: 44px 48px;
-          font-family: 'Inter', Arial, sans-serif;
-          font-size: 13.5px;
-          line-height: 1.55;
-          box-shadow: 0 24px 60px rgba(0,0,0,0.45);
-          border-top: 6px solid var(--accent);
-        }
-        .cv-folha h1 {
-          font-family: 'Space Grotesk', 'Inter', sans-serif;
-          font-size: 30px; font-weight: 800; letter-spacing: -0.5px;
-          color: #0f172a; margin: 0 0 6px;
-        }
-        .cv-contato { display: flex; flex-wrap: wrap; gap: 4px 18px; color: #475569; font-size: 12.5px; }
-        .cv-cabecalho { padding-bottom: 18px; border-bottom: 1px solid #e2e8f0; margin-bottom: 18px; }
-        .cv-folha section { margin-bottom: 18px; break-inside: avoid; }
-        .cv-folha h2 {
-          font-family: 'Inter', Arial, sans-serif;
-          font-size: 11px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase;
-          color: var(--accent-strong); margin: 0 0 6px;
-        }
-        .cv-folha p { margin: 0; color: #334155; }
-        .cv-folha strong { color: #0f172a; }
-        .cv-folha ul { margin: 0; padding-left: 18px; color: #334155; }
-        .cv-folha li { margin-bottom: 3px; }
-        .cv-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-
         .empty-state {
           padding: 40px;
           border: 1px dashed rgb(var(--accent-rgb) / 0.15);
@@ -366,22 +300,9 @@ const ResumeBuilder = () => {
 
         @media (max-width: 600px) {
           .resume-card { padding: 24px 18px; }
-          .cv-folha { padding: 28px 22px; }
-          .cv-colunas { grid-template-columns: 1fr; gap: 0; }
         }
 
-        /* PDF: só a folha do currículo, em A4, sem o resto do app */
-        #curriculo-print { display: none; }
-        @media print {
-          @page { size: A4; margin: 14mm; }
-          :root, html, body { background: #fff !important; color-scheme: light; }
-          body > *:not(#curriculo-print) { display: none !important; }
-          #curriculo-print { display: block; }
-          #curriculo-print .cv-folha {
-            box-shadow: none; border-radius: 0; padding: 0 0 0 0; border-top: none;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
-        }
+        ${ESTILOS_FOLHA}
       `}</style>
 
       <div className="resume-card">
@@ -452,7 +373,18 @@ const ResumeBuilder = () => {
               transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="result-header">
-                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><IconDocument /> Currículo pronto</span>
+                <div>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><IconDocument /> Currículo pronto</span>
+                  {/* Cada geração vira a versão que a escola vê no painel */}
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <IconCheckCircle style={{ color: '#34d399' }} />
+                    Enviado pra coordenação{geradoEm ? ` · atualizado em ${dataHoraIsoParaBr(geradoEm)}` : ''}
+                  </div>
+                  <label style={{ fontSize: '12px', color: temFoto ? '#cbd5e1' : '#475569', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', cursor: temFoto ? 'pointer' : 'not-allowed' }} title={temFoto ? undefined : 'Adicione uma foto em Minha conta primeiro'}>
+                    <input type="checkbox" checked={fotoNoCurriculo && temFoto} disabled={!temFoto} onChange={(e) => alternarFoto(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+                    Incluir minha foto no currículo{!temFoto && ' (adicione uma foto em Minha conta)'}
+                  </label>
+                </div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button onClick={handleBaixarPdf} className="result-action-btn pdf">
                     <IconDocument /> Baixar PDF
@@ -479,14 +411,15 @@ const ResumeBuilder = () => {
                 )}
               </AnimatePresence>
 
-              <FolhaCurriculo cv={curriculo} perfil={perfil} />
+              <FolhaCurriculo cv={curriculo} perfil={perfil} foto={fotoUrl} />
             </motion.div>
           )}
         </AnimatePresence>
 
-        {curriculo && createPortal(
-          <div id="curriculo-print"><FolhaCurriculo cv={curriculo} perfil={perfil} /></div>,
-          document.body,
+        {curriculo && imprimindo && (
+          <Imprimir nomeDoArquivo={`Curriculo - ${(curriculo.nome_candidato || perfil.nome || 'Estudante').trim()}`} aoTerminar={() => setImprimindo(false)}>
+            <FolhaCurriculo cv={curriculo} perfil={perfil} foto={fotoUrl} />
+          </Imprimir>
         )}
       </div>
     </div>
