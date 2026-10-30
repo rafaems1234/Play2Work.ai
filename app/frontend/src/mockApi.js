@@ -1,5 +1,9 @@
+import { idadeDe, hojeLocalIso } from './utils/formatos';
 import { LIGAS as LIGAS_INFO } from './ligas.js';
 import BANCO_QUESTOES from './data/banco_questoes.json';
+import SITUACOES_LISTA from './data/situacoes.json';
+import { criarMockTrilha } from './mockTrilha';
+import { criarMockMensagens } from './mockMensagens';
 
 // Modo demonstração: simula todas as rotas da API inteiramente no navegador,
 // com dados fictícios e uma "gamificação" leve simulada em memória -- pra dar
@@ -56,7 +60,6 @@ const PERGUNTAS_POR_QUIZ = 10;
 const PERGUNTAS_GERAIS_POR_QUIZ = 2;
 const SENHA_ADMIN_DEMO = 'escola123';
 const TOKEN_ADMIN_DEMO = 'demo-admin';
-const CUSTO_MOEDAS_POR_VIDA = 50;
 const DICAS_POR_QUIZ = 2;
 const PULOS_POR_QUIZ = 2;
 const LIGAS = LIGAS_INFO.map((l) => l.nome);
@@ -77,7 +80,6 @@ const estado = {
   liga: 'Prata',
   vidas: 4,
   proxima_vida_em: null,
-  moedas: 65,
   congelamentos_disponiveis: 1,
   quizzes_perfeitos_seguidos: 3,
   precisaTrocarSenha: false,
@@ -142,21 +144,157 @@ const ALUNOS = [
   return lista;
 }, []);
 
+// Contato, nascimento e situação de cada aluno da demonstração (id -> campos)
+const DDD = '67';
+const EXTRAS_ALUNOS = {
+  1: { data_nascimento: '2008-11-15', responsavel_nome: 'Cláudia Sozza' },
+  2: { data_nascimento: '2008-03-02', responsavel_nome: 'Paulo Ferreira', status_contratacao: 'contratado', empresa_contratante: 'Eldorado Brasil Celulose', contratado_em: '2026-09-15', ja_trabalhou: true, experiencia_previa: 'Ajudava na lan house do tio: atendimento e manutenção básica dos computadores.' },
+  3: { data_nascimento: '2009-07-21', responsavel_nome: 'Renata Andrade' },
+  4: { data_nascimento: '2008-01-30', responsavel_nome: 'Sérgio Martins', ja_trabalhou: false, status_contratacao: 'contratado', empresa_contratante: 'Eldorado Brasil Celulose', contratado_em: '2026-10-01' },
+  5: { data_nascimento: '2010-05-12', responsavel_nome: 'Márcia Souza' },
+  6: { data_nascimento: '2007-12-08', responsavel_nome: 'Helena Lima', status_contratacao: 'contratado', empresa_contratante: 'Machado Advogados Associados', contratado_em: '2026-08-04', ja_trabalhou: true, experiencia_previa: 'Jovem Aprendiz no cartório da cidade por 1 ano.' },
+  7: { data_nascimento: '2009-02-17', responsavel_nome: 'Fábio Rocha' },
+  8: { data_nascimento: '2008-09-25', responsavel_nome: 'Lúcia Nunes', ja_trabalhou: false },
+  9: { data_nascimento: '2010-01-03', responsavel_nome: 'Cristina Duarte' },
+  10: { data_nascimento: '2008-06-14', responsavel_nome: 'Antônio Pires' },
+  11: { data_nascimento: '2009-10-29', responsavel_nome: 'Juliana Costa' },
+  12: { responsavel_nome: 'Roberto Silva' }, // sem nascimento: mostra o aviso do filtro de idade
+};
+ALUNOS.forEach((a) => Object.assign(a, {
+  status_contratacao: 'disponivel', empresa_contratante: null, contratado_em: null, ja_trabalhou: null, experiencia_previa: null, foto_no_curriculo: false,
+  telefone: `${DDD}9${String(91000000 + a.id * 137).slice(0, 8)}`,
+  responsavel_telefone: `${DDD}9${String(88000000 + a.id * 211).slice(0, 8)}`,
+}, EXTRAS_ALUNOS[a.id] || {}));
+
+const agoraIso = () => new Date().toISOString().slice(0, 19);
+const diasAtras = (dias, hora = 10) => {
+  const d = new Date();
+  d.setDate(d.getDate() - dias);
+  d.setHours(hora, 0, 0, 0);
+  return d.toISOString().slice(0, 19);
+};
+
+const fotos = new Map();                  // alunoId -> { dataUrl, em }
+const onboardingConcluido = new Set(ALUNOS.map((a) => a.id).filter((id) => id !== 1)); // o aluno da demo passa pelo primeiro acesso
+const curriculos = new Map([[2, [{
+  id: 1, gerado_em: diasAtras(3), texto_original: 'Gosto de dados, fiz curso de Excel e Python na escola e ajudava na lan house do meu tio.',
+  curriculo: {
+    nome_candidato: 'Bianca Ferreira',
+    objetivo_profissional: 'Estudante do Ensino Médio em busca da primeira oportunidade como Jovem Aprendiz em Tecnologia e Ciência de Dados.',
+    experiencias: ['Atendimento e manutenção de computadores na lan house da família', 'Curso de Python e Excel oferecido pela escola'],
+    hard_skills: ['Python', 'SQL', 'Excel', 'Análise de Dados'],
+    soft_skills: ['Comunicação', 'Organização', 'Proatividade'],
+    sugestao_areas_atuacao: ['Jovem Aprendiz em Dados', 'Suporte Técnico'],
+  },
+}]]]);
+let proximoCurriculoId = 2;
+const entrevistas = new Map([[2, [
+  { remetente: 'ai', mensagem: 'Me conta um pouco sobre você e por que quer trabalhar com dados.', em: diasAtras(5) },
+  { remetente: 'user', mensagem: 'Gosto de organizar informação. Na lan house eu fazia a planilha de caixa do meu tio.', feedback: 'Ótimo exemplo prático! Mostra iniciativa.', xp: 40, em: diasAtras(5) },
+  { remetente: 'ai', mensagem: 'Como você lida com prazos apertados?', em: diasAtras(5) },
+  { remetente: 'user', mensagem: 'Faço uma lista do que é mais urgente e peço ajuda quando preciso.', feedback: 'Boa resposta, tente dar um exemplo real.', xp: 25, em: diasAtras(5) },
+]]]);
+let proximaObservacaoId = 3;
+const observacoes = new Map([
+  [2, [{ id: 1, texto: 'Comportamento exemplar na entrevista da Eldorado. Empresa elogiou a pontualidade.', autor: 'Coordenação', criada_em: diasAtras(20) }]],
+  [3, [{ id: 2, texto: 'Precisa melhorar a pontualidade nas aulas do itinerário.', autor: 'Coordenação', criada_em: diasAtras(8) }]],
+]);
+const mudancasStatus = new Map([
+  [2, [{ status: 'contratado', empresa: 'Eldorado Brasil Celulose', registrada_em: diasAtras(44) }]],
+  [6, [{ status: 'contratado', empresa: 'Machado Advogados Associados', registrada_em: diasAtras(86) }]],
+]);
+const infoCandidaturas = new Map(); // `${alunoId}-${vagaId}` -> { status, resposta_empresa, criada_em, atualizada_em }
+
+const ultimoCurriculo = (id) => (curriculos.get(id) || [])[0] || null;
+
 const indicacoes = new Map(); // vagaId -> Map(alunoId -> pontuação)
 let proximoAlunoId = ALUNOS.length + 1;
 let proximaTurmaId = TURMAS.length + 1;
 let proximaVagaId = 10;
 
-const PESOS_DESEMPENHO = { habilidades: 35, itinerario: 20, quiz: 25, engajamento: 15, constancia: 5 };
-const calcularDesempenho = (aluno, vaga, xpMaximo) => {
+// --------------------------------------------------------------- mapa de competências
+// Mesma regra de competencias.py: 10 eixos da BNCC, média móvel (nova evidência
+// pesa 30%) e, na indicação, cada eixo puxado pra 50 como se tivesse 3 evidências medianas.
+const COMPETENCIAS = [
+  ['conhecimento', 'Conhecimento', 1, 'Usar os conhecimentos construídos pra entender a realidade e continuar aprendendo.'],
+  ['pensamento_critico', 'Pensamento crítico e criativo', 2, 'Investigar, refletir, analisar criticamente e criar soluções.'],
+  ['repertorio_cultural', 'Repertório cultural', 3, 'Valorizar e fruir as diversas manifestações artísticas e culturais.'],
+  ['comunicacao', 'Comunicação', 4, 'Se expressar com clareza, nas linguagens verbal, escrita, digital e outras.'],
+  ['cultura_digital', 'Cultura digital', 5, 'Usar tecnologias digitais de forma crítica, ética e responsável.'],
+  ['trabalho_projeto_vida', 'Trabalho e projeto de vida', 6, 'Entender o mundo do trabalho e fazer escolhas alinhadas ao seu projeto de vida.'],
+  ['argumentacao', 'Argumentação', 7, 'Argumentar com base em fatos e defender ideias com respeito.'],
+  ['autoconhecimento', 'Autoconhecimento e autocuidado', 8, 'Conhecer a si mesmo, reconhecer suas emoções e lidar com elas.'],
+  ['empatia_cooperacao', 'Empatia e cooperação', 9, 'Dialogar, resolver conflitos e trabalhar em equipe com respeito ao outro.'],
+  ['responsabilidade', 'Responsabilidade e cidadania', 10, 'Agir com autonomia, responsabilidade, ética e compromisso.'],
+].map(([codigo, nome, bncc, descricao]) => ({ codigo, nome, bncc, descricao }));
+const SITUACOES = Object.fromEntries(SITUACOES_LISTA.map((sit) => [sit.id, sit]));
+const SITUACOES_POR_DIA = 5;
+
+const mapas = new Map();        // alunoId -> { codigo: { pontuacao, total } }
+const evidencias = new Map();   // alunoId -> [{ competencia, pontos, origem, criada_em }]
+const respostasSituacoes = new Map(); // alunoId -> [{ situacao_id, opcao_index, criada_em }]
+const ORIGENS = { quiz: 'Quiz do dia', entrevista: 'Simulador de entrevista', situacao: 'O que você faria?', aula: 'Aula EAD (fixação)' };
+
+const registrarEvidencias = (alunoId, pontosPorEixo, origem, criadaEm = agoraIso()) => {
+  const mapa = mapas.get(alunoId) || {};
+  Object.entries(pontosPorEixo).forEach(([codigo, bruto]) => {
+    const pontos = Math.max(0, Math.min(100, Math.round(bruto)));
+    const atual = mapa[codigo];
+    mapa[codigo] = atual ? { pontuacao: atual.pontuacao * 0.7 + pontos * 0.3, total: atual.total + 1 } : { pontuacao: pontos, total: 1 };
+    evidencias.set(alunoId, [{ competencia: codigo, pontos, origem: ORIGENS[origem], criada_em: criadaEm }, ...(evidencias.get(alunoId) || [])]);
+  });
+  mapas.set(alunoId, mapa);
+};
+
+const notaCompetencias = (alunoId) => {
+  const mapa = mapas.get(alunoId) || {};
+  const soma = COMPETENCIAS.reduce((total, { codigo }) => {
+    const { pontuacao = 50, total: n = 0 } = mapa[codigo] || {};
+    return total + (pontuacao * n + 50 * 3) / (n + 3);
+  }, 0);
+  return soma / COMPETENCIAS.length / 100;
+};
+
+const mapaParaTela = (aluno) => {
+  const mapa = mapas.get(aluno.id) || {};
+  const daTurma = ALUNOS.filter((a) => (aluno.turma_id ? a.turma_id === aluno.turma_id : true));
+  return {
+    referencia_media: aluno.turma_id ? 'turma' : 'escola',
+    eixos: COMPETENCIAS.map((comp) => {
+      const valores = daTurma.map((a) => mapas.get(a.id)?.[comp.codigo]?.pontuacao).filter((v) => v != null);
+      const meu = mapa[comp.codigo];
+      return {
+        ...comp,
+        pontuacao: meu ? Math.round(meu.pontuacao) : null,
+        total_evidencias: meu?.total ?? 0,
+        media_turma: valores.length ? Math.round(valores.reduce((x, y) => x + y, 0) / valores.length) : null,
+      };
+    }),
+  };
+};
+
+// Histórico fictício pra demonstração: cada aluno já fez algumas atividades
+// (o aluno 1, da demo, só algumas -- pra mostrar eixos ainda sem atividades)
+ALUNOS.forEach((a) => {
+  const semente = (n) => ((a.id * 37 + n * 53) % 41) - 20; // -20..20, fixo por aluno
+  const base = (a.taxa_acerto_quiz ?? 60);
+  const eixos = a.id === 1 ? ['conhecimento', 'comunicacao', 'cultura_digital', 'trabalho_projeto_vida'] : COMPETENCIAS.map((c) => c.codigo).filter((_, i) => (a.id + i) % 5 !== 0);
+  eixos.forEach((codigo, i) => {
+    for (let k = 0; k < 2 + ((a.id + i) % 3); k += 1) {
+      registrarEvidencias(a.id, { [codigo]: base + semente(i + k) }, codigo === 'conhecimento' ? 'quiz' : i % 2 ? 'situacao' : 'entrevista', diasAtras(10 - k));
+    }
+  });
+});
+
+const PESOS_DESEMPENHO = { habilidades: 30, itinerario: 20, competencias: 35, quiz: 15 };
+const calcularDesempenho = (aluno, vaga) => {
   const habVaga = new Set(vaga.habilidades_exigidas);
   const emComum = (aluno.habilidades || []).filter((h) => habVaga.has(h));
   const fracoes = {
     habilidades: habVaga.size ? emComum.length / habVaga.size : 0,
     itinerario: aluno.itinerario && aluno.itinerario === vaga.area_itinerario ? 1 : 0,
+    competencias: notaCompetencias(aluno.id),
     quiz: (aluno.taxa_acerto_quiz ?? 0) / 100,
-    engajamento: xpMaximo > 0 ? Math.min(1, aluno.xp_total / xpMaximo) : 0,
-    constancia: Math.min(1, aluno.ofensiva_dias / 30),
   };
   const detalhes = Object.fromEntries(Object.entries(fracoes).map(([k, f]) => [k, Math.round(f * PESOS_DESEMPENHO[k] * 10) / 10]));
   return { pontuacao: Math.round(Object.values(detalhes).reduce((a, b) => a + b, 0)), detalhes, habilidades_em_comum: emComum.sort() };
@@ -169,7 +307,67 @@ const alunoParaApi = (a) => ({
   turma: nomeTurma(a.turma_id),
   nivel: 1 + Math.floor(a.xp_total / 300),
   total_indicacoes: totalIndicacoesDoAluno(a.id),
+  idade: idadeDe(a.data_nascimento),
+  tem_foto: fotos.has(a.id),
+  foto_atualizada_em: fotos.get(a.id)?.em ?? null,
+  curriculo_atualizado_em: ultimoCurriculo(a.id)?.gerado_em ?? null,
+  total_certificados: trilha.totalCertificados(a.id),
 });
+
+// Mesma validação de fotos.py (tipo pelos primeiros bytes, até 1 MB)
+const validarFoto = (texto) => {
+  const base64 = String(texto || '').split(',').pop();
+  let bytes;
+  try { bytes = atob(base64); } catch { return 'Imagem inválida.'; }
+  if (bytes.length > 1_000_000) return 'Foto grande demais (máximo 1 MB).';
+  const ehJpeg = bytes.startsWith('\xff\xd8\xff');
+  const ehPng = bytes.startsWith('\x89PNG');
+  const ehWebp = bytes.startsWith('RIFF') && bytes.slice(8, 12) === 'WEBP';
+  return ehJpeg || ehPng || ehWebp ? null : 'Formato não suportado: envie uma foto JPG, PNG ou WebP.';
+};
+
+const respostaFoto = (id) => {
+  const foto = fotos.get(id);
+  if (!foto) return erroFake('Aluno sem foto.', 404);
+  return Promise.resolve({ ok: true, status: 200, blob: async () => (await fetch(foto.dataUrl)).blob(), json: async () => ({}) });
+};
+
+const salvarFotoDemo = (id, corpo) => {
+  const erro = validarFoto(corpo.imagem_base64);
+  if (erro) return erroFake(erro, 400);
+  const em = agoraIso();
+  fotos.set(id, { dataUrl: corpo.imagem_base64, em });
+  return respostaFake({ sucesso: true, foto_atualizada_em: em });
+};
+
+// Candidaturas de um aluno = indicações da escola + as que ele mesmo fez
+const candidaturasDoAluno = (aluno) => VAGAS
+  .filter((v) => indicacoes.get(v.id)?.has(aluno.id) || (aluno.id === estado.alunoId && estado.candidaturas.has(v.id)))
+  .map((v) => {
+    const chave = `${aluno.id}-${v.id}`;
+    if (!infoCandidaturas.has(chave)) infoCandidaturas.set(chave, { status: 'em_analise', resposta_empresa: null, criada_em: agoraIso(), atualizada_em: null });
+    const info = infoCandidaturas.get(chave);
+    const indicada = indicacoes.get(v.id)?.has(aluno.id) ?? false;
+    return {
+      id: aluno.id * 1000 + v.id, vaga_id: v.id, titulo_vaga: v.titulo_vaga, empresa: v.empresa, ...info,
+      indicada_pela_escola: indicada, pontuacao_indicacao: indicada ? indicacoes.get(v.id).get(aluno.id) : null,
+    };
+  });
+
+const entrevistasPorDia = (mensagens) => {
+  const dias = new Map();
+  let ultimaPergunta = null;
+  mensagens.forEach((m) => {
+    if (m.remetente === 'ai') { ultimaPergunta = m.mensagem; return; }
+    const dia = m.em.slice(0, 10);
+    if (!dias.has(dia)) dias.set(dia, []);
+    dias.get(dia).push({ pergunta: ultimaPergunta, resposta: m.mensagem, feedback: m.feedback, nota: m.xp });
+  });
+  return [...dias.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([data, itens]) => {
+    const notas = itens.map((i) => i.nota).filter((n) => n != null);
+    return { data, total_respostas: itens.length, nota_media: notas.length ? Math.round(notas.reduce((x, y) => x + y, 0) / notas.length) : null, itens };
+  });
+};
 
 // --------------------------------------------------------------- banco de questões
 const embaralhar = (lista) => {
@@ -402,14 +600,28 @@ const respostaFake = (dados, status = 200) => Promise.resolve({
 
 const erroFake = (detail, status = 400) => respostaFake({ detail }, status);
 
-const atenderAdmin = (metodo, caminho, query, corpo, token) => {
+// Trilha EAD (aulas, frequência, fixação e certificados) -- em mockTrilha.js
+const concederXpDemo = (xp) => {
+  estado.xp_total += xp;
+  estado.xp_semanal += xp;
+  if (estado.xp_total >= 300 * estado.nivel_gamificacao) estado.nivel_gamificacao += 1;
+  atualizarCategoriaStatus();
+  registrarTreinoDoDia();
+};
+const mensagensDemo = criarMockMensagens({ ALUNOS, TURMAS, estado, respostaFake, erroFake, agoraIso, diasAtras });
+const trilha = criarMockTrilha({ ALUNOS, estado, respostaFake, erroFake, registrarEvidencias, concederXp: concederXpDemo, nomeTurma, agoraIso, diasAtras });
+
+const atenderAdmin = async (metodo, caminho, query, corpo, token) => {
   if (metodo === 'POST' && caminho === '/api/admin/login') {
     if (corpo.senha !== SENHA_ADMIN_DEMO) return erroFake('Senha incorreta', 401);
     return respostaFake({ token: TOKEN_ADMIN_DEMO });
   }
   if (token !== TOKEN_ADMIN_DEMO) return erroFake('Acesso restrito à escola. Faça login no painel.', 401);
+  const daTrilha = await trilha.admin(metodo, caminho, query, corpo);
+  if (daTrilha) return daTrilha;
+  const dasMensagens = mensagensDemo.admin(metodo, caminho, query, corpo);
+  if (dasMensagens) return dasMensagens;
 
-  const xpMaximo = Math.max(0, ...ALUNOS.map((a) => a.xp_total));
   const validarCpf = (cpfDigitado, ignorarId) => {
     const cpf = String(cpfDigitado || '').replace(/\D/g, '');
     if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return [null, erroFake('CPF inválido — confira os números', 400)];
@@ -432,6 +644,9 @@ const atenderAdmin = (metodo, caminho, query, corpo, token) => {
       total_turmas: TURMAS.length,
       total_vagas: VAGAS.length,
       total_indicacoes: [...indicacoes.values()].reduce((t, m) => t + m.size, 0),
+      total_contratados: ALUNOS.filter((a) => a.status_contratacao === 'contratado').length,
+      mensagens_nao_lidas: mensagensDemo.naoLidasDaEscola(),
+      total_sem_foto: ALUNOS.filter((a) => !fotos.has(a.id)).length,
       alunos_por_itinerario: semIt ? [...porIt, { itinerario: null, total: semIt }] : porIt,
     });
   }
@@ -461,6 +676,8 @@ const atenderAdmin = (metodo, caminho, query, corpo, token) => {
       data_nascimento: corpo.data_nascimento || null, email: corpo.email, turma_id: corpo.turma_id ?? null,
       itinerario: corpo.itinerario || null, habilidades: corpo.habilidades || [], xp_total: 0, ofensiva_dias: 0,
       taxa_acerto_quiz: null, liga: 'Bronze', total_candidaturas: 0,
+      telefone: corpo.telefone || null, responsavel_nome: corpo.responsavel_nome || null, responsavel_telefone: corpo.responsavel_telefone || null,
+      status_contratacao: 'disponivel', empresa_contratante: null, contratado_em: null, ja_trabalhou: null, experiencia_previa: null,
     };
     ALUNOS.push(aluno);
     return respostaFake(alunoParaApi(aluno), 201);
@@ -478,13 +695,91 @@ const atenderAdmin = (metodo, caminho, query, corpo, token) => {
       aluno.nome = corpo.nome.trim();
       aluno.nome_exibicao = escolherNomeExibicao(aluno.nome, nomesOcupados(aluno.id));
     }
-    ['data_nascimento', 'email', 'turma_id', 'itinerario', 'habilidades'].forEach((campo) => {
+    ['data_nascimento', 'email', 'turma_id', 'itinerario', 'habilidades', 'telefone', 'responsavel_nome', 'responsavel_telefone', 'ja_trabalhou', 'experiencia_previa'].forEach((campo) => {
       if (campo in corpo) aluno[campo] = corpo[campo];
     });
     if (aluno.id === estado.alunoId) {
       Object.assign(estado, { nome: aluno.nome, nome_exibicao: aluno.nome_exibicao, itinerario: aluno.itinerario, habilidades: aluno.habilidades, email: aluno.email });
     }
     return respostaFake(alunoParaApi(aluno));
+  }
+
+  const matchFicha = caminho.match(/^\/api\/admin\/estudantes\/(\d+)\/(status|foto|curriculo|historico|observacoes|competencias)$/);
+  if (matchFicha) {
+    const aluno = ALUNOS.find((a) => a.id === Number(matchFicha[1]));
+    if (!aluno) return erroFake('Aluno não encontrado', 404);
+    const recurso = matchFicha[2];
+
+    if (recurso === 'status' && metodo === 'PUT') {
+      if (!['disponivel', 'contratado'].includes(corpo.status)) return erroFake('Status inválido', 400);
+      const empresa = (corpo.empresa || '').trim() || null;
+      if (corpo.status === 'contratado' && !empresa) return erroFake('Informe a empresa que contratou o aluno', 400);
+      Object.assign(aluno, corpo.status === 'contratado'
+        ? { status_contratacao: 'contratado', empresa_contratante: empresa, contratado_em: corpo.contratado_em || hojeLocalIso() }
+        : { status_contratacao: 'disponivel', empresa_contratante: null, contratado_em: null });
+      mudancasStatus.set(aluno.id, [{ status: corpo.status, empresa, registrada_em: agoraIso() }, ...(mudancasStatus.get(aluno.id) || [])]);
+      return respostaFake({ status_contratacao: aluno.status_contratacao, empresa_contratante: aluno.empresa_contratante, contratado_em: aluno.contratado_em });
+    }
+    if (recurso === 'foto') {
+      if (metodo === 'GET') return respostaFoto(aluno.id);
+      if (metodo === 'PUT') return salvarFotoDemo(aluno.id, corpo);
+      if (metodo === 'DELETE') { fotos.delete(aluno.id); return respostaFake({ sucesso: true }); }
+    }
+    if (recurso === 'curriculo' && metodo === 'GET') {
+      const versoes = curriculos.get(aluno.id) || [];
+      if (!versoes.length) return respostaFake({ atual: null, versoes: [] });
+      const versaoId = Number(query.get('versao_id')) || null;
+      const atual = versaoId ? versoes.find((v) => v.id === versaoId) : versoes[0];
+      if (!atual) return erroFake('Versão do currículo não encontrada', 404);
+      return respostaFake({ atual, versoes: versoes.map((v, i) => ({ id: v.id, gerado_em: v.gerado_em, mais_recente: i === 0 })) });
+    }
+    if (recurso === 'historico' && metodo === 'GET') {
+      return respostaFake({
+        experiencia: { ja_trabalhou: aluno.ja_trabalhou, experiencia_previa: aluno.experiencia_previa },
+        entrevistas: entrevistasPorDia(entrevistas.get(aluno.id) || []),
+        candidaturas: candidaturasDoAluno(aluno),
+        mudancas_status: mudancasStatus.get(aluno.id) || [],
+        observacoes: observacoes.get(aluno.id) || [],
+      });
+    }
+    if (recurso === 'competencias' && metodo === 'GET') {
+      return respostaFake({
+        ...mapaParaTela(aluno),
+        evidencias: (evidencias.get(aluno.id) || []).slice(0, 30),
+        situacoes: (respostasSituacoes.get(aluno.id) || []).slice(0, 20).map((r) => ({
+          titulo: SITUACOES[r.situacao_id].titulo, escolha: SITUACOES[r.situacao_id].opcoes[r.opcao_index].texto, criada_em: r.criada_em,
+        })),
+      });
+    }
+    if (recurso === 'observacoes' && metodo === 'POST') {
+      const texto = (corpo.texto || '').trim();
+      if (!texto) return erroFake('Escreva a observação', 400);
+      const nova = { id: proximaObservacaoId++, texto, autor: 'Coordenação', criada_em: agoraIso() };
+      observacoes.set(aluno.id, [nova, ...(observacoes.get(aluno.id) || [])]);
+      return respostaFake(nova, 201);
+    }
+  }
+  const matchObservacao = metodo === 'DELETE' && caminho.match(/^\/api\/admin\/observacoes\/(\d+)$/);
+  if (matchObservacao) {
+    const id = Number(matchObservacao[1]);
+    const dono = [...observacoes.entries()].find(([, lista]) => lista.some((o) => o.id === id));
+    if (!dono) return erroFake('Observação não encontrada', 404);
+    observacoes.set(dono[0], dono[1].filter((o) => o.id !== id));
+    return respostaFake({ sucesso: true });
+  }
+  const matchCandidatura = metodo === 'PUT' && caminho.match(/^\/api\/admin\/candidaturas\/(\d+)$/);
+  if (matchCandidatura) {
+    const id = Number(matchCandidatura[1]);
+    const chave = `${Math.floor(id / 1000)}-${id % 1000}`;
+    const info = infoCandidaturas.get(chave);
+    if (!info) return erroFake('Candidatura não encontrada', 404);
+    if ('status' in corpo) {
+      if (!['enviada', 'em_analise', 'aprovada', 'recusada'].includes(corpo.status)) return erroFake('Status inválido', 400);
+      info.status = corpo.status;
+    }
+    if ('resposta_empresa' in corpo) info.resposta_empresa = (corpo.resposta_empresa || '').trim() || null;
+    info.atualizada_em = agoraIso();
+    return respostaFake({ id, ...info });
   }
 
   if (metodo === 'GET' && caminho === '/api/admin/vagas') {
@@ -508,7 +803,7 @@ const atenderAdmin = (metodo, caminho, query, corpo, token) => {
       .map((a) => ({
         estudante_id: a.id, nome: a.nome, nome_exibicao: a.nome_exibicao, turma: nomeTurma(a.turma_id), itinerario: a.itinerario,
         xp_total: a.xp_total, ofensiva_dias: a.ofensiva_dias, taxa_acerto_quiz: a.taxa_acerto_quiz,
-        ...calcularDesempenho(a, vaga, xpMaximo),
+        ...calcularDesempenho(a, vaga),
         candidatou_se: indicadosDaVaga.has(a.id) || (a.id === estado.alunoId && estado.candidaturas.has(vaga.id)),
         indicado: indicadosDaVaga.has(a.id),
       }))
@@ -526,7 +821,7 @@ const atenderAdmin = (metodo, caminho, query, corpo, token) => {
     let novas = 0;
     ids.forEach((id) => {
       if (!mapa.has(id)) novas += 1;
-      mapa.set(id, calcularDesempenho(ALUNOS.find((a) => a.id === id), vaga, xpMaximo).pontuacao);
+      mapa.set(id, calcularDesempenho(ALUNOS.find((a) => a.id === id), vaga).pontuacao);
     });
     indicacoes.set(vaga.id, mapa);
     return respostaFake({ sucesso: true, indicados: ids.length, novas_indicacoes: novas, mensagem: `${ids.length} aluno(s) indicado(s) para ${vaga.titulo_vaga} — ${vaga.empresa}.` });
@@ -534,11 +829,11 @@ const atenderAdmin = (metodo, caminho, query, corpo, token) => {
   return erroFake(`Rota fake não implementada: ${metodo} ${caminho}`, 404);
 };
 
-export const atenderRequisicaoFake = (path, options = {}) => {
+export const atenderRequisicaoFake = async (path, options = {}) => {
   const metodo = (options.method || 'GET').toUpperCase();
   const [caminho, queryString] = path.split('?');
   const query = new URLSearchParams(queryString || '');
-  const corpo = options.body ? JSON.parse(options.body) : {};
+  const corpo = options.body instanceof FormData ? options.body : options.body ? JSON.parse(options.body) : {};
 
   if (caminho.startsWith('/api/admin')) return atenderAdmin(metodo, caminho, query, corpo, options.token);
 
@@ -579,7 +874,6 @@ export const atenderRequisicaoFake = (path, options = {}) => {
       minutos_para_regenerar_vida: MINUTOS_PARA_REGENERAR_VIDA,
       acertos_seguidos_para_vida: ACERTOS_SEGUIDOS_PARA_VIDA,
       proxima_vida_em: estado.proxima_vida_em,
-      moedas: estado.moedas,
       congelamentos_disponiveis: estado.congelamentos_disponiveis,
       quizzes_perfeitos_seguidos: estado.quizzes_perfeitos_seguidos,
       quizzes_perfeitos_para_bonus: 5,
@@ -609,10 +903,7 @@ export const atenderRequisicaoFake = (path, options = {}) => {
 
   // GET /jobs/minhas-candidaturas
   if (metodo === 'GET' && caminho === '/api/jobs/minhas-candidaturas') {
-    return respostaFake([...estado.candidaturas].map((id, idx) => {
-      const vaga = VAGAS.find((v) => v.id === id);
-      return { id: idx + 1, vaga_id: id, titulo_vaga: vaga?.titulo_vaga, empresa: vaga?.empresa, status: 'enviada', indicada_pela_escola: Boolean(indicacoes.get(id)?.has(estado.alunoId)), criada_em: new Date().toISOString() };
-    }));
+    return respostaFake(candidaturasDoAluno(ALUNOS.find((a) => a.id === estado.alunoId)).map(({ id, vaga_id, titulo_vaga, empresa, status, indicada_pela_escola, criada_em }) => ({ id, vaga_id, titulo_vaga, empresa, status, indicada_pela_escola, criada_em })));
   }
 
   // GET /jobs/{id}
@@ -626,19 +917,7 @@ export const atenderRequisicaoFake = (path, options = {}) => {
 
   // POST /jobs/apply-meta
   if (metodo === 'POST' && caminho === '/api/jobs/apply-meta') {
-    const vaga = VAGAS.find((v) => v.id === corpo.vaga_id);
-    if (!vaga) return erroFake('Vaga não encontrada', 404);
-    const jaExistia = estado.candidaturas.has(vaga.id);
-    estado.candidaturas.add(vaga.id);
-    return respostaFake({
-      sucesso: true,
-      ja_existia: jaExistia,
-      candidatura_id: vaga.id,
-      status: 'enviada',
-      mensagem: jaExistia
-        ? `Você já tinha se candidatado pra ${vaga.empresa}. Status atual: enviada.`
-        : `Candidatura enviada com sucesso pra ${vaga.empresa}!`,
-    }, 201);
+    return erroFake('As indicações para as vagas são feitas pela coordenação da escola, de acordo com as cotas das empresas parceiras.', 403);
   }
 
   // GET /quiz/itinerarios
@@ -654,7 +933,7 @@ export const atenderRequisicaoFake = (path, options = {}) => {
   // POST /quiz/generate
   if (metodo === 'POST' && caminho === '/api/quiz/generate') {
     if (estado.vidas <= 0) {
-      return respostaFake({ detail: { mensagem: 'Você está sem vidas. Espere regenerar ou compre com moedas.', proxima_vida_em: estado.proxima_vida_em } }, 403);
+      return respostaFake({ detail: { mensagem: 'Você está sem vidas. Elas voltam sozinhas: 1 a cada 30 minutos.', proxima_vida_em: estado.proxima_vida_em } }, 403);
     }
     quizAtivo = {
       quiz_id: proximoQuizId++,
@@ -714,6 +993,7 @@ export const atenderRequisicaoFake = (path, options = {}) => {
     const xpConcedido = acertos * 8;
 
     for (let i = 0; i < errados; i += 1) perderVida();
+    if (total - pulos > 0) registrarEvidencias(estado.alunoId, { conhecimento: (acertos / (total - pulos)) * 100 }, 'quiz');
     const vidasRecuperadasCombo = ganharVidas(vidasGanhasPorCombo(quizAtivo.respostas));
     let vidaBonusGanha = false;
     if (total > 0 && acertos === total) {
@@ -730,7 +1010,6 @@ export const atenderRequisicaoFake = (path, options = {}) => {
     estado.xp_semanal += xpConcedido;
     if (estado.xp_total >= 300 * estado.nivel_gamificacao) estado.nivel_gamificacao += 1;
     atualizarCategoriaStatus();
-    estado.moedas += Math.max(1, Math.round(xpConcedido * 0.1));
     registrarTreinoDoDia();
 
     const mudancaLiga = avaliarPromocaoDemo();
@@ -746,7 +1025,6 @@ export const atenderRequisicaoFake = (path, options = {}) => {
       categoria_status: estado.categoria_status,
       missoes_diarias: 1,
       vidas: estado.vidas,
-      moedas: estado.moedas,
       congelamentos_disponiveis: estado.congelamentos_disponiveis,
       quizzes_perfeitos_seguidos: estado.quizzes_perfeitos_seguidos,
       vida_bonus_ganha: vidaBonusGanha,
@@ -757,26 +1035,111 @@ export const atenderRequisicaoFake = (path, options = {}) => {
     });
   }
 
-  // POST /vidas/comprar
-  if (metodo === 'POST' && caminho === '/api/vidas/comprar') {
-    if (estado.vidas >= VIDAS_MAXIMAS) return erroFake('Suas vidas já estão cheias.', 400);
-    if (estado.moedas < CUSTO_MOEDAS_POR_VIDA) return erroFake(`Moedas insuficientes. Precisa de ${CUSTO_MOEDAS_POR_VIDA} moedas.`, 400);
-    estado.moedas -= CUSTO_MOEDAS_POR_VIDA;
-    estado.vidas += 1;
-    return respostaFake({ sucesso: true, vidas: estado.vidas, moedas: estado.moedas });
-  }
-
   // GET /ranking
   if (metodo === 'GET' && caminho === '/api/ranking') {
     return respostaFake(construirRanking());
   }
 
-  // POST /resume/generate
+  const alunoAtual = ALUNOS.find((a) => a.id === estado.alunoId);
+  const daTrilha = await trilha.aluno(metodo, caminho, query, corpo);
+  if (daTrilha) return daTrilha;
+  const dasMensagens = mensagensDemo.aluno(metodo, caminho, query, corpo);
+  if (dasMensagens) return dasMensagens;
+
+  if (metodo === 'GET' && caminho === '/api/estudante/me/competencias') return respostaFake(mapaParaTela(alunoAtual));
+
+  const situacoesHoje = () => (respostasSituacoes.get(estado.alunoId) || []).filter((r) => r.dia === hojeLocalIso()).length;
+  if (metodo === 'GET' && caminho === '/api/situacoes/proxima') {
+    const restantes = Math.max(0, SITUACOES_POR_DIA - situacoesHoje());
+    if (!restantes) return respostaFake({ situacao: null, restantes_hoje: 0, limite_diario: SITUACOES_POR_DIA });
+    const feitas = new Set((respostasSituacoes.get(estado.alunoId) || []).map((r) => r.situacao_id));
+    const candidatas = SITUACOES_LISTA.filter((sit) => !feitas.has(sit.id));
+    const escolhida = (candidatas.length ? candidatas : SITUACOES_LISTA)[Math.floor(Math.random() * (candidatas.length || SITUACOES_LISTA.length))];
+    return respostaFake({
+      situacao: { id: escolhida.id, titulo: escolhida.titulo, cenario: escolhida.cenario, opcoes: escolhida.opcoes.map((o) => o.texto) },
+      restantes_hoje: restantes,
+      limite_diario: SITUACOES_POR_DIA,
+    });
+  }
+  if (metodo === 'POST' && caminho === '/api/situacoes/responder') {
+    const situacao = SITUACOES[corpo.situacao_id];
+    if (!situacao) return erroFake('Situação não encontrada', 404);
+    const opcao = situacao.opcoes[corpo.opcao_index];
+    if (!opcao) return erroFake('Opção inválida', 400);
+    if (situacoesHoje() >= SITUACOES_POR_DIA) return erroFake(`Você já fez as ${SITUACOES_POR_DIA} situações de hoje. Volte amanhã!`, 429);
+    respostasSituacoes.set(estado.alunoId, [{ situacao_id: situacao.id, opcao_index: corpo.opcao_index, criada_em: agoraIso(), dia: hojeLocalIso() }, ...(respostasSituacoes.get(estado.alunoId) || [])]);
+    registrarEvidencias(estado.alunoId, opcao.competencias, 'situacao');
+    const media = (o) => Object.values(o.competencias).reduce((x, y) => x + y, 0) / Object.values(o.competencias).length;
+    const indiceMelhor = situacao.opcoes.reduce((melhor, o, i) => (media(o) > media(situacao.opcoes[melhor]) ? i : melhor), 0);
+    const nota = media(opcao);
+    const xp = Math.max(2, Math.round(nota / 5));
+    estado.xp_total += xp;
+    estado.xp_semanal += xp;
+    if (estado.xp_total >= 300 * estado.nivel_gamificacao) estado.nivel_gamificacao += 1;
+    atualizarCategoriaStatus();
+    registrarTreinoDoDia();
+    return respostaFake({
+      nota: Math.round(nota),
+      xp_concedido: xp,
+      consequencia: opcao.consequencia,
+      competencias: Object.entries(opcao.competencias).map(([codigo, pontos]) => ({ codigo, pontos })),
+      escolheu_a_melhor: indiceMelhor === corpo.opcao_index,
+      melhor_opcao: indiceMelhor === corpo.opcao_index ? null : { indice: indiceMelhor, texto: situacao.opcoes[indiceMelhor].texto, consequencia: situacao.opcoes[indiceMelhor].consequencia },
+      novos_pontos_totais: estado.xp_total,
+      nivel_atual: estado.nivel_gamificacao,
+      ofensiva_dias: estado.ofensiva_dias,
+      categoria_status: estado.categoria_status,
+      liga: estado.liga,
+      mudanca_liga: avaliarPromocaoDemo(),
+    });
+  }
+
+  if (metodo === 'GET' && caminho === '/api/estudante/me/perfil') {
+    const curriculo = ultimoCurriculo(estado.alunoId);
+    return respostaFake({
+      tem_foto: fotos.has(estado.alunoId),
+      foto_atualizada_em: fotos.get(estado.alunoId)?.em ?? null,
+      tem_curriculo: Boolean(curriculo),
+      curriculo_atualizado_em: curriculo?.gerado_em ?? null,
+      ja_trabalhou: alunoAtual?.ja_trabalhou ?? null,
+      experiencia_previa: alunoAtual?.experiencia_previa ?? null,
+      onboarding_concluido: onboardingConcluido.has(estado.alunoId),
+    });
+  }
+  if (caminho === '/api/estudante/me/foto') {
+    if (metodo === 'GET') return respostaFoto(estado.alunoId);
+    if (metodo === 'PUT') return salvarFotoDemo(estado.alunoId, corpo);
+    if (metodo === 'DELETE') { fotos.delete(estado.alunoId); return respostaFake({ sucesso: true }); }
+  }
+  if (metodo === 'PUT' && caminho === '/api/estudante/me/experiencia') {
+    const texto = (corpo.experiencia_previa || '').trim();
+    Object.assign(alunoAtual, { ja_trabalhou: corpo.ja_trabalhou, experiencia_previa: corpo.ja_trabalhou && texto ? texto : null });
+    return respostaFake({ ja_trabalhou: alunoAtual.ja_trabalhou, experiencia_previa: alunoAtual.experiencia_previa });
+  }
+  if (metodo === 'POST' && caminho === '/api/estudante/me/onboarding/concluir') {
+    onboardingConcluido.add(estado.alunoId);
+    return respostaFake({ onboarding_concluido: true });
+  }
+  if (metodo === 'GET' && caminho === '/api/resume/atual') {
+    const curriculo = ultimoCurriculo(estado.alunoId);
+    return respostaFake({
+      foto_no_curriculo: Boolean(alunoAtual?.foto_no_curriculo),
+      ...(curriculo ? { curriculo: curriculo.curriculo, texto_original: curriculo.texto_original, gerado_em: curriculo.gerado_em } : { curriculo: null }),
+    });
+  }
+  if (metodo === 'PUT' && caminho === '/api/estudante/me/preferencias-curriculo') {
+    alunoAtual.foto_no_curriculo = Boolean(corpo.foto_no_curriculo);
+    return respostaFake({ foto_no_curriculo: alunoAtual.foto_no_curriculo });
+  }
+
+  // POST /resume/generate -- cada geração vira uma versão nova, que o painel da escola lê
   if (metodo === 'POST' && caminho === '/api/resume/generate') {
     const extraido = montarCurriculoDemo(corpo.habilidades_texto || '');
     const area = estado.itinerario || 'Tecnologia';
-    return respostaFake({
-      sucesso: true,
+    const versao = {
+      id: proximoCurriculoId++,
+      gerado_em: agoraIso(),
+      texto_original: corpo.habilidades_texto || '',
       curriculo: {
         nome_candidato: estado.nome,
         objetivo_profissional: `Estudante do Ensino Médio em busca da primeira oportunidade como Jovem Aprendiz na área de ${area}, com vontade de aplicar na prática o que venho aprendendo e de crescer junto com a equipe.`,
@@ -785,7 +1148,9 @@ export const atenderRequisicaoFake = (path, options = {}) => {
           ? [`Jovem Aprendiz em ${estado.itinerario}`, 'Suporte Operacional', 'Assistente Administrativo']
           : ['Jovem Aprendiz', 'Atendimento ao Cliente', 'Suporte Operacional'],
       },
-    }, 201);
+    };
+    curriculos.set(estado.alunoId, [versao, ...(curriculos.get(estado.alunoId) || [])]);
+    return respostaFake({ sucesso: true, curriculo: versao.curriculo, gerado_em: versao.gerado_em }, 201);
   }
 
   // POST /resume/export-linkedin
@@ -805,19 +1170,25 @@ export const atenderRequisicaoFake = (path, options = {}) => {
     const xpConcedido = respostaFraca ? 0 : 15 + Math.floor(Math.random() * 26);
     const proximaPergunta = PERGUNTAS_ENTREVISTA[estado.respostaEntrevistaIndex % PERGUNTAS_ENTREVISTA.length];
     estado.respostaEntrevistaIndex += 1;
+    const feedback = respostaFraca
+      ? 'Atenção! Respostas muito curtas reduzem suas chances com o recrutador. Tente elaborar mais.'
+      : 'Boa resposta! Você demonstra clareza sobre suas competências.';
+    entrevistas.set(estado.alunoId, [
+      ...(entrevistas.get(estado.alunoId) || []),
+      { remetente: 'user', mensagem, feedback, xp: xpConcedido, em: agoraIso() },
+      { remetente: 'ai', mensagem: proximaPergunta, em: agoraIso() },
+    ]);
 
     estado.xp_total += xpConcedido;
     estado.xp_semanal += xpConcedido;
     if (estado.xp_total >= 300 * estado.nivel_gamificacao) estado.nivel_gamificacao += 1;
     atualizarCategoriaStatus();
-    if (xpConcedido > 0) estado.moedas += Math.max(1, Math.round(xpConcedido * 0.1));
     if (!respostaFraca) registrarTreinoDoDia();
+    registrarEvidencias(estado.alunoId, { comunicacao: xpConcedido * 2, trabalho_projeto_vida: xpConcedido * 2, autoconhecimento: xpConcedido * 2 }, 'entrevista');
     const mudancaLiga = avaliarPromocaoDemo();
 
     return respostaFake({
-      feedback_ia: respostaFraca
-        ? 'Atenção! Respostas muito curtas reduzem suas chances com o recrutador. Tente elaborar mais.'
-        : 'Boa resposta! Você demonstra clareza sobre suas competências.',
+      feedback_ia: feedback,
       resposta_ia: proximaPergunta,
       xp_concedido: xpConcedido,
       novos_pontos_totais: estado.xp_total,
@@ -825,7 +1196,6 @@ export const atenderRequisicaoFake = (path, options = {}) => {
       ofensiva_dias: estado.ofensiva_dias,
       categoria_status: estado.categoria_status,
       missoes_diarias: 1,
-      moedas: estado.moedas,
       liga: estado.liga,
       mudanca_liga: mudancaLiga,
     });

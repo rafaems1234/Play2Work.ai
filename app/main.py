@@ -7,6 +7,8 @@ import models
 from database import engine
 from routes import router  # Garanta que o arquivo routes.py exista nesta mesma pasta
 from admin_routes import router as admin_router
+from aulas_routes import router_admin as aulas_admin_router, router_aluno as aulas_aluno_router
+from mensagens import router_admin as mensagens_admin_router, router_aluno as mensagens_aluno_router
 from limiter import limiter
 
 logging.basicConfig(
@@ -41,6 +43,10 @@ app.add_middleware(
 # REMOVIDO: A linha duplicada que reincluía o router
 app.include_router(router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+app.include_router(aulas_admin_router, prefix="/api")
+app.include_router(aulas_aluno_router, prefix="/api")
+app.include_router(mensagens_admin_router, prefix="/api")
+app.include_router(mensagens_aluno_router, prefix="/api")
 
 # Rota de checagem inicial de status
 @app.get("/api/status", tags=["Status"])

@@ -1,38 +1,44 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import InterviewSimulator from './components/InterviewSimulator';
-import JobMatchBoard from './components/JobMatchBoard';
+import Competencias from './components/Competencias';
+import Trilha from './components/Trilha';
+import ChatAluno, { SinoNotificacoes, ContadorBolinha, useNaoLidas, avisarMensagemNova } from './components/Mensagens';
 import ResumeBuilder from './components/ResumeBuilder';
 import WeeklyLeaderboard from './components/WeeklyLeaderboard';
 import DailyQuiz from './components/DailyQuiz';
-import CourseSelector from './components/CourseSelector';
 import StreakCalendar from './components/StreakCalendar';
 import AccountSettings from './components/AccountSettings';
 import TechBackground from './components/TechBackground';
 import IntroScreen from './components/IntroScreen';
 import LoginAluno from './components/LoginAluno';
 import AdminPanel from './components/AdminPanel';
+import PrimeiroAcesso from './components/PrimeiroAcesso';
 import Logo from './components/Logo';
 import Trofeu from './components/Trofeu';
 import { buscarLiga } from './ligas';
-import { IconBriefcase, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconGraduationCap, IconSpeakerHigh, IconSpeakerX, IconTarget, IconMask, IconConfetti, IconTrendDown } from './components/icons';
+import { IconChat, IconCamera, IconBook, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconSpeakerHigh, IconSpeakerX, IconTarget, IconMask, IconConfetti, IconTrendDown } from './components/icons';
 import { useCountUp } from './hooks/useCountUp';
 import { apiFetch, DEMO_MODE, obterToken, limparToken, aoExpirarSessao } from './api';
+import { hojeLocalIso } from './utils/formatos';
 import { somEstaAtivado, definirSomAtivado, tocarSomLevelUp, tocarSomLiga } from './utils/sound';
 
 const TABS = [
-  { id: 'vagas', label: 'Mural', Icon: IconBriefcase },
+  { id: 'competencias', label: 'Competências', Icon: IconTarget },
+  { id: 'aulas', label: 'Aulas', Icon: IconBook },
+  { id: 'chat', label: 'Chat', Icon: IconChat },
   { id: 'simulador', label: 'Simulador IA', Icon: IconRobot },
   { id: 'quiz', label: 'Quiz', Icon: IconQuiz },
-  { id: 'curso', label: 'Curso', Icon: IconGraduationCap },
   { id: 'curriculo', label: 'Currículo', Icon: IconSparkle },
   { id: 'ranking', label: 'Ranking', Icon: IconTrophy },
 ];
 
 
 const CHAVE_BANNER_OFENSIVA = 'play2work_banner_ofensiva_dispensado_em';
-const hojeISO = () => new Date().toISOString().slice(0, 10);
+const CHAVE_BANNER_PERFIL = 'play2work_banner_perfil_dispensado_em';
+const PERFIL_VAZIO = { carregado: false, foto_atualizada_em: null, tem_curriculo: false, onboarding_concluido: true };
+const hojeISO = () => hojeLocalIso();
 
 const dispararConfeteLevelUp = () => {
   const cores = ['#2e7bff', '#00e5ff', '#fbbf24', '#34d399'];
@@ -42,11 +48,28 @@ const dispararConfeteLevelUp = () => {
 function App() {
   const [contaInfo, setContaInfo] = useState({ nome: '', email: '', linkedin: '' });
   const [contaAberta, setContaAberta] = useState(false);
+  // Foto/currículo/primeiro acesso -- decide se mostra o onboarding e o aviso de perfil incompleto
+  const [perfilAluno, setPerfilAluno] = useState(PERFIL_VAZIO);
+  const [bannerPerfilDispensado, setBannerPerfilDispensado] = useState(() => {
+    try {
+      return localStorage.getItem(CHAVE_BANNER_PERFIL) === hojeISO();
+    } catch {
+      return false;
+    }
+  });
+  const dispensarBannerPerfil = () => {
+    try {
+      localStorage.setItem(CHAVE_BANNER_PERFIL, hojeISO());
+    } catch {
+      // sem localStorage -- o aviso só some nesta sessão
+    }
+    setBannerPerfilDispensado(true);
+  };
 
   // intro → login (se ainda não entrou) → app. '#admin' na URL abre direto o painel da escola.
   const [tela, setTela] = useState(() => (window.location.hash === '#admin' ? 'admin' : 'intro'));
   const [logado, setLogado] = useState(() => Boolean(obterToken('aluno')));
-  const [abaAtiva, setAbaAtiva] = useState('vagas');
+  const [abaAtiva, setAbaAtiva] = useState('competencias');
   const [estudanteStatus, setEstudanteStatus] = useState({
     nome: '',
     xp_total: 0,
@@ -99,6 +122,17 @@ function App() {
     }
     setBannerOfensivaDispensado(true);
   };
+
+  // Mensagens: contador no cabeçalho, som e aviso na tela quando chega uma nova
+  // Conversa que a notificação mandou abrir na aba Chat
+  const [canalChat, setCanalChat] = useState(null);
+  const abrirChat = (canalId) => { setCanalChat(canalId); setAbaAtiva('chat'); };
+  const aoChegarMensagem = useCallback((quantas) => {
+    avisarMensagemNova(somAtivado);
+    adicionarToast(IconChat, '#22c55e', quantas > 1 ? `${quantas} mensagens novas` : 'Nova mensagem');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [somAtivado]);
+  const { total: naoLidas, atualizar: atualizarNaoLidas } = useNaoLidas(logado && tela === 'app', aoChegarMensagem);
 
   const atualizarDadosUsuario = (novosDados) => {
     if (
@@ -161,7 +195,8 @@ function App() {
     limparToken('aluno');
     setLogado(false);
     setContaAberta(false);
-    setAbaAtiva('vagas');
+    setPerfilAluno(PERFIL_VAZIO);
+    setAbaAtiva('competencias');
     setTela('login');
   };
 
@@ -180,6 +215,12 @@ function App() {
           const dados = await response.json();
           setContaInfo({ nome: dados.nome, email: dados.email, linkedin: dados.linkedin });
         }
+      } catch (err) {
+        console.error(err);
+      }
+      try {
+        const response = await apiFetch('/api/estudante/me/perfil');
+        if (response.ok) setPerfilAluno({ ...(await response.json()), carregado: true });
       } catch (err) {
         console.error(err);
       }
@@ -376,6 +417,8 @@ function App() {
               <span style={{ color: 'var(--accent-2)', fontWeight: '600' }}>{xpExibido} XP</span>
             </div>
 
+            <SinoNotificacoes total={naoLidas} aoAbrirCanal={abrirChat} />
+
             <button
               onClick={alternarSom}
               title={somAtivado ? 'Desativar sons' : 'Ativar sons'}
@@ -459,6 +502,7 @@ function App() {
                 )}
                 <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Icon /> {label}
+                  {id === 'chat' && <ContadorBolinha total={naoLidas} />}
                 </span>
               </button>
             ))}
@@ -466,6 +510,7 @@ function App() {
 
           {/* Estado de Gamificação compacto (mobile) — sempre visível, sem precisar abrir menu */}
           <div className="app-mobile-only" style={{ alignItems: 'center', gap: '8px', position: 'relative' }}>
+            <SinoNotificacoes total={naoLidas} aoAbrirCanal={abrirChat} />
             <button
               onClick={alternarCalendario}
               className="app-pill"
@@ -547,6 +592,43 @@ function App() {
         )}
       </AnimatePresence>
 
+      {/* Perfil incompleto: até ter foto e currículo, lembra o aluno (dispensável por um dia) */}
+      <AnimatePresence>
+        {perfilAluno.carregado && perfilAluno.onboarding_concluido && (!perfilAluno.foto_atualizada_em || !perfilAluno.tem_curriculo) && !bannerPerfilDispensado && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{
+              maxWidth: '1320px', margin: '0 auto', padding: '12px 24px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap',
+              background: 'rgb(var(--accent-rgb) / 0.07)', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.2)',
+            }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-soft)', fontSize: '13px', fontWeight: '600' }}>
+                <IconSparkle style={{ fontSize: '15px' }} />
+                Complete seu perfil: {[!perfilAluno.foto_atualizada_em && 'falta a foto', !perfilAluno.tem_curriculo && 'falta o currículo'].filter(Boolean).join(' e ')}.
+              </span>
+              {!perfilAluno.foto_atualizada_em && (
+                <button onClick={() => setContaAberta(true)} style={{ background: 'var(--accent)', border: 'none', color: '#00121f', fontWeight: '700', fontSize: '12px', padding: '6px 12px', borderRadius: '10px', cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <IconCamera /> Adicionar foto
+                </button>
+              )}
+              {!perfilAluno.tem_curriculo && abaAtiva !== 'curriculo' && (
+                <button onClick={() => setAbaAtiva('curriculo')} style={{ background: 'none', border: '1px solid rgb(var(--accent-rgb) / 0.4)', color: 'var(--accent-soft)', fontWeight: '700', fontSize: '12px', padding: '6px 12px', borderRadius: '10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Montar currículo
+                </button>
+              )}
+              <button onClick={dispensarBannerPerfil} aria-label="Dispensar aviso" style={{ background: 'none', border: 'none', color: 'var(--accent-soft)', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '0 4px' }}>
+                ×
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
         <AnimatePresence>
           {toasts.map((toast) => (
@@ -592,9 +674,11 @@ function App() {
             key={id}
             onClick={() => setAbaAtiva(id)}
             className={`app-bottom-nav-btn ${abaAtiva === id ? 'active' : ''}`}
+            style={{ position: 'relative' }}
           >
             <Icon />
             {label}
+            {id === 'chat' && <ContadorBolinha total={naoLidas} style={{ position: 'absolute', top: '2px', right: 'calc(50% - 22px)', minWidth: '16px', height: '16px', fontSize: '10px' }} />}
           </button>
         ))}
       </nav>
@@ -609,16 +693,17 @@ function App() {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
           >
-            {abaAtiva === 'vagas' && <JobMatchBoard />}
+            {abaAtiva === 'competencias' && <Competencias aoGanharXp={atualizarDadosUsuario} />}
+            {abaAtiva === 'aulas' && <Trilha aoGanharXp={atualizarDadosUsuario} />}
+            {abaAtiva === 'chat' && <ChatAluno canalInicial={canalChat} aoMudou={atualizarNaoLidas} />}
             {abaAtiva === 'simulador' && <InterviewSimulator aoGanharXp={atualizarDadosUsuario} />}
             {abaAtiva === 'quiz' && (
               <DailyQuiz
                 aoGanharXp={atualizarDadosUsuario}
-                aoVoltarMural={() => setAbaAtiva('vagas')}
+                aoVoltarInicio={() => setAbaAtiva('competencias')}
               />
             )}
-            {abaAtiva === 'curso' && <CourseSelector />}
-            {abaAtiva === 'curriculo' && <ResumeBuilder />}
+            {abaAtiva === 'curriculo' && <ResumeBuilder aoGerar={() => setPerfilAluno((p) => ({ ...p, tem_curriculo: true }))} />}
             {abaAtiva === 'ranking' && <WeeklyLeaderboard />}
           </motion.div>
         </AnimatePresence>
@@ -628,12 +713,27 @@ function App() {
         {contaAberta && (
           <AccountSettings
             estudante={contaInfo}
+            itinerario={estudanteStatus.itinerario}
+            fotoVersao={perfilAluno.foto_atualizada_em}
+            aoMudarFoto={(versao) => setPerfilAluno((p) => ({ ...p, foto_atualizada_em: versao }))}
             aoFechar={() => setContaAberta(false)}
             aoAtualizarLinkedin={(linkedin) => setContaInfo((prev) => ({ ...prev, linkedin }))}
             aoSair={sair}
           />
         )}
       </AnimatePresence>
+
+      {perfilAluno.carregado && !perfilAluno.onboarding_concluido && (
+        <PrimeiroAcesso
+          nome={contaInfo.nome}
+          fotoVersao={perfilAluno.foto_atualizada_em}
+          aoMudarFoto={(versao) => setPerfilAluno((p) => ({ ...p, foto_atualizada_em: versao }))}
+          aoConcluir={(irParaCurriculo) => {
+            setPerfilAluno((p) => ({ ...p, onboarding_concluido: true }));
+            if (irParaCurriculo) setAbaAtiva('curriculo');
+          }}
+        />
+      )}
 
     </div>
     </MotionConfig>

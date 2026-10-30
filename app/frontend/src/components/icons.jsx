@@ -17,7 +17,6 @@ import {
   X,
   Exam,
   Heart,
-  Coins,
   Snowflake,
   CalendarBlank,
   GraduationCap,
@@ -41,6 +40,19 @@ import {
   MaskHappy,
   TrendDown,
   Confetti,
+  Camera,
+  UserCircle,
+  FileCsv,
+  FilePdf,
+  Trash,
+  ClockCounterClockwise,
+  NotePencil,
+  Handshake,
+  ChatsCircle,
+  PaperPlaneRight,
+  UsersThree,
+  Megaphone,
+  BellSimple,
 } from '@phosphor-icons/react';
 
 const wrap = (PhosphorIcon) => (props) => (
@@ -64,7 +76,6 @@ export const IconMenu = wrap(List);
 export const IconClose = wrap(X);
 export const IconQuiz = wrap(Exam);
 export const IconHeart = wrap(Heart);
-export const IconCoins = wrap(Coins);
 export const IconSnowflake = wrap(Snowflake);
 export const IconCalendar = wrap(CalendarBlank);
 export const IconGraduationCap = wrap(GraduationCap);
@@ -88,3 +99,16 @@ export const IconRetry = wrap(ArrowsClockwise);
 export const IconMask = wrap(MaskHappy);
 export const IconTrendDown = wrap(TrendDown);
 export const IconConfetti = wrap(Confetti);
+export const IconCamera = wrap(Camera);
+export const IconUser = wrap(UserCircle);
+export const IconCsv = wrap(FileCsv);
+export const IconPdf = wrap(FilePdf);
+export const IconTrash = wrap(Trash);
+export const IconHistory = wrap(ClockCounterClockwise);
+export const IconNote = wrap(NotePencil);
+export const IconHandshake = wrap(Handshake);
+export const IconChat = wrap(ChatsCircle);
+export const IconEnviar = wrap(PaperPlaneRight);
+export const IconGrupo = wrap(UsersThree);
+export const IconMegafone = wrap(Megaphone);
+export const IconSino = wrap(BellSimple);

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { IconTarget, IconWarning, IconSparkle, IconHeart, IconCoins, IconSnowflake, IconGraduationCap, IconFire, IconTimer, IconLightbulb, IconSkip, IconCheckCircle, IconXCircle } from './icons';
+import { IconTarget, IconWarning, IconSparkle, IconHeart, IconSnowflake, IconGraduationCap, IconFire, IconTimer, IconLightbulb, IconSkip, IconCheckCircle, IconXCircle } from './icons';
 import { apiFetch } from '../api';
 import { SkeletonStyles, Skeleton } from './Skeleton';
 import QuizResultado from './QuizResultado';
@@ -9,7 +9,6 @@ import { tocarSomAcerto, tocarSomErro, tocarSomCombo, tocarSomVida } from '../ut
 
 const DICAS_POR_QUIZ = 2;
 const PULOS_POR_QUIZ = 2;
-const CUSTO_VIDA_MOEDAS = 50;
 const XP_POR_ACERTO = 8;
 
 const FRASES_ACERTO = ['Mandou bem!', 'Isso aí!', 'Certíssimo!', 'Boa!', 'Na mosca!', 'Arrasou!'];
@@ -39,14 +38,13 @@ const formatarTempo = (segundos) => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
-const DailyQuiz = ({ aoGanharXp, aoVoltarMural }) => {
+const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
   const [quiz, setQuiz] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
   const [semVidas, setSemVidas] = useState(false);
 
   const [status, setStatus] = useState(null);
-  const [comprando, setComprando] = useState(false);
 
   const [indiceAtual, setIndiceAtual] = useState(0);
   const [opcaoSelecionada, setOpcaoSelecionada] = useState(null);
@@ -89,24 +87,6 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarMural }) => {
     }, 1000);
     return () => clearInterval(intervalo);
   }, [quiz, resultado, inicioQuiz]);
-
-  const comprarVida = async () => {
-    try {
-      setComprando(true);
-      const response = await apiFetch('/api/vidas/comprar', { method: 'POST' });
-      const dados = await response.json();
-      if (response.ok) {
-        setStatus((prev) => ({ ...prev, vidas: dados.vidas, moedas: dados.moedas }));
-        setSemVidas(dados.vidas <= 0);
-      } else {
-        setErro(dados.detail || 'Não foi possível comprar a vida.');
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setComprando(false);
-    }
-  };
 
   const [respondendo, setRespondendo] = useState(false);
   const [feedback, setFeedback] = useState(null); // { correta, resposta_correta_index, explicacao }
@@ -175,7 +155,6 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarMural }) => {
         setStatus((prev) => ({
           ...prev,
           vidas: dados.vidas,
-          moedas: dados.moedas,
           congelamentos_disponiveis: dados.congelamentos_disponiveis,
           quizzes_perfeitos_seguidos: dados.quizzes_perfeitos_seguidos,
         }));
@@ -498,9 +477,9 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarMural }) => {
       <SkeletonStyles />
 
       <div className="quiz-card">
-        {aoVoltarMural && (
-          <button onClick={aoVoltarMural} className="quiz-back-link">
-            ← Voltar pro Mural
+        {aoVoltarInicio && (
+          <button onClick={aoVoltarInicio} className="quiz-back-link">
+            ← Voltar pro início
           </button>
         )}
 
@@ -511,7 +490,7 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarMural }) => {
               Teste o que <span className="gradient-text-live">você sabe</span>
             </h2>
             <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, marginTop: '8px', maxWidth: '440px' }}>
-              10 perguntas sobre o seu curso — o mesmo usado pela IA Recrutadora no Simulador. Errou, perde uma vida; acertou, ganha XP e moedas.
+              10 perguntas sobre o seu curso — o mesmo usado pela IA Recrutadora no Simulador. Errou, perde uma vida; acertou, ganha XP.
               {' '}<strong style={{ color: '#fb7185' }}>{status?.acertos_seguidos_para_vida ?? 5} acertos seguidos devolvem 1 vida</strong>, e cada vida perdida volta sozinha a cada {status?.minutos_para_regenerar_vida ?? 30} min.
             </p>
           </div>
@@ -525,7 +504,6 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarMural }) => {
                 <IconHeart key={i} style={{ color: i < status.vidas ? '#f43f5e' : 'rgba(255,255,255,0.15)' }} />
               ))}
             </div>
-            <div className="quiz-stat"><IconCoins style={{ color: '#fbbf24' }} /> {status.moedas}</div>
             {status.congelamentos_disponiveis > 0 && (
               <div className="quiz-stat"><IconSnowflake style={{ color: 'var(--accent-2)' }} /> {status.congelamentos_disponiveis} congelamento{status.congelamentos_disponiveis > 1 ? 's' : ''}</div>
             )}
@@ -536,17 +514,12 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarMural }) => {
           <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '16px', padding: '22px', textAlign: 'center', marginBottom: '24px' }}>
             <IconHeart style={{ fontSize: '28px', color: '#f43f5e', marginBottom: '10px' }} />
             <div style={{ color: '#e2e8f0', fontWeight: '700', marginBottom: '6px' }}>Você está sem vidas</div>
-            <div style={{ color: '#64748b', fontSize: '13px', marginBottom: '16px' }}>
-              {status?.proxima_vida_em ? `Próxima vida em ${formatarEspera(status.proxima_vida_em)} — depois, mais 1 a cada ${status.minutos_para_regenerar_vida ?? 30} min até encher.` : 'Aguarde a regeneração ou compre com moedas.'}
+            <div style={{ color: '#64748b', fontSize: '13px' }}>
+              {status?.proxima_vida_em ? `Próxima vida em ${formatarEspera(status.proxima_vida_em)} — depois, mais 1 a cada ${status.minutos_para_regenerar_vida ?? 30} min até encher.` : 'Suas vidas voltam sozinhas com o tempo.'}
             </div>
-            <button
-              onClick={comprarVida}
-              disabled={comprando || (status?.moedas ?? 0) < CUSTO_VIDA_MOEDAS}
-              className="quiz-next-btn"
-              style={{ maxWidth: '280px', margin: '0 auto' }}
-            >
-              {comprando ? 'Comprando...' : `Comprar 1 vida (${CUSTO_VIDA_MOEDAS} moedas)`}
-            </button>
+            <div style={{ color: '#64748b', fontSize: '13px', marginTop: '8px' }}>
+              Enquanto isso, dá pra treinar no Simulador ou nas situações de trabalho, na aba Competências.
+            </div>
           </div>
         )}
 

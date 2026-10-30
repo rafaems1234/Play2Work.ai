@@ -3,8 +3,33 @@ import { motion } from 'framer-motion';
 import { IconLinkedIn, IconClose, IconCheck } from './icons';
 import { apiFetch } from '../api';
 import TechBackground from './TechBackground';
+import { Avatar, SeletorFoto } from './FotoPerfil';
 
-const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLinkedin, aoSair }) => {
+const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto, forcado = false, aoFechar, aoAtualizarLinkedin, aoSair }) => {
+  const [erroFoto, setErroFoto] = useState(null);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+
+  const enviarFoto = async (dataUrl) => {
+    setErroFoto(null);
+    setEnviandoFoto(true);
+    try {
+      const resposta = await apiFetch('/api/estudante/me/foto', { method: 'PUT', body: JSON.stringify({ imagem_base64: dataUrl }) });
+      if (!resposta.ok) throw new Error((await resposta.json().catch(() => ({}))).detail || 'Não foi possível enviar a foto.');
+      aoMudarFoto?.((await resposta.json()).foto_atualizada_em);
+    } catch (err) {
+      setErroFoto(err.message);
+    } finally {
+      setEnviandoFoto(false);
+    }
+  };
+
+  const removerFoto = async () => {
+    setErroFoto(null);
+    const resposta = await apiFetch('/api/estudante/me/foto', { method: 'DELETE' });
+    if (resposta.ok) aoMudarFoto?.(null);
+    else setErroFoto('Não foi possível remover a foto.');
+  };
+
   const [linkedin, setLinkedin] = useState(estudante?.linkedin || '');
   const [salvandoPerfil, setSalvandoPerfil] = useState(false);
   const [erroPerfil, setErroPerfil] = useState(null);
@@ -108,11 +133,39 @@ const AccountSettings = ({ estudante, forcado = false, aoFechar, aoAtualizarLink
 
         {!forcado && (
           <>
+            <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Foto do perfil</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <Avatar caminho="/api/estudante/me/foto" versao={fotoVersao} nome={estudante?.nome} tamanho={64} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                  <SeletorFoto
+                    className="account-save-btn"
+                    rotulo={enviandoFoto ? 'Enviando...' : fotoVersao ? 'Trocar foto' : 'Adicionar foto'}
+                    disabled={enviandoFoto}
+                    aoEscolher={enviarFoto}
+                    aoErro={setErroFoto}
+                  />
+                  {fotoVersao && (
+                    <button type="button" onClick={removerFoto} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '12px', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
+                      Remover foto
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.5, margin: '10px 0 0' }}>
+                Só a coordenação da escola vê sua foto. Ela não aparece no ranking.
+              </p>
+              {erroFoto && <div style={{ color: '#f87171', fontSize: '12px', marginTop: '8px' }}>{erroFoto}</div>}
+            </div>
+
             <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Nome</div>
               <div style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: '600', marginBottom: '10px' }}>{estudante?.nome}</div>
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>E-mail</div>
-              <div style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: '600' }}>{estudante?.email}</div>
+              <div style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: '600', marginBottom: '10px' }}>{estudante?.email}</div>
+              {/* Definido pela escola no painel -- o aluno só vê */}
+              <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Itinerário formativo</div>
+              <div style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: '600' }}>{itinerario || 'Ainda não definido pela escola'}</div>
             </div>
 
             <form onSubmit={salvarPerfil} style={{ marginBottom: '28px' }}>

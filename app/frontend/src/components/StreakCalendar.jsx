@@ -1,5 +1,6 @@
 import React from 'react';
 import { IconCalendar } from './icons';
+import { hojeLocalIso } from '../utils/formatos';
 
 const NOMES_MES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -20,7 +21,7 @@ const StreakCalendar = ({ ano, mes, dias = [] }) => {
 
   const primeiroDiaSemana = new Date(ano, mes - 1, 1).getDay();
   const totalDias = new Date(ano, mes, 0).getDate();
-  const hojeIso = new Date().toISOString().slice(0, 10);
+  const hojeIso = hojeLocalIso();
 
   const celulas = [];
   for (let i = 0; i < primeiroDiaSemana; i++) celulas.push(null);

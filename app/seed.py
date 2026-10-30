@@ -16,6 +16,7 @@ from database import SessionLocal, engine
 from auth import hash_senha
 import models
 from nomes import escolher_nome_exibicao
+from fuso import hoje as hoje_na_escola
 
 # Senha de demonstração do estudante de teste (id=1). Só pra facilitar login
 # local -- não use isso em produção.
@@ -60,7 +61,7 @@ def popular_banco():
         db.add_all(turmas)
         db.flush()
 
-        ontem = date.today() - timedelta(days=1)
+        ontem = hoje_na_escola() - timedelta(days=1)
 
         habilidades_estudante = ["Python", "SQL", "React", "Análise de Dados", "Lógica de Programação"]
 
@@ -79,7 +80,7 @@ def popular_banco():
             nivel_gamificacao=1,
             xp_total=120,
             xp_semanal=120,
-            semana_referencia=date.today() - timedelta(days=date.today().weekday()),
+            semana_referencia=hoje_na_escola() - timedelta(days=hoje_na_escola().weekday()),
             categoria_status="🌌 Na Jornada",
             liga="Bronze",
             ofensiva_dias=4,
@@ -107,7 +108,7 @@ def popular_banco():
             # Outro Rafael com sobrenome em S: vira "Rafael Si." no ranking, não um segundo "Rafael S."
             ("Rafael Silva", 1, "Tecnologia e Ciência de Dados", 300, 5, ["Python", "Excel"], 70),
         ]
-        inicio_semana = date.today() - timedelta(days=date.today().weekday())
+        inicio_semana = hoje_na_escola() - timedelta(days=hoje_na_escola().weekday())
         nomes_usados = {"rafael s."}
         for idx, (nome, turma_id, itinerario, xp, ofensiva, habilidades, taxa) in enumerate(colegas, start=2):
             nome_exibicao = escolher_nome_exibicao(nome, nomes_usados)

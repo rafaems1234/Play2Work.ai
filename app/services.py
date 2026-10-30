@@ -13,15 +13,16 @@ from sqlalchemy.orm import Session
 from google import genai
 from google.genai import errors as genai_errors
 from models import Estudante, Vaga, AtividadeDiaria, QuizSessao
+from fuso import hoje as hoje_na_escola, agora_utc
 from nomes import escolher_nome_exibicao
 from schemas import CurriculoIaSchema, AvaliacaoEntrevistaSchema, QuizSchema
 
-# ❤️ Configuração do sistema de vidas/moedas/congelamento de ofensiva
+# ❤️ Configuração do sistema de vidas/congelamento de ofensiva.
+# Sem moedas nem loja: as vidas voltam sozinhas com o tempo, pelo combo de
+# acertos e pelo bônus de quizzes perfeitos -- nada se compra.
 VIDAS_MAXIMAS = 5
 MINUTOS_PARA_REGENERAR_VIDA = 30  # cada vida perdida volta sozinha, uma a cada 30 min, até encher
-ACERTOS_SEGUIDOS_PARA_VIDA = 5   # combo de 5 acertos seguidos no quiz devolve 1 vida (sem anúncio nem moeda)
-CUSTO_MOEDAS_POR_VIDA = 50
-MOEDAS_POR_XP = 0.1              # 1 moeda a cada 10 XP ganho
+ACERTOS_SEGUIDOS_PARA_VIDA = 5   # combo de 5 acertos seguidos no quiz devolve 1 vida
 DIAS_OFENSIVA_POR_CONGELAMENTO = 7  # a cada 7 dias seguidos, ganha 1 congelamento de graça
 QUIZZES_PERFEITOS_PARA_VIDA_BONUS = 5  # 5 quizzes seguidos com 100% de acerto = 1 vida de bônus
 DICAS_POR_QUIZ = 2               # limite de dicas (elimina 1 alternativa errada) por quiz, validado no servidor
@@ -201,32 +202,34 @@ def gerar_nome_exibicao(db: Session, nome_completo: str, ignorar_id: int | None 
 # Pesos da nota de desempenho usada pela escola (painel admin) pra
 # selecionar quem indicar pra uma vaga. Somam 100, então a nota final já
 # sai em 0-100 e cada parcela é explicável no painel ("por que esse aluno?").
+#
+# XP e ofensiva (dias seguidos) saíram da nota: medem acesso a celular e
+# internet em casa tanto quanto mérito, e puniam quem só usa a plataforma na
+# escola. No lugar entrou o mapa de competências (competencias.py), que mede
+# o que o aluno demonstrou nas atividades -- não quanto tempo ficou no app.
 PESOS_DESEMPENHO = {
-    "habilidades": 35,   # % das habilidades exigidas pela vaga que o aluno tem
-    "itinerario": 20,    # itinerário do aluno é a área da vaga
-    "quiz": 25,          # taxa de acerto nos quizzes concluídos (validados no servidor)
-    "engajamento": 15,   # XP total, relativo ao aluno com mais XP
-    "constancia": 5,     # ofensiva atual (dias seguidos), satura em OFENSIVA_PARA_CONSTANCIA_MAXIMA
+    "habilidades": 30,    # % das habilidades exigidas pela vaga que o aluno tem
+    "itinerario": 20,     # itinerário do aluno é a área da vaga
+    "competencias": 35,   # mapa de competências (BNCC), com eixos pouco medidos puxados pra 50
+    "quiz": 15,           # taxa de acerto nos quizzes concluídos (validados no servidor)
 }
-OFENSIVA_PARA_CONSTANCIA_MAXIMA = 30
 
 
-def calcular_desempenho_para_vaga(estudante: Estudante, vaga: Vaga, taxa_acerto_quiz: float | None, xp_maximo: int) -> dict:
+def calcular_desempenho_para_vaga(estudante: Estudante, vaga: Vaga, taxa_acerto_quiz: float | None, nota_competencias: float) -> dict:
     """
-    Nota de 0 a 100 de quão indicado o aluno é pra essa vaga, combinando o
-    desempenho na plataforma (quiz, XP, ofensiva) com a aderência à vaga
-    (habilidades e itinerário). Função pura -- quem chama já traz a taxa de
-    acerto e o XP máximo da base, pra dar pra ranquear muitos alunos com
-    poucas consultas.
+    Nota de 0 a 100 de quão indicado o aluno é pra essa vaga, combinando a
+    aderência à vaga (habilidades e itinerário) com o que ele demonstrou na
+    plataforma (competências e quiz). Função pura -- quem chama já traz a
+    taxa de acerto e a nota de competências (0-1, ver nota_de_competencias),
+    pra dar pra ranquear muitos alunos com poucas consultas.
     """
     hab_vaga = set(vaga.habilidades_exigidas or [])
     hab_estudante = set(estudante.habilidades or [])
     fracoes = {
         "habilidades": len(hab_vaga & hab_estudante) / len(hab_vaga) if hab_vaga else 0.0,
         "itinerario": 1.0 if estudante.itinerario and estudante.itinerario == vaga.area_itinerario else 0.0,
+        "competencias": max(0.0, min(1.0, nota_competencias)),
         "quiz": taxa_acerto_quiz or 0.0,
-        "engajamento": min(1.0, (estudante.xp_total or 0) / xp_maximo) if xp_maximo > 0 else 0.0,
-        "constancia": min(1.0, (estudante.ofensiva_dias or 0) / OFENSIVA_PARA_CONSTANCIA_MAXIMA),
     }
     detalhes = {chave: round(fracao * PESOS_DESEMPENHO[chave], 1) for chave, fracao in fracoes.items()}
     return {
@@ -454,7 +457,7 @@ class AIService:
         escolhido, sorteia dentro dos sub-temas daquela trilha específica.
         """
         temas = ITINERARIOS_QUIZ[itinerario]["temas"] if itinerario in ITINERARIOS_QUIZ else TEMAS_QUIZ
-        return temas[date.today().toordinal() % len(temas)]
+        return temas[hoje_na_escola().toordinal() % len(temas)]
 
     @staticmethod
     def gerar_quiz_ia(tema: str, itinerario: str | None = None, perguntas_recentes: set[str] | None = None) -> dict:
@@ -516,7 +519,7 @@ class AIService:
 
     @staticmethod
     def atualizar_ofensiva_duolingo(estudante: Estudante, db: Session) -> None:
-        hoje = date.today()
+        hoje = hoje_na_escola()
         if estudante.ultimo_treino is None:
             estudante.ofensiva_dias = 1
             estudante.missoes_diarias_concluidas = 1
@@ -554,7 +557,7 @@ class AIService:
         atualizar_ofensiva_duolingo, disparada apenas quando o estudante
         volta a treinar.
         """
-        hoje = date.today()
+        hoje = hoje_na_escola()
         if not estudante.ultimo_treino or estudante.ofensiva_dias <= 0:
             return {"treinou_hoje": False, "em_risco": False}
 
@@ -608,7 +611,7 @@ class AIService:
         mantendo o ranking em '/api/ranking' de fato semanal. Antes de zerar,
         avalia a mudança de liga referente à semana que está terminando.
         """
-        inicio_semana_atual = date.today() - timedelta(days=date.today().weekday())
+        inicio_semana_atual = hoje_na_escola() - timedelta(days=hoje_na_escola().weekday())
         if estudante.semana_referencia == inicio_semana_atual:
             return None
 
@@ -628,7 +631,7 @@ class AIService:
         if estudante.vidas >= VIDAS_MAXIMAS or estudante.proxima_vida_em is None:
             return
 
-        agora = datetime.utcnow()
+        agora = agora_utc()
         if agora < estudante.proxima_vida_em:
             return
 
@@ -668,7 +671,7 @@ class AIService:
             return
         estudante.vidas -= 1
         if estudante.proxima_vida_em is None:
-            estudante.proxima_vida_em = datetime.utcnow() + timedelta(minutes=MINUTOS_PARA_REGENERAR_VIDA)
+            estudante.proxima_vida_em = agora_utc() + timedelta(minutes=MINUTOS_PARA_REGENERAR_VIDA)
 
     @staticmethod
     def ganhar_vidas(estudante: Estudante, quantidade: int) -> int:
@@ -680,16 +683,11 @@ class AIService:
         return ganhas
 
     @staticmethod
-    def conceder_moedas_por_xp(estudante: Estudante, xp_concedido: int) -> None:
-        if xp_concedido > 0:
-            estudante.moedas += max(1, round(xp_concedido * MOEDAS_POR_XP))
-
-    @staticmethod
     def processar_gamificacao_pos_atividade(estudante: Estudante, db: Session, xp_concedido: int) -> dict | None:
         """
         Ponto único que roda depois de qualquer atividade que dá XP (chat da
         entrevista ou quiz): atualiza ofensiva, congelamento, calendário,
-        XP total/semanal, nível, moedas, categoria de carreira e liga
+        XP total/semanal, nível, categoria de carreira e liga
         semanal. Retorna um resumo de mudança de liga (ou None) pro front
         mostrar um aviso de promoção/rebaixamento.
         """
@@ -703,24 +701,7 @@ class AIService:
             estudante.nivel_gamificacao += 1
 
         estudante.categoria_status = AIService.calcular_categoria_status(estudante.xp_total)
-        AIService.conceder_moedas_por_xp(estudante, xp_concedido)
         return mudanca_liga
-
-    @staticmethod
-    def comprar_vida(estudante: Estudante) -> dict:
-        """Troca moedas por 1 vida. Retorna {sucesso, motivo} pra rota decidir o status HTTP."""
-        AIService.regenerar_vidas(estudante)
-
-        if estudante.vidas >= VIDAS_MAXIMAS:
-            return {"sucesso": False, "motivo": "Suas vidas já estão cheias."}
-        if estudante.moedas < CUSTO_MOEDAS_POR_VIDA:
-            return {"sucesso": False, "motivo": f"Moedas insuficientes. Precisa de {CUSTO_MOEDAS_POR_VIDA} moedas."}
-
-        estudante.moedas -= CUSTO_MOEDAS_POR_VIDA
-        estudante.vidas += 1
-        if estudante.vidas >= VIDAS_MAXIMAS:
-            estudante.proxima_vida_em = None
-        return {"sucesso": True, "motivo": None}
 
     @staticmethod
     def calendario_do_mes(estudante_id: int, ano: int, mes: int, db: Session) -> list[dict]:

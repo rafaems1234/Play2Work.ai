@@ -1,7 +1,7 @@
 import json
 import logging
 import random
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -31,6 +31,10 @@ from services import (
 )
 from auth import hash_senha, verificar_senha, criar_token, get_estudante_atual, gerar_senha_temporaria, normalizar_cpf
 from limiter import limiter
+from fuso import hoje as hoje_na_escola, agora_utc
+from competencias import registrar_evidencias, mapa_para_tela
+from atividades import proxima_situacao, responder_situacao
+from fotos import FotoRequest, salvar_foto, remover_foto, resposta_da_foto
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +75,18 @@ class AtualizarContaRequest(BaseModel):
     linkedin: Optional[str] = None
 
 class ResumeRequest(BaseModel):
-    habilidades_texto: str
+    habilidades_texto: str = Field(min_length=1, max_length=4000)
+
+class ResponderSituacaoRequest(BaseModel):
+    situacao_id: str = Field(min_length=1, max_length=40)
+    opcao_index: int
+
+class PreferenciasCurriculoRequest(BaseModel):
+    foto_no_curriculo: bool
+
+class ExperienciaRequest(BaseModel):
+    ja_trabalhou: bool
+    experiencia_previa: Optional[str] = Field(default=None, max_length=2000)
 
 class ChatMessageRequest(BaseModel):
     mensagem_usuario: str
@@ -325,15 +340,19 @@ def generate_resume(data: ResumeRequest, estudante: Estudante = Depends(get_estu
     """
     curriculo_ia_dados = AIService.gerar_curriculo_ia(data.habilidades_texto, estudante.nome)
 
+    # Cada geração é uma versão nova (nada é sobrescrito); o painel da escola
+    # sempre lê a mais recente -- é assim que o currículo "sincroniza".
     novo_curriculo = Curriculo(
         estudante_id=estudante.id,
-        texto_curriculo_formatado=json.dumps(curriculo_ia_dados)
+        texto_curriculo_formatado=json.dumps(curriculo_ia_dados),
+        texto_original=data.habilidades_texto,
     )
 
     try:
         db.add(novo_curriculo)
         db.commit()
-        return {"sucesso": True, "curriculo": curriculo_ia_dados}
+        db.refresh(novo_curriculo)
+        return {"sucesso": True, "curriculo": curriculo_ia_dados, "gerado_em": novo_curriculo.gerado_em.isoformat() if novo_curriculo.gerado_em else None}
     except Exception:
         db.rollback()
         logger.exception("Erro ao salvar currículo do estudante %s", estudante.id)
@@ -363,7 +382,8 @@ def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_
             estudante_id=estudante.id,
             remetente="user",
             mensagem=data.mensagem_usuario,
-            feedback_ia=feedback_gerado
+            feedback_ia=feedback_gerado,
+            xp_concedido=xp_concedido,
         )
         db.add(msg_usuario)
 
@@ -375,6 +395,11 @@ def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_
         db.add(msg_ia)
 
         mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
+        # Nota da resposta (0-50 XP) vira evidência 0-100 nos eixos que uma entrevista exercita
+        nota_resposta = max(0, min(50, int(xp_concedido or 0))) * 2
+        registrar_evidencias(db, estudante.id, {
+            "comunicacao": nota_resposta, "trabalho_projeto_vida": nota_resposta, "autoconhecimento": nota_resposta,
+        }, origem="entrevista")
         db.commit()
 
         return {
@@ -386,7 +411,6 @@ def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_
             "ofensiva_dias": estudante.ofensiva_dias,
             "categoria_status": estudante.categoria_status,
             "missoes_diarias": estudante.missoes_diarias_concluidas,
-            "moedas": estudante.moedas,
             "liga": estudante.liga,
             "mudanca_liga": mudanca_liga,
         }
@@ -401,7 +425,7 @@ def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_
 # você compete dentro do seu grupo, não no ranking global).
 @router.get("/ranking")
 def get_weekly_ranking(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
-    inicio_semana_atual = date.today() - timedelta(days=date.today().weekday())
+    inicio_semana_atual = hoje_na_escola() - timedelta(days=hoje_na_escola().weekday())
     liga_atual = estudante.liga or "Bronze"
 
     # Estudantes sem interação na semana atual ainda não passaram pelo reset
@@ -476,7 +500,7 @@ def generate_quiz(estudante: Estudante = Depends(get_estudante_atual), db: Sessi
         raise HTTPException(
             status_code=403,
             detail={
-                "mensagem": "Você está sem vidas. Espere regenerar ou compre com moedas.",
+                "mensagem": "Você está sem vidas. Elas voltam sozinhas: 1 a cada 30 minutos.",
                 "proxima_vida_em": estudante.proxima_vida_em.isoformat() if estudante.proxima_vida_em else None,
             },
         )
@@ -629,6 +653,9 @@ def submit_quiz(data: QuizSubmitRequest, estudante: Estudante = Depends(get_estu
 
         vida_bonus_ganha = AIService.avaliar_bonus_por_desempenho(estudante, acertos, total)
         mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
+        respondidas = total - pulos
+        if respondidas > 0:
+            registrar_evidencias(db, estudante.id, {"conhecimento": acertos / respondidas * 100}, origem="quiz", origem_id=sessao.id)
         db.commit()
 
         return {
@@ -641,7 +668,6 @@ def submit_quiz(data: QuizSubmitRequest, estudante: Estudante = Depends(get_estu
             "categoria_status": estudante.categoria_status,
             "missoes_diarias": estudante.missoes_diarias_concluidas,
             "vidas": estudante.vidas,
-            "moedas": estudante.moedas,
             "congelamentos_disponiveis": estudante.congelamentos_disponiveis,
             "quizzes_perfeitos_seguidos": estudante.quizzes_perfeitos_seguidos,
             "vida_bonus_ganha": vida_bonus_ganha,
@@ -656,7 +682,7 @@ def submit_quiz(data: QuizSubmitRequest, estudante: Estudante = Depends(get_estu
         raise HTTPException(status_code=500, detail="Erro ao processar resultado do quiz. Tente novamente mais tarde.")
 
 
-# --- Rota Nova: Status consolidado de gamificação (vidas, moedas, congelamentos) ---
+# --- Rota Nova: Status consolidado de gamificação (vidas, congelamentos) ---
 @router.get("/estudante/me/status")
 def get_status_gamificacao(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     AIService.regenerar_vidas(estudante)
@@ -670,7 +696,6 @@ def get_status_gamificacao(estudante: Estudante = Depends(get_estudante_atual), 
         "minutos_para_regenerar_vida": MINUTOS_PARA_REGENERAR_VIDA,
         "acertos_seguidos_para_vida": ACERTOS_SEGUIDOS_PARA_VIDA,
         "proxima_vida_em": estudante.proxima_vida_em.isoformat() if estudante.proxima_vida_em else None,
-        "moedas": estudante.moedas,
         "congelamentos_disponiveis": estudante.congelamentos_disponiveis,
         "quizzes_perfeitos_seguidos": estudante.quizzes_perfeitos_seguidos,
         "quizzes_perfeitos_para_bonus": QUIZZES_PERFEITOS_PARA_VIDA_BONUS,
@@ -687,26 +712,123 @@ def get_status_gamificacao(estudante: Estudante = Depends(get_estudante_atual), 
     }
 
 
+# --- Perfil do primeiro acesso: foto, experiência prévia e currículo ---
+def _curriculo_mais_recente(estudante_id: int, db: Session) -> Optional[Curriculo]:
+    return db.query(Curriculo).filter(Curriculo.estudante_id == estudante_id).order_by(Curriculo.gerado_em.desc(), Curriculo.id.desc()).first()
+
+
+@router.get("/estudante/me/perfil")
+def get_perfil(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    """
+    O que falta no perfil -- o app usa pra mostrar o primeiro acesso (uma
+    vez) e o aviso de "complete seu perfil" (até ter foto e currículo).
+    """
+    curriculo = _curriculo_mais_recente(estudante.id, db)
+    return {
+        "tem_foto": estudante.foto_atualizada_em is not None,
+        "foto_atualizada_em": estudante.foto_atualizada_em.isoformat() if estudante.foto_atualizada_em else None,
+        "tem_curriculo": curriculo is not None,
+        "curriculo_atualizado_em": curriculo.gerado_em.isoformat() if curriculo and curriculo.gerado_em else None,
+        "ja_trabalhou": estudante.ja_trabalhou,
+        "experiencia_previa": estudante.experiencia_previa,
+        "onboarding_concluido": estudante.onboarding_concluido_em is not None,
+    }
+
+
+@router.get("/estudante/me/foto")
+def get_minha_foto(estudante: Estudante = Depends(get_estudante_atual)):
+    return resposta_da_foto(estudante)
+
+
+@router.put("/estudante/me/foto")
+def enviar_minha_foto(data: FotoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    salvar_foto(db, estudante, data.imagem_base64, enviada_por="aluno")
+    db.commit()
+    return {"sucesso": True, "foto_atualizada_em": estudante.foto_atualizada_em.isoformat()}
+
+
+@router.delete("/estudante/me/foto")
+def apagar_minha_foto(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    remover_foto(estudante)
+    db.commit()
+    return {"sucesso": True}
+
+
+@router.put("/estudante/me/experiencia")
+def salvar_experiencia(data: ExperienciaRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    estudante.ja_trabalhou = data.ja_trabalhou
+    texto = (data.experiencia_previa or "").strip()
+    estudante.experiencia_previa = texto if data.ja_trabalhou and texto else None
+    db.commit()
+    return {"ja_trabalhou": estudante.ja_trabalhou, "experiencia_previa": estudante.experiencia_previa}
+
+
+@router.post("/estudante/me/onboarding/concluir")
+def concluir_onboarding(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    if estudante.onboarding_concluido_em is None:
+        estudante.onboarding_concluido_em = agora_utc()
+        db.commit()
+    return {"onboarding_concluido": True}
+
+
+@router.get("/resume/atual")
+def get_curriculo_atual(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    """Último currículo gerado, pra tela abrir com ele em vez de vazia."""
+    curriculo = _curriculo_mais_recente(estudante.id, db)
+    if not curriculo:
+        return {"curriculo": None, "foto_no_curriculo": bool(estudante.foto_no_curriculo)}
+    return {
+        "foto_no_curriculo": bool(estudante.foto_no_curriculo),
+        "curriculo": json.loads(curriculo.texto_curriculo_formatado),
+        "texto_original": curriculo.texto_original,
+        "gerado_em": curriculo.gerado_em.isoformat() if curriculo.gerado_em else None,
+    }
+
+
+# --- Mapa de competências e "O que você faria?" ---
+@router.get("/estudante/me/competencias")
+def get_minhas_competencias(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    return mapa_para_tela(db, estudante)
+
+
+@router.get("/situacoes/proxima")
+def get_proxima_situacao(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    return proxima_situacao(db, estudante)
+
+
+@router.post("/situacoes/responder")
+def post_responder_situacao(data: ResponderSituacaoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    resultado = responder_situacao(db, estudante, data.situacao_id, data.opcao_index)
+    try:
+        mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, resultado["xp_concedido"])
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Erro ao registrar situação do estudante %s", estudante.id)
+        raise HTTPException(status_code=500, detail="Erro ao registrar sua resposta. Tente novamente.")
+    return {
+        **resultado,
+        "novos_pontos_totais": estudante.xp_total,
+        "nivel_atual": estudante.nivel_gamificacao,
+        "ofensiva_dias": estudante.ofensiva_dias,
+        "categoria_status": estudante.categoria_status,
+        "liga": estudante.liga,
+        "mudanca_liga": mudanca_liga,
+    }
+
+
+@router.put("/estudante/me/preferencias-curriculo")
+def salvar_preferencias_curriculo(data: PreferenciasCurriculoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    """Foto no currículo é escolha do aluno -- e só aparece se ele tiver foto cadastrada."""
+    estudante.foto_no_curriculo = data.foto_no_curriculo
+    db.commit()
+    return {"foto_no_curriculo": estudante.foto_no_curriculo}
+
+
 # --- Rota Nova: Calendário de ofensiva do mês ---
 @router.get("/estudante/me/calendario")
 def get_calendario(ano: int = Query(...), mes: int = Query(..., ge=1, le=12), estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     return {"dias": AIService.calendario_do_mes(estudante.id, ano, mes, db)}
-
-
-# --- Rota Nova: Comprar 1 vida com moedas ---
-@router.post("/vidas/comprar")
-def comprar_vida(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
-    resultado = AIService.comprar_vida(estudante)
-    if not resultado["sucesso"]:
-        db.commit()
-        raise HTTPException(status_code=400, detail=resultado["motivo"])
-
-    db.commit()
-    return {
-        "sucesso": True,
-        "vidas": estudante.vidas,
-        "moedas": estudante.moedas,
-    }
 
 
 # --- Rota 4: Integração LinkedIn ---
@@ -721,8 +843,21 @@ def export_to_linkedin(data: LinkedInExportRequest, estudante: Estudante = Depen
 
 
 # --- Rota 5: Envio de Candidaturas (persistido de verdade, não é mais fake) ---
+# O aluno não se candidata sozinho: as vagas são por cota das empresas
+# parceiras e a maioria dos alunos é menor de idade, então toda candidatura
+# nasce de uma indicação da escola (POST /admin/vagas/{id}/indicar). A rota
+# fica respondendo 403 (em vez de sumir) pra um app antigo em cache mostrar
+# a mensagem certa. O corpo antigo segue abaixo, desligado pela flag.
+CANDIDATURA_PELO_ALUNO_LIBERADA = False
+
+
 @router.post("/jobs/apply-meta", status_code=status.HTTP_201_CREATED)
 def apply_to_job_meta(data: MetaEmpresaRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    if not CANDIDATURA_PELO_ALUNO_LIBERADA:
+        raise HTTPException(
+            status_code=403,
+            detail="As indicações para as vagas são feitas pela coordenação da escola, de acordo com as cotas das empresas parceiras.",
+        )
     vaga = db.query(Vaga).filter(Vaga.id == data.vaga_id).first()
     if not vaga:
         raise HTTPException(status_code=404, detail="Vaga não encontrada")

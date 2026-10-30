@@ -1,10 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
 import TechBackground from './TechBackground';
-import { IconWarning, IconClose, IconTrophy, IconBriefcase, IconGraduationCap, IconMask, IconCheck, IconCheckCircle, IconPencil, IconLock, IconFire, IconMedal, IconBook, IconTarget } from './icons';
-import { apiFetch, salvarToken, limparToken, obterToken, aoExpirarSessao, DEMO_MODE } from '../api';
-import { mascararCpf, mascararData, dataBrParaIso, dataIsoParaBr, cpfValido, normalizarBusca, somenteDigitos } from '../utils/formatos';
+import FichaAluno, { FormAluno, ChipStatus, fotoDoAluno } from './FichaAluno';
+import Gaveta from './Gaveta';
+import AbaTrilha from './AdminTrilha';
+import AbaMensagens, { SinoEscola } from './AdminMensagens';
+import { somEstaAtivado, tocarSomMensagem } from '../utils/sound';
+import { Avatar } from './FotoPerfil';
+import { Imprimir } from './FolhaCurriculo';
+import { IconWarning, IconTrophy, IconBriefcase, IconGraduationCap, IconMask, IconCheckCircle, IconMedal, IconBook, IconTarget, IconHandshake, IconCsv, IconPdf, IconChat } from './icons';
+import { apiFetch, lerErro, salvarToken, limparToken, obterToken, aoExpirarSessao, DEMO_MODE } from '../api';
+import { mascararCpf, dataHoraIsoParaBr, normalizarBusca, somenteDigitos } from '../utils/formatos';
+import { COLUNAS_ALUNOS, baixarCsv, carimboArquivo } from '../utils/exportar';
 
 // Painel da escola: cadastro e gestão dos alunos (CPF, nascimento, e-mail,
 // turma, itinerário), turmas, vagas das empresas parceiras e a seleção dos
@@ -13,9 +21,8 @@ import { mascararCpf, mascararData, dataBrParaIso, dataIsoParaBr, cpfValido, nor
 const ROTULOS_DESEMPENHO = {
   habilidades: 'Habilidades',
   itinerario: 'Itinerário',
+  competencias: 'Competências',
   quiz: 'Quiz',
-  engajamento: 'XP',
-  constancia: 'Ofensiva',
 };
 
 const corDaNota = (nota) => {
@@ -23,17 +30,6 @@ const corDaNota = (nota) => {
   if (nota >= 55) return '#2563eb';
   if (nota >= 35) return '#c98a04';
   return '#dc2626';
-};
-
-const lerErro = async (resposta, padrao) => {
-  try {
-    const dados = await resposta.json();
-    if (typeof dados.detail === 'string') return dados.detail;
-    if (Array.isArray(dados.detail)) return 'Confira os campos preenchidos.';
-  } catch {
-    // resposta sem JSON
-  }
-  return padrao;
 };
 
 // ------------------------------------------------------------------ login
@@ -156,196 +152,99 @@ const BuscaAlunos = ({ valor, aoMudar, alunos, aoEscolher }) => {
   );
 };
 
-// ------------------------------------------------------------------ formulário de aluno (cadastro e edição)
-const FormAluno = ({ inicial, turmas, itinerarios, aoSalvar, aoCancelar }) => {
-  const [campos, setCampos] = useState(() => ({
-    nome: inicial?.nome || '',
-    cpf: mascararCpf(inicial?.cpf || ''),
-    nascimento: dataIsoParaBr(inicial?.data_nascimento),
-    email: inicial?.email || '',
-    turma_id: inicial?.turma_id ?? '',
-    itinerario: inicial?.itinerario || '',
-    habilidades: (inicial?.habilidades || []).join(', '),
-  }));
-  const [erro, setErro] = useState(null);
-  const [salvando, setSalvando] = useState(false);
-  const mudar = (campo) => (e) => setCampos((c) => ({ ...c, [campo]: e.target.value }));
+// ------------------------------------------------------------------ aba Alunos
+// Filtros rápidos por status de contratação (com a contagem já respeitando os outros filtros)
+const FILTROS_STATUS = [
+  { valor: '', rotulo: 'Todos' },
+  { valor: 'disponivel', rotulo: 'Disponíveis (em espera)' },
+  { valor: 'contratado', rotulo: 'Contratados' },
+];
 
-  const cpfOk = cpfValido(campos.cpf);
-  const dataIso = dataBrParaIso(campos.nascimento);
-
-  const salvar = async (e) => {
-    e.preventDefault();
-    if (!cpfOk) { setErro('CPF inválido — confira os números.'); return; }
-    if (campos.nascimento && !dataIso) { setErro('Data de nascimento inválida (use dd/mm/aaaa).'); return; }
-    setSalvando(true);
-    setErro(null);
-    const erroServidor = await aoSalvar({
-      nome: campos.nome.trim(),
-      cpf: somenteDigitos(campos.cpf),
-      ...(dataIso ? { data_nascimento: dataIso } : {}),
-      email: campos.email.trim(),
-      turma_id: campos.turma_id === '' ? null : Number(campos.turma_id),
-      itinerario: campos.itinerario || null,
-      habilidades: campos.habilidades.split(',').map((h) => h.trim()).filter(Boolean),
-    });
-    setSalvando(false);
-    if (erroServidor) setErro(erroServidor);
-  };
-
+const RelatorioAlunos = ({ alunos, descricaoFiltros }) => {
+  const colunas = COLUNAS_ALUNOS.filter(([, , noPdf]) => noPdf);
   return (
-    <form onSubmit={salvar}>
-      <div className="adm-form-grade">
-        <div style={{ gridColumn: '1 / -1' }}>
-          <label className="adm-rotulo" htmlFor="fa-nome">Nome completo</label>
-          <input id="fa-nome" className="adm-input" value={campos.nome} onChange={mudar('nome')} required minLength={2} />
-        </div>
-        <div>
-          <label className="adm-rotulo" htmlFor="fa-cpf">CPF {campos.cpf.length === 14 && (cpfOk ? <IconCheck style={{ color: '#059669', verticalAlign: '-2px' }} /> : <span style={{ color: '#dc2626' }}>inválido</span>)}</label>
-          <input id="fa-cpf" className="adm-input" inputMode="numeric" placeholder="000.000.000-00" value={campos.cpf} onChange={(e) => setCampos((c) => ({ ...c, cpf: mascararCpf(e.target.value) }))} required />
-        </div>
-        <div>
-          <label className="adm-rotulo" htmlFor="fa-nasc">Nascimento (opcional)</label>
-          <input id="fa-nasc" className="adm-input" inputMode="numeric" placeholder="dd/mm/aaaa" value={campos.nascimento} onChange={(e) => setCampos((c) => ({ ...c, nascimento: mascararData(e.target.value) }))} />
-        </div>
-        <div style={{ gridColumn: '1 / -1' }}>
-          <label className="adm-rotulo" htmlFor="fa-email">E-mail</label>
-          <input id="fa-email" type="email" className="adm-input" value={campos.email} onChange={mudar('email')} required />
-        </div>
-        <div>
-          <label className="adm-rotulo" htmlFor="fa-turma">Turma</label>
-          <select id="fa-turma" className="adm-input" value={campos.turma_id} onChange={mudar('turma_id')}>
-            <option value="">Sem turma</option>
-            {turmas.map((t) => <option key={t.id} value={t.id}>{t.nome}{t.turno ? ` · ${t.turno}` : ''}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="adm-rotulo" htmlFor="fa-it">Itinerário</label>
-          <select id="fa-it" className="adm-input" value={campos.itinerario} onChange={mudar('itinerario')}>
-            <option value="">Não definido</option>
-            {itinerarios.map((it) => <option key={it} value={it}>{it}</option>)}
-          </select>
-        </div>
-        <div style={{ gridColumn: '1 / -1' }}>
-          <label className="adm-rotulo" htmlFor="fa-hab">Habilidades (separadas por vírgula)</label>
-          <input id="fa-hab" className="adm-input" placeholder="Python, Comunicação, Pacote Office" value={campos.habilidades} onChange={mudar('habilidades')} />
-        </div>
-      </div>
-      {erro && <div className="adm-erro"><IconWarning /> {erro}</div>}
-      <div style={{ display: 'flex', gap: '10px', marginTop: '18px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-        <button type="button" className="adm-btn secundario" onClick={aoCancelar}>Cancelar</button>
-        <button type="submit" className="adm-btn" disabled={salvando}>{salvando ? 'Salvando...' : inicial ? 'Salvar alterações' : 'Cadastrar aluno'}</button>
-      </div>
-    </form>
-  );
-};
-
-// Painel lateral/modal genérico
-const Gaveta = ({ titulo, aoFechar, children }) => (
-  <motion.div className="adm-fundo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={aoFechar}>
-    <motion.div
-      className="adm-gaveta"
-      initial={{ x: 40, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 40, opacity: 0 }}
-      transition={{ duration: 0.22 }}
-      onMouseDown={(e) => e.stopPropagation()}
-      role="dialog"
-      aria-label={titulo}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
-        <h2 style={{ fontSize: '18px', fontWeight: '800', color: 'var(--adm-forte)' }}>{titulo}</h2>
-        <button className="adm-icone-btn" onClick={aoFechar} aria-label="Fechar"><IconClose /></button>
-      </div>
-      {children}
-    </motion.div>
-  </motion.div>
-);
-
-const FichaAluno = ({ aluno, turmas, itinerarios, aoSalvar }) => {
-  const [editando, setEditando] = useState(false);
-  // Ficha abre só pra leitura; editar exige destravar e confirmar em "Salvar",
-  // pra ninguém mudar o cadastro de um aluno sem querer enquanto consulta.
-  if (editando) {
-    return (
-      <>
-        <div className="adm-ok" style={{ cursor: 'default', background: 'rgba(251,191,36,0.08)', borderColor: 'rgba(251,191,36,0.3)', color: '#92400e' }}>
-          <IconPencil style={{ verticalAlign: '-2px' }} /> Modo de edição. Nada é gravado até você clicar em "Salvar alterações".
-        </div>
-        <FormAluno
-        inicial={aluno}
-        turmas={turmas}
-        itinerarios={itinerarios}
-        aoCancelar={() => setEditando(false)}
-        aoSalvar={async (dados) => {
-          const erro = await aoSalvar(dados);
-          if (!erro) setEditando(false);
-          return erro;
-        }}
-      />
-      </>
-    );
-  }
-  const linhas = [
-    ['No ranking', aluno.nome_exibicao],
-    ['CPF (senha)', mascararCpf(aluno.cpf || '') || '—'],
-    ['Nascimento', dataIsoParaBr(aluno.data_nascimento) || '—'],
-    ['E-mail', aluno.email],
-    ['Turma', aluno.turma || 'Sem turma'],
-    ['Itinerário', aluno.itinerario || 'Não definido'],
-    ['Habilidades', aluno.habilidades.length ? aluno.habilidades.join(', ') : '—'],
-  ];
-  return (
-    <div>
-      <div className="adm-ficha-stats">
-        <div><strong>{aluno.xp_total}</strong><span>XP</span></div>
-        <div><strong>{aluno.nivel}</strong><span>nível</span></div>
-        <div><strong>{aluno.taxa_acerto_quiz ?? '—'}{aluno.taxa_acerto_quiz != null && '%'}</strong><span>acerto no quiz</span></div>
-        <div><strong>{aluno.ofensiva_dias} <IconFire style={{ color: '#f97316', verticalAlign: '-2px' }} /></strong><span>ofensiva</span></div>
-        <div><strong>{aluno.liga}</strong><span>liga</span></div>
-        <div><strong>{aluno.total_indicacoes}</strong><span>indicações</span></div>
-      </div>
-      <dl className="adm-ficha">
-        {linhas.map(([rotulo, valor]) => (
-          <React.Fragment key={rotulo}>
-            <dt>{rotulo}</dt>
-            <dd>{valor}</dd>
-          </React.Fragment>
-        ))}
-      </dl>
-      <p style={{ fontSize: '12px', color: 'var(--adm-suave)', margin: '14px 0' }}>
-        A senha do aluno é o CPF acima. Se ele não conseguir entrar, confira o CPF cadastrado.
+    <div className="adm-relatorio">
+      <style>{`
+        .adm-relatorio { font-family: 'Inter', Arial, sans-serif; color: #0f172a; font-size: 9.5px; }
+        .adm-relatorio h1 { font-size: 16px; margin: 0 0 2px; }
+        .adm-relatorio .sub { color: #475569; margin: 0 0 10px; font-size: 10px; }
+        .adm-relatorio table { width: 100%; border-collapse: collapse; }
+        .adm-relatorio th { text-align: left; background: #e6eefa; padding: 4px 5px; border-bottom: 1px solid #94a3b8; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .adm-relatorio td { padding: 3px 5px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+        .adm-relatorio tr { break-inside: avoid; }
+      `}</style>
+      <h1>Relatório de alunos — Play2Work.ai</h1>
+      <p className="sub">
+        {alunos.length} aluno{alunos.length !== 1 ? 's' : ''} · {descricaoFiltros || 'sem filtros'} · gerado em {dataHoraIsoParaBr(new Date().toISOString())}
       </p>
-      <button className="adm-btn secundario" onClick={() => setEditando(true)}><IconLock style={{ verticalAlign: '-2px' }} /> Habilitar edição</button>
+      <table>
+        <thead><tr>{colunas.map(([titulo]) => <th key={titulo}>{titulo}</th>)}</tr></thead>
+        <tbody>
+          {alunos.map((a) => <tr key={a.id}>{colunas.map(([titulo, valor]) => <td key={titulo}>{valor(a)}</td>)}</tr>)}
+        </tbody>
+      </table>
     </div>
   );
 };
 
-// ------------------------------------------------------------------ aba Alunos
 const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar }) => {
   const [busca, setBusca] = useState('');
   const [turmaId, setTurmaId] = useState(filtroTurmaInicial ?? '');
   const [itinerario, setItinerario] = useState('');
+  const [status, setStatus] = useState('');
+  const [idadeMin, setIdadeMin] = useState('');
+  const [idadeMax, setIdadeMax] = useState('');
+  const [soSemFoto, setSoSemFoto] = useState(false);
+  const [empresa, setEmpresa] = useState('');
+  const [certificado, setCertificado] = useState('');
   const [cadastrando, setCadastrando] = useState(false);
   const [selecionadoId, setSelecionadoId] = useState(null);
   const [aviso, setAviso] = useState(null);
+  const [imprimindo, setImprimindo] = useState(false);
 
   useEffect(() => { setTurmaId(filtroTurmaInicial ?? ''); }, [filtroTurmaInicial]);
 
-  // Filtro instantâneo, a cada letra digitada
-  const filtrados = useMemo(() => {
+  // Filtro instantâneo, a cada letra digitada. Tudo menos o status -- que é
+  // aplicado por último, pra os botões rápidos mostrarem a contagem de cada um.
+  const { semStatus, semNascimento } = useMemo(() => {
     const termo = normalizarBusca(busca);
     const digitos = somenteDigitos(busca);
-    return alunos.filter((a) => {
+    const min = idadeMin === '' ? null : Number(idadeMin);
+    const max = idadeMax === '' ? null : Number(idadeMax);
+    const filtraIdade = min != null || max != null;
+    const passaOutrosFiltros = (a) => {
       if (turmaId !== '' && String(a.turma_id ?? '') !== String(turmaId)) return false;
       if (itinerario && (itinerario === '__nenhum' ? a.itinerario : a.itinerario !== itinerario)) return false;
+      if (soSemFoto && a.tem_foto) return false;
+      if (empresa && a.empresa_contratante !== empresa) return false;
+      if (certificado === 'com' && !a.total_certificados) return false;
+      if (certificado === 'sem' && a.total_certificados) return false;
       if (!termo) return true;
       return normalizarBusca(a.nome).includes(termo)
         || normalizarBusca(a.nome_exibicao).includes(termo)
         || normalizarBusca(a.email).includes(termo)
-        || (digitos.length >= 3 && (a.cpf || '').includes(digitos));
-    });
-  }, [alunos, busca, turmaId, itinerario]);
+        || normalizarBusca(a.responsavel_nome).includes(termo)
+        || (digitos.length >= 3 && ((a.cpf || '').includes(digitos) || (a.telefone || '').includes(digitos) || (a.responsavel_telefone || '').includes(digitos)));
+    };
+    const candidatos = alunos.filter(passaOutrosFiltros);
+    if (!filtraIdade) return { semStatus: candidatos, semNascimento: [] };
+    // Com filtro de idade, quem não tem nascimento cadastrado fica de fora --
+    // mas separado, pra o painel avisar (senão a coordenação exporta "todos os
+    // de 16 a 18" e faltam alunos sem perceber)
+    return {
+      semStatus: candidatos.filter((a) => a.idade != null && (min == null || a.idade >= min) && (max == null || a.idade <= max)),
+      semNascimento: candidatos.filter((a) => a.idade == null && (!status || a.status_contratacao === status)),
+    };
+  }, [alunos, busca, turmaId, itinerario, idadeMin, idadeMax, soSemFoto, empresa, certificado, status]);
+
+  // Empresas onde há aluno contratado -- é o que alimenta o filtro e as sugestões na ficha
+  const empresas = useMemo(
+    () => [...new Set(alunos.map((a) => a.empresa_contratante).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [alunos],
+  );
+
+  const filtrados = useMemo(() => (status ? semStatus.filter((a) => a.status_contratacao === status) : semStatus), [semStatus, status]);
+  const contagem = (valor) => (valor ? semStatus.filter((a) => a.status_contratacao === valor).length : semStatus.length);
 
   const selecionado = alunos.find((a) => a.id === selecionadoId);
 
@@ -366,11 +265,33 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
     return null;
   };
 
-  const limparFiltros = () => { setBusca(''); setTurmaId(''); setItinerario(''); };
-  const temFiltro = busca || turmaId !== '' || itinerario;
+  const limparFiltros = () => {
+    setBusca(''); setTurmaId(''); setItinerario(''); setStatus(''); setIdadeMin(''); setIdadeMax(''); setSoSemFoto(false); setEmpresa(''); setCertificado('');
+  };
+  const temFiltro = busca || turmaId !== '' || itinerario || status || idadeMin !== '' || idadeMax !== '' || soSemFoto || empresa || certificado;
+
+  // Descrição dos filtros aplicados, que vai no cabeçalho do PDF
+  const descricaoFiltros = [
+    status && FILTROS_STATUS.find((f) => f.valor === status)?.rotulo,
+    turmaId !== '' && `turma ${turmas.find((t) => String(t.id) === String(turmaId))?.nome ?? ''}`,
+    itinerario && (itinerario === '__nenhum' ? 'sem itinerário' : itinerario),
+    (idadeMin !== '' || idadeMax !== '') && `idade ${idadeMin || '…'} a ${idadeMax || '…'}`,
+    soSemFoto && 'sem foto',
+    empresa && `empresa ${empresa}`,
+    certificado && (certificado === 'com' ? 'com certificado' : 'sem certificado'),
+    busca && `busca "${busca}"`,
+  ].filter(Boolean).join(' · ');
 
   return (
     <div>
+      <div className="adm-segmentado" role="group" aria-label="Status de contratação">
+        {FILTROS_STATUS.map((f) => (
+          <button key={f.valor || 'todos'} className={status === f.valor ? 'ativo' : ''} onClick={() => setStatus(f.valor)} aria-pressed={status === f.valor}>
+            {f.rotulo} <span>{contagem(f.valor)}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="adm-filtros">
         <BuscaAlunos valor={busca} aoMudar={setBusca} alunos={alunos} aoEscolher={(a) => setSelecionadoId(a.id)} />
         <select className="adm-input" value={turmaId} onChange={(e) => setTurmaId(e.target.value)} style={{ flex: '1 1 140px' }} aria-label="Filtrar por turma">
@@ -382,42 +303,98 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
           {itinerarios.map((it) => <option key={it} value={it}>{it}</option>)}
           <option value="__nenhum">Sem itinerário</option>
         </select>
+        <select className="adm-input" value={empresa} onChange={(e) => setEmpresa(e.target.value)} style={{ flex: '1 1 180px' }} aria-label="Filtrar por empresa" disabled={!empresas.length}>
+          <option value="">{empresas.length ? 'Todas as empresas' : 'Nenhum aluno contratado'}</option>
+          {empresas.map((nome) => <option key={nome} value={nome}>{nome}</option>)}
+        </select>
+        <select className="adm-input" value={certificado} onChange={(e) => setCertificado(e.target.value)} style={{ flex: '1 1 160px' }} aria-label="Filtrar por certificado">
+          <option value="">Certificado: todos</option>
+          <option value="com">Com certificado</option>
+          <option value="sem">Sem certificado</option>
+        </select>
+        <div className="adm-idade" role="group" aria-label="Filtrar por idade">
+          <span>Idade</span>
+          <input type="number" min={10} max={30} className="adm-input" placeholder="de" value={idadeMin} onChange={(e) => setIdadeMin(e.target.value)} aria-label="Idade mínima" />
+          <input type="number" min={10} max={30} className="adm-input" placeholder="até" value={idadeMax} onChange={(e) => setIdadeMax(e.target.value)} aria-label="Idade máxima" />
+        </div>
+        <label className="adm-check">
+          <input type="checkbox" checked={soSemFoto} onChange={(e) => setSoSemFoto(e.target.checked)} /> Só sem foto
+        </label>
         <button className="adm-btn" onClick={() => setCadastrando(true)} style={{ flex: '0 0 auto' }}>+ Cadastrar aluno</button>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 2px 10px', fontSize: '12px', color: 'var(--adm-suave)' }}>
-        <span>{filtrados.length} de {alunos.length} aluno{alunos.length !== 1 ? 's' : ''}</span>
-        {temFiltro && <button className="adm-link" onClick={limparFiltros}>Limpar filtros</button>}
+      <div className="adm-barra-lista">
+        <span>
+          {filtrados.length} de {alunos.length} aluno{alunos.length !== 1 ? 's' : ''}
+          {temFiltro && <> · <button className="adm-link" onClick={limparFiltros}>Limpar filtros</button></>}
+        </span>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="adm-btn secundario pequeno" disabled={!filtrados.length} onClick={() => baixarCsv(`alunos_${carimboArquivo()}.csv`, filtrados)}>
+            <IconCsv style={{ verticalAlign: '-2px' }} /> Exportar CSV
+          </button>
+          <button className="adm-btn secundario pequeno" disabled={!filtrados.length} onClick={() => setImprimindo(true)}>
+            <IconPdf style={{ verticalAlign: '-2px' }} /> Exportar PDF
+          </button>
+        </div>
       </div>
 
       {aviso && <div className="adm-ok" onClick={() => setAviso(null)}><IconCheckCircle style={{ verticalAlign: '-2px' }} /> {aviso}</div>}
+
+      {semNascimento.length > 0 && (
+        <div className="adm-aviso" style={{ marginBottom: '12px', flexWrap: 'wrap' }} role="status">
+          <IconWarning />
+          <span>
+            {semNascimento.length} aluno{semNascimento.length > 1 ? 's' : ''} sem data de nascimento {semNascimento.length > 1 ? 'ficaram' : 'ficou'} de fora do filtro de idade
+            {' '}(e da exportação): {semNascimento.slice(0, 3).map((a) => a.nome).join(', ')}{semNascimento.length > 3 ? '…' : ''}.
+          </span>
+          <button className="adm-link" onClick={() => { setIdadeMin(''); setIdadeMax(''); }}>Tirar filtro de idade</button>
+        </div>
+      )}
 
       <div className="adm-tabela-wrap">
         <table className="adm-tabela">
           <thead>
             <tr>
-              <th>Aluno</th><th>CPF</th><th>Turma</th><th>Itinerário</th><th className="num">XP</th><th className="num">Quiz</th><th className="num">Ofensiva</th><th className="num">Indicações</th>
+              <th>Aluno</th><th>CPF</th><th className="num">Idade</th><th>Turma</th><th>Itinerário</th><th>Status</th><th className="num">XP</th><th className="num">Quiz</th><th className="num">Indicações</th>
             </tr>
           </thead>
           <tbody>
             {filtrados.map((a) => (
               <tr key={a.id} onClick={() => setSelecionadoId(a.id)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setSelecionadoId(a.id)}>
-                <td><div style={{ fontWeight: 700, color: 'var(--adm-texto-forte)' }}>{a.nome}</div><div style={{ fontSize: '11px', color: 'var(--adm-suave)' }}>no ranking: <span style={{ color: 'var(--accent-soft)' }}>{a.nome_exibicao}</span> · {a.email}</div></td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Avatar caminho={fotoDoAluno(a.id)} versao={a.foto_atualizada_em} nome={a.nome} tamanho={34} />
+                    <div>
+                      <div style={{ fontWeight: 700, color: 'var(--adm-texto-forte)' }}>{a.nome}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--adm-suave)' }}>no ranking: <span style={{ color: 'var(--accent-soft)' }}>{a.nome_exibicao}</span> · {a.email}</div>
+                    </div>
+                  </div>
+                </td>
                 <td className="mono">{mascararCpf(a.cpf || '') || '—'}</td>
+                <td className="num">{a.idade ?? <span className="adm-vazio">—</span>}</td>
                 <td>{a.turma || <span className="adm-vazio">—</span>}</td>
                 <td>{a.itinerario || <span className="adm-vazio">não definido</span>}</td>
+                <td>
+                  <ChipStatus status={a.status_contratacao} />
+                  {a.empresa_contratante && <div style={{ fontSize: '11px', color: 'var(--adm-suave)', marginTop: '2px' }}>{a.empresa_contratante}</div>}
+                </td>
                 <td className="num">{a.xp_total}</td>
                 <td className="num">{a.taxa_acerto_quiz != null ? `${a.taxa_acerto_quiz}%` : '—'}</td>
-                <td className="num">{a.ofensiva_dias}</td>
                 <td className="num">{a.total_indicacoes || <span className="adm-vazio">—</span>}</td>
               </tr>
             ))}
             {filtrados.length === 0 && (
-              <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--adm-suave)', padding: '28px' }}>Nenhum aluno com esses filtros.</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--adm-suave)', padding: '28px' }}>Nenhum aluno com esses filtros.</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {imprimindo && (
+        <Imprimir nomeDoArquivo={`Relatorio de alunos ${carimboArquivo()}`} paisagem aoTerminar={() => setImprimindo(false)}>
+          <RelatorioAlunos alunos={filtrados} descricaoFiltros={descricaoFiltros} />
+        </Imprimir>
+      )}
 
       <AnimatePresence>
         {cadastrando && (
@@ -426,8 +403,8 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
           </Gaveta>
         )}
         {selecionado && (
-          <Gaveta titulo={selecionado.nome} aoFechar={() => setSelecionadoId(null)}>
-            <FichaAluno key={selecionado.id} aluno={selecionado} turmas={turmas} itinerarios={itinerarios} aoSalvar={atualizar} />
+          <Gaveta titulo={selecionado.nome} aoFechar={() => setSelecionadoId(null)} larga>
+            <FichaAluno key={selecionado.id} aluno={selecionado} turmas={turmas} itinerarios={itinerarios} empresas={empresas} aoSalvar={atualizar} aoAtualizar={recarregar} />
           </Gaveta>
         )}
       </AnimatePresence>
@@ -677,7 +654,8 @@ const AbaVagas = ({ vagas, turmas, itinerarios, recarregar }) => {
         </div>
 
         <p style={{ fontSize: '12px', color: 'var(--adm-suave)', margin: '10px 2px' }}>
-          Nota de 0 a 100: habilidades exigidas pela vaga (até 35), itinerário igual ao da vaga (20), acerto no quiz (25), XP comparado ao melhor aluno (15) e ofensiva (5).
+          Nota de 0 a 100: habilidades exigidas pela vaga (até 30), itinerário igual ao da vaga (20), mapa de competências (35) e acerto no quiz (15).
+          Tempo de uso no app (XP e dias seguidos) não entra, pra não favorecer quem tem mais acesso à internet em casa.
         </p>
 
         <AnimatePresence>
@@ -709,6 +687,8 @@ const ABAS = [
   { id: 'alunos', rotulo: 'Alunos', Icon: IconGraduationCap },
   { id: 'turmas', rotulo: 'Turmas', Icon: IconTrophy },
   { id: 'vagas', rotulo: 'Vagas e indicação', Icon: IconBriefcase },
+  { id: 'trilha', rotulo: 'Trilha EAD', Icon: IconBook },
+  { id: 'mensagens', rotulo: 'Chat', Icon: IconChat },
 ];
 
 // Cartões do topo: tons fechados e dessaturados, pra dar identidade sem virar arco-íris
@@ -717,11 +697,15 @@ const CARTOES_RESUMO = [
   { campo: 'total_turmas', rotulo: 'turmas', Icon: IconBook, cor: '#5a5f9e' },
   { campo: 'total_vagas', rotulo: 'vagas', Icon: IconBriefcase, cor: '#2c7a7b' },
   { campo: 'total_indicacoes', rotulo: 'indicações', Icon: IconTarget, cor: '#a16a1f' },
+  { campo: 'total_contratados', rotulo: 'contratados', Icon: IconHandshake, cor: '#2f7a4f' },
 ];
 
 const AdminPanel = ({ aoSair }) => {
   const [logado, setLogado] = useState(() => Boolean(obterToken('admin')));
   const [aba, setAba] = useState('alunos');
+  // Conversa que a notificação do sininho mandou abrir na aba Chat
+  const [canalChat, setCanalChat] = useState(null);
+  const abrirChat = (canalId) => { setCanalChat(canalId); setAba('mensagens'); };
   const [verItinerarios, setVerItinerarios] = useState(false);
   const [filtroTurma, setFiltroTurma] = useState(null);
   const [resumo, setResumo] = useState(null);
@@ -751,6 +735,28 @@ const AdminPanel = ({ aoSair }) => {
     if (logado) recarregar();
   }, [logado]);
 
+  // Só o resumo, a cada 30 s: mantém o contador de mensagens não lidas da aba Mensagens em dia
+  const atualizarResumo = useCallback(async () => {
+    const r = await apiFetch('/api/admin/resumo');
+    if (r.ok) setResumo(await r.json());
+  }, []);
+  useEffect(() => {
+    if (!logado) return undefined;
+    const id = setInterval(atualizarResumo, 30000);
+    return () => clearInterval(id);
+  }, [logado, atualizarResumo]);
+
+  // Mensagem nova de aluno: som (se o som do app estiver ligado) e "(n)" no título da aba
+  const naoLidas = resumo?.mensagens_nao_lidas || 0;
+  const naoLidasAntesRef = useRef(null);
+  useEffect(() => {
+    if (naoLidasAntesRef.current != null && naoLidas > naoLidasAntesRef.current && somEstaAtivado()) tocarSomMensagem();
+    naoLidasAntesRef.current = naoLidas;
+    const base = document.title.replace(/^\(\d+\)\s*/, '');
+    document.title = logado && naoLidas ? `(${naoLidas}) ${base}` : base;
+    return () => { document.title = document.title.replace(/^\(\d+\)\s*/, ''); };
+  }, [naoLidas, logado]);
+
   const sair = () => {
     limparToken('admin');
     setLogado(false);
@@ -772,7 +778,8 @@ const AdminPanel = ({ aoSair }) => {
                 <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>Play2Work.ai{DEMO_MODE && <> · <IconMask style={{ verticalAlign: '-2px' }} /> demonstração</>}</div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <SinoEscola total={naoLidas} aoAbrirCanal={abrirChat} />
               <button className="adm-btn secundario" onClick={aoSair}>Voltar ao app</button>
               <button className="adm-btn secundario" onClick={sair}>Sair</button>
             </div>
@@ -804,6 +811,7 @@ const AdminPanel = ({ aoSair }) => {
             {ABAS.map(({ id, rotulo, Icon }) => (
               <button key={id} role="tab" aria-selected={aba === id} className={aba === id ? 'ativa' : ''} onClick={() => { setAba(id); if (id !== 'alunos') setFiltroTurma(null); }}>
                 <Icon /> {rotulo}
+                {id === 'mensagens' && resumo?.mensagens_nao_lidas > 0 && <span className="adm-contador" style={{ background: '#16a34a', color: '#fff' }}>{resumo.mensagens_nao_lidas}</span>}
               </button>
             ))}
           </nav>
@@ -811,6 +819,8 @@ const AdminPanel = ({ aoSair }) => {
           {aba === 'alunos' && <AbaAlunos alunos={alunos} turmas={turmas} itinerarios={itinerarios} filtroTurmaInicial={filtroTurma} recarregar={recarregar} />}
           {aba === 'turmas' && <AbaTurmas turmas={turmas} recarregar={recarregar} aoVerAlunos={(id) => { setFiltroTurma(String(id)); setAba('alunos'); }} />}
           {aba === 'vagas' && <AbaVagas vagas={vagas} turmas={turmas} itinerarios={itinerarios} recarregar={recarregar} />}
+          {aba === 'trilha' && <AbaTrilha itinerarios={itinerarios} turmas={turmas} />}
+          {aba === 'mensagens' && <AbaMensagens alunos={alunos} aoMudou={atualizarResumo} canalInicial={canalChat} />}
         </div>
       )}
     </div>
@@ -881,7 +891,7 @@ const ESTILOS = `
   .adm-icone-btn { background: rgb(var(--adm-tinta) / 0.09); border: none; color: var(--adm-texto); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
   .adm-erro { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25); color: #b91c1c; font-size: 13px; display: flex; gap: 6px; align-items: center; }
   .adm-ok { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.3); color: #047857; font-size: 13px; cursor: pointer; }
-  .adm-resumo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .adm-resumo { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
   .adm-resumo > .adm-card { padding: 14px; }
   .adm-resumo-num { display: flex; align-items: center; gap: 14px; }
   .adm-resumo-icone { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 21px; color: var(--cor); background: color-mix(in srgb, var(--cor) 10%, transparent); }
@@ -904,6 +914,7 @@ const ESTILOS = `
   .adm-resumo-it b { color: var(--adm-texto-forte); }
   @media (max-width: 900px) {
     .adm-resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .adm-resumo > .adm-resumo-num:nth-child(5) { grid-column: 1 / -1; }
   }
   .adm-abas { display: flex; gap: 4px; border-bottom: 1px solid rgb(var(--accent-rgb) / 0.25); margin-bottom: 16px; overflow-x: auto; }
   .adm-abas button { display: flex; align-items: center; gap: 6px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--adm-texto); padding: 10px 14px; font-weight: 700; font-size: 14px; cursor: pointer; font-family: inherit; white-space: nowrap; }
@@ -916,7 +927,7 @@ const ESTILOS = `
   .adm-tabela-wrap { overflow-x: auto; border: 1px solid rgb(var(--accent-rgb) / 0.25); border-radius: 16px; background: rgb(var(--surface-rgb) / 0.9); }
   .adm-tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
   /* No celular a tabela rola dentro do card em vez de espremer as colunas */
-  @media (max-width: 700px) { .adm-tabela { min-width: 720px; } }
+  @media (max-width: 700px) { .adm-tabela { min-width: 860px; } }
   .adm-tabela th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--adm-suave); padding: 10px 12px; border-bottom: 1px solid rgb(var(--accent-rgb) / 0.25); background: rgb(var(--adm-tinta) / 0.04); white-space: nowrap; }
   .adm-tabela td { padding: 10px 12px; border-bottom: 1px solid rgb(var(--adm-tinta) / 0.08); vertical-align: middle; }
   .adm-tabela tbody tr { cursor: pointer; transition: background 0.15s; }
@@ -925,9 +936,61 @@ const ESTILOS = `
   .adm-tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .adm-tabela .mono { font-variant-numeric: tabular-nums; white-space: nowrap; }
   .adm-vazio { color: #7a879f; font-style: italic; }
+  p.adm-vazio { font-size: 13px; margin: 0 0 8px; }
   .adm-chip { display: inline-block; font-size: 11px; font-weight: 700; color: var(--adm-texto-forte); background: rgb(var(--adm-tinta) / 0.09); border: 1px solid rgb(var(--adm-tinta) / 0.16); padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
   .adm-chip.pequeno { font-size: 10px; padding: 1px 6px; }
   .adm-chip.verde { color: #047857; background: rgba(52,211,153,0.1); border-color: rgba(52,211,153,0.35); }
+  .adm-chip.azul { color: #1d4ed8; background: rgba(59,130,246,0.08); border-color: rgba(59,130,246,0.3); }
+  .adm-btn.pequeno { padding: 7px 12px; font-size: 12px; border-radius: 10px; }
+  .adm-a { color: var(--accent-soft); font-weight: 600; text-decoration: none; }
+  .adm-a:hover { text-decoration: underline; }
+  .adm-link.perigo { color: #b91c1c; }
+  .adm-segmentado { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin-bottom: 12px; border-radius: 14px; background: rgb(var(--adm-tinta) / 0.07); border: 1px solid rgb(var(--adm-tinta) / 0.12); }
+  .adm-segmentado button { border: none; background: none; padding: 8px 14px; border-radius: 10px; font-family: inherit; font-size: 13px; font-weight: 700; color: var(--adm-texto); cursor: pointer; }
+  .adm-segmentado button span { margin-left: 4px; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: rgb(var(--adm-tinta) / 0.1); }
+  .adm-segmentado button.ativo { background: rgb(var(--surface-rgb)); color: var(--accent-soft); box-shadow: 0 1px 4px rgb(var(--adm-tinta) / 0.15); }
+  .adm-idade { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; font-size: 12px; color: var(--adm-texto); }
+  .adm-idade .adm-input { width: 68px; }
+  .adm-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--adm-texto); cursor: pointer; white-space: nowrap; }
+  .adm-barra-lista { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 2px 10px; font-size: 12px; color: var(--adm-suave); }
+  .adm-gaveta.larga { max-width: 720px; }
+  .adm-ficha-topo { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .adm-aviso { padding: 9px 12px; border-radius: 12px; background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.35); color: #92400e; font-size: 12px; display: flex; gap: 6px; align-items: center; }
+  /* Barra de rolagem fina e discreta quando as abas não cabem (em vez da padrão do navegador) */
+  .adm-abas { scrollbar-width: thin; scrollbar-color: rgb(var(--adm-tinta) / 0.25) transparent; }
+  .adm-abas::-webkit-scrollbar { height: 4px; }
+  .adm-abas::-webkit-scrollbar-track { background: transparent; }
+  .adm-abas::-webkit-scrollbar-thumb { background: rgb(var(--adm-tinta) / 0.25); border-radius: 99px; }
+  /* Na ficha do aluno as abas quebram linha em vez de rolar de lado */
+  .adm-abas-ficha { margin-bottom: 14px; flex-wrap: wrap; overflow: visible; gap: 2px 0; }
+  .adm-abas-ficha button { padding: 8px 7px; font-size: 12.5px; gap: 5px; }
+  .adm-contador { font-size: 10px; background: rgb(var(--accent-rgb) / 0.15); color: var(--accent-soft); border-radius: 99px; padding: 0 6px; }
+  .adm-subtitulo { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--adm-suave); margin: 18px 0 8px; }
+  .adm-form-secao { grid-column: 1 / -1; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent-soft); margin-top: 6px; padding-top: 10px; border-top: 1px solid rgb(var(--adm-tinta) / 0.1); }
+  .adm-status-bloco { padding: 12px 14px; border-radius: 14px; margin-bottom: 14px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.22); }
+  .adm-status-bloco.contratado { background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.35); }
+  .adm-hist-item { padding: 12px; border-radius: 12px; margin-bottom: 10px; background: rgb(var(--adm-tinta) / 0.04); border: 1px solid rgb(var(--adm-tinta) / 0.1); }
+  .adm-detalhes { margin-bottom: 8px; border-radius: 12px; border: 1px solid rgb(var(--adm-tinta) / 0.12); background: rgb(var(--adm-tinta) / 0.03); font-size: 13px; }
+  .adm-detalhes summary { cursor: pointer; padding: 10px 12px; color: var(--adm-texto-forte); font-weight: 600; }
+  .adm-detalhes > p { margin: 0; padding: 0 12px 12px; white-space: pre-wrap; }
+  .adm-entrevista-item { padding: 8px 12px 10px; border-top: 1px solid rgb(var(--adm-tinta) / 0.08); font-size: 12px; line-height: 1.5; }
+  .adm-entrevista-p { color: var(--adm-suave); }
+  .adm-entrevista-r { color: var(--adm-texto-forte); margin: 2px 0; }
+  .adm-entrevista-f { color: #0e7490; }
+  .adm-citacao { margin: 0; padding: 8px 12px; border-left: 3px solid rgb(var(--accent-rgb) / 0.4); background: rgb(var(--adm-tinta) / 0.04); font-size: 13px; white-space: pre-wrap; }
+  .adm-linha-tempo { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  .adm-linha-tempo li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid rgb(var(--adm-tinta) / 0.08); }
+  .adm-linha-tempo li span:last-child { margin-left: auto; font-size: 11px; color: var(--adm-suave); }
+  .adm-vazio-bloco { text-align: center; padding: 28px 16px; color: var(--adm-suave); border: 1px dashed rgb(var(--adm-tinta) / 0.2); border-radius: 14px; font-size: 13px; }
+        .amsg-item { width: 100%; display: flex; gap: 10px; align-items: center; padding: 11px 12px; border: none; border-bottom: 1px solid rgb(var(--adm-tinta) / 0.06); background: none; cursor: pointer; text-align: left; font-family: inherit; }
+        .amsg-item:hover { background: rgb(var(--adm-tinta) / 0.04); }
+        .amsg-item.ativo { background: rgb(var(--accent-rgb) / 0.1); }
+        .amsg-icone { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; flex: 0 0 auto; }
+        .amsg-icone.direto { background: rgba(29,95,214,0.12); color: #1d5fd6; }
+        .amsg-icone.grupo { background: rgba(5,150,105,0.12); color: #047857; }
+        .amsg-icone.geral { background: rgba(201,138,4,0.14); color: #a16207; }
+        .amsg-badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; background: #16a34a; color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .adm-folha-wrap .cv-folha { box-shadow: 0 8px 24px rgb(var(--adm-tinta) / 0.15); padding: 28px 26px; }
   .adm-grade-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
   .adm-fundo { position: fixed; inset: 0; background: rgba(15,30,61,0.3); z-index: 80; display: flex; justify-content: flex-end; }
   .adm-gaveta { width: 100%; max-width: 480px; height: 100%; overflow-y: auto; background: rgb(var(--surface-rgb)); border-left: 1px solid rgb(var(--accent-rgb) / 0.35); padding: 22px 18px; }

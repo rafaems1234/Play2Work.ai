@@ -113,3 +113,9 @@ export const tocarSomLiga = (subiu) => (subiu
     { frequencia: 392, inicio: 0, duracao: 0.2, tipo: 'sine', volume: 0.14 },
     { frequencia: 293.66, inicio: 0.16, duracao: 0.26, tipo: 'sine', volume: 0.12 },
   ]));
+
+// Mensagem nova no chat: dois toques curtos e suaves
+export const tocarSomMensagem = () => tocarSequencia([
+  { frequencia: 880, inicio: 0, duracao: 0.08, volume: 0.12 },
+  { frequencia: 1175, inicio: 0.1, duracao: 0.12, volume: 0.12 },
+]);
