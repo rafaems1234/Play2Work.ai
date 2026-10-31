@@ -23,6 +23,28 @@
   --gradient: linear-gradient(135deg, var(--accent-strong) 0%, var(--accent-2-strong) 100%);
   --gradient-soft: linear-gradient(135deg, var(--accent), var(--accent-2));
 
+  /* Tema (app do aluno). Escuro é o padrão; o claro fica em [data-tema="claro"]
+     logo abaixo. Os componentes usam só estas variáveis pra texto, superfícies
+     translúcidas (--tinta-rgb) e campos (--campo-rgb) -- nada de cor fixa. */
+  --tinta-rgb: 255 255 255;          /* véus e bordas: branco translúcido no escuro */
+  --campo-rgb: 0 0 0;                /* fundo de campos e sombras */
+  --txt-1: #f1f5f9;                  /* títulos */
+  --txt-1b: #e2e8f0;
+  --txt-2: #cbd5e1;                  /* texto corrido */
+  --txt-3: #94a3b8;
+  --txt-4: #64748b;                  /* legendas */
+  --txt-5: #475569;
+  --ok: #34d399;
+  --ok-suave: #6ee7b7;
+  --ok-claro: #a7f3d0;
+  --erro: #f87171;
+  --erro-suave: #fca5a5;
+  --erro-claro: #fecaca;
+  --aviso: #fbbf24;
+  --aviso-suave: #fcd34d;
+  --info: #60a5fa;
+  --trofeu-bloqueado: #0b0b10;       /* silhueta das ligas ainda não alcançadas */
+
   --sans: 'Inter', system-ui, -apple-system, sans-serif;
   --heading: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
@@ -37,6 +59,49 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Tema claro: mesmo azul da marca, fundo azul-gelo e texto escuro. Os tons
+   de status ficam mais fortes pra manter o contraste no fundo claro. */
+:root[data-tema="claro"] {
+  --accent-rgb: 22 96 230;           /* #1660e6 */
+  --accent-strong-rgb: 22 82 224;
+  --accent-2-rgb: 0 132 158;         /* ciano escurecido: no branco o #00e5ff some */
+  --surface-rgb: 255 255 255;
+  --accent-soft: #1652e0;
+  --accent-2-strong: #00788f;
+
+  --text: #475569;
+  --text-h: #0f172a;
+  --bg: #eef3fa;
+  --border: rgba(15, 23, 42, 0.1);
+  --code-bg: #e5ebf5;
+
+  --tinta-rgb: 15 23 42;             /* véus e bordas: azul-marinho translúcido */
+  --campo-rgb: 255 255 255;
+  --txt-1: #0f172a;
+  --txt-1b: #1e293b;
+  --txt-2: #334155;
+  --txt-3: #475569;
+  --txt-4: #5b6b82;
+  --txt-5: #7a889c;
+  --ok: #059669;
+  --ok-suave: #047857;
+  --ok-claro: #065f46;
+  --erro: #dc2626;
+  --erro-suave: #b91c1c;
+  --erro-claro: #991b1b;
+  --aviso: #b45309;
+  --aviso-suave: #92400e;
+  --info: #2563eb;
+  --trofeu-bloqueado: #d3dbe8;
+
+  color-scheme: light;
+}
+
+/* Texto na cor de uma liga (style={{ '--liga-cor': ..., '--liga-cor-escura': ... }}):
+   no escuro o tom claro da liga; no claro o tom escuro (prata e pérola somem no branco) */
+.cor-liga { color: var(--liga-cor); }
+:root[data-tema="claro"] .cor-liga { color: var(--liga-cor-escura); }
 
 @media (max-width: 1024px) {
   :root {

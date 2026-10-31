@@ -7,15 +7,17 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from models import Estudante, Vaga, Candidatura, Turma, Curriculo, HistoricoEntrevista, ObservacaoEstudante, MudancaStatusContratacao, EvidenciaCompetencia, RespostaSituacao, Certificado, Canal, Mensagem
+from models import Estudante, Vaga, Candidatura, Turma, Curriculo, HistoricoEntrevista, ObservacaoEstudante, MudancaStatusContratacao, EvidenciaCompetencia, RespostaSituacao, Canal, Mensagem, ContratoAprendizagem
 from database import get_db
-from services import ITINERARIOS_QUIZ, calcular_desempenho_para_vaga, taxas_de_acerto_quiz, gerar_nome_exibicao
+from services import ITINERARIOS_QUIZ, AIService, calcular_desempenho_para_vaga, taxas_de_acerto_quiz, gerar_nome_exibicao
 from auth import ADMIN_SENHA, criar_token_admin, get_admin_atual, normalizar_cpf, cpf_valido
 from limiter import limiter
 from fuso import hoje as hoje_na_escola, agora_utc, data_local
 from competencias import mapas_de_varios, nota_de_competencias, mapa_para_tela
 from atividades import SITUACOES
-from fotos import FotoRequest, salvar_foto, remover_foto, resposta_da_foto
+from aulas import certificados_dos_alunos
+import ficha_pap
+from fotos import FotoRequest, salvar_foto, remover_foto, resposta_da_foto, resposta_da_foto_curriculo
 
 # Painel da escola: gestão de turmas/alunos/itinerários e seleção dos alunos
 # com melhor desempenho pra indicar a uma vaga de empresa parceira.
@@ -24,7 +26,8 @@ router = APIRouter(prefix="/admin", tags=["Play2Work.AI - Painel da Escola"])
 protegido = [Depends(get_admin_atual)]
 
 # Status de contratação do aluno (fila do PAP) e status de uma candidatura
-STATUS_CONTRATACAO = {"disponivel": "Disponível", "contratado": "Contratado"}
+# Status do aprendiz como na planilha do PAP ("disponivel" é o "No aguardo")
+STATUS_CONTRATACAO = ficha_pap.STATUS_APRENDIZ
 STATUS_CANDIDATURA = {"enviada": "Enviada", "em_analise": "Em análise", "aprovada": "Aprovada", "recusada": "Recusada"}
 
 
@@ -48,6 +51,7 @@ class NovoEstudanteRequest(BaseModel):
     telefone: Optional[str] = Field(default=None, max_length=20)
     responsavel_nome: Optional[str] = Field(default=None, max_length=100)
     responsavel_telefone: Optional[str] = Field(default=None, max_length=20)
+    ficha: Optional[dict] = None  # campos da planilha do PAP (data/ficha_pap.json)
 
 
 class AtualizarEstudanteRequest(BaseModel):
@@ -63,6 +67,7 @@ class AtualizarEstudanteRequest(BaseModel):
     responsavel_telefone: Optional[str] = Field(default=None, max_length=20)
     ja_trabalhou: Optional[bool] = None
     experiencia_previa: Optional[str] = Field(default=None, max_length=2000)
+    ficha: Optional[dict] = None  # campos da planilha do PAP (data/ficha_pap.json)
 
 
 class StatusContratacaoRequest(BaseModel):
@@ -218,7 +223,7 @@ def criar_turma(data: TurmaRequest, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------- alunos
-def _estudante_para_dict(est: Estudante, taxa_acerto: float | None, total_candidaturas: int, total_indicacoes: int, curriculo_em: Optional[datetime] = None, total_certificados: int = 0) -> dict:
+def _estudante_para_dict(est: Estudante, taxa_acerto: float | None, total_candidaturas: int, total_indicacoes: int, curriculo_em: Optional[datetime] = None, certificados: Optional[list[dict]] = None, contrato_atual=None) -> dict:
     return {
         "id": est.id,
         "nome": est.nome,
@@ -226,6 +231,7 @@ def _estudante_para_dict(est: Estudante, taxa_acerto: float | None, total_candid
         "cpf": est.cpf,
         "data_nascimento": est.data_nascimento.isoformat() if est.data_nascimento else None,
         "email": est.email,
+        "linkedin": est.linkedin,
         "turma_id": est.turma_id,
         "turma": est.turma.nome if est.turma else None,
         "itinerario": est.itinerario,
@@ -248,9 +254,17 @@ def _estudante_para_dict(est: Estudante, taxa_acerto: float | None, total_candid
         "experiencia_previa": est.experiencia_previa,
         "tem_foto": est.foto_atualizada_em is not None,
         "foto_no_curriculo": bool(est.foto_no_curriculo),
+        "tem_foto_curriculo": est.foto_curriculo_atualizada_em is not None,
+        "foto_curriculo_atualizada_em": _iso(est.foto_curriculo_atualizada_em),
         "foto_atualizada_em": _iso(est.foto_atualizada_em),
         "curriculo_atualizado_em": _iso(curriculo_em),
-        "total_certificados": total_certificados,
+        # Certificado de conclusão da trilha EAD: retirado em mãos na escola
+        "certificados_a_retirar": sum(1 for c in certificados or [] if not c["retirado_em"]),
+        "certificados_retirados": sum(1 for c in certificados or [] if c["retirado_em"]),
+        # Ficha do PAP (colunas da planilha) e o contrato mais recente
+        **ficha_pap.para_dict(est, "aluno"),
+        "cadastro_atualizado_em": _iso(est.cadastro_atualizado_em),
+        "contrato_atual": ficha_pap.contrato_para_dict(contrato_atual),
     }
 
 
@@ -294,13 +308,14 @@ def listar_estudantes(
         .filter(Curriculo.estudante_id.in_(ids)).group_by(Curriculo.estudante_id).all()
     ) if ids else {}
 
-    certificados = dict(
-        db.query(Certificado.estudante_id, func.count(Certificado.id))
-        .filter(Certificado.estudante_id.in_(ids)).group_by(Certificado.estudante_id).all()
-    ) if ids else {}
+    certificados = certificados_dos_alunos(db, estudantes)
+    contratos_atuais = {}
+    for contrato in (db.query(ContratoAprendizagem).filter(ContratoAprendizagem.estudante_id.in_(ids))
+                     .order_by(ContratoAprendizagem.data_inicial.desc(), ContratoAprendizagem.id.desc()).all() if ids else []):
+        contratos_atuais.setdefault(contrato.estudante_id, contrato)
 
     return [
-        _estudante_para_dict(e, taxas[e.id], candidaturas.get(e.id, 0), indicacoes.get(e.id, 0), curriculos.get(e.id), certificados.get(e.id, 0))
+        _estudante_para_dict(e, taxas[e.id], candidaturas.get(e.id, 0), indicacoes.get(e.id, 0), curriculos.get(e.id), certificados[e.id], contratos_atuais.get(e.id))
         for e in estudantes
     ]
 
@@ -325,6 +340,8 @@ def cadastrar_estudante(data: NovoEstudanteRequest, db: Session = Depends(get_db
         telefone=_normalizar_telefone(data.telefone),
         responsavel_nome=(data.responsavel_nome or "").strip() or None,
         responsavel_telefone=_normalizar_telefone(data.responsavel_telefone),
+        cadastro_atualizado_em=hoje_na_escola(),
+        **ficha_pap.validar("aluno", data.ficha or {}, parcial=True),
     )
     db.add(estudante)
     db.commit()
@@ -365,6 +382,10 @@ def atualizar_estudante(estudante_id: int, data: AtualizarEstudanteRequest, db: 
         estudante.ja_trabalhou = data.ja_trabalhou
     if "experiencia_previa" in campos:
         estudante.experiencia_previa = (data.experiencia_previa or "").strip() or None
+    if data.ficha is not None:
+        for campo, valor in ficha_pap.validar("aluno", data.ficha, parcial=True).items():
+            setattr(estudante, campo, valor)
+    estudante.cadastro_atualizado_em = hoje_na_escola()  # "data atualização" da planilha
     db.commit()
     db.refresh(estudante)
     return {
@@ -378,13 +399,81 @@ def atualizar_estudante(estudante_id: int, data: AtualizarEstudanteRequest, db: 
         "turma": estudante.turma.nome if estudante.turma else None,
         "itinerario": estudante.itinerario,
         "habilidades": estudante.habilidades or [],
+        **ficha_pap.para_dict(estudante, "aluno"),
+        "cadastro_atualizado_em": _iso(estudante.cadastro_atualizado_em),
     }
+
+
+# ---------------------------------------------------------------- contratos (planilha do PAP)
+def _marcar_contratado_pelo_contrato(estudante: Estudante, contrato: ContratoAprendizagem, db: Session) -> None:
+    """Contrato ativo = aluno contratado por aquela empresa (e o selo do app acompanha)."""
+    mudou = estudante.status_contratacao != "contratado" or estudante.empresa_contratante != contrato.empresa
+    estudante.status_contratacao = "contratado"
+    estudante.empresa_contratante = contrato.empresa
+    estudante.contratado_em = contrato.data_inicial
+    estudante.categoria_status = AIService.calcular_categoria_status(estudante.xp_total or 0, True)
+    if mudou:
+        db.add(MudancaStatusContratacao(estudante_id=estudante.id, status="contratado", empresa=contrato.empresa))
+
+
+@router.get("/estudantes/{estudante_id}/contratos", dependencies=protegido)
+def contratos_do_aluno(estudante_id: int, db: Session = Depends(get_db)):
+    _buscar_estudante(estudante_id, db)
+    contratos = (db.query(ContratoAprendizagem).filter(ContratoAprendizagem.estudante_id == estudante_id)
+                 .order_by(ContratoAprendizagem.data_inicial.desc(), ContratoAprendizagem.id.desc()).all())
+    return [ficha_pap.contrato_para_dict(c) for c in contratos]
+
+
+@router.post("/estudantes/{estudante_id}/contratos", status_code=status.HTTP_201_CREATED, dependencies=protegido)
+def criar_contrato(estudante_id: int, dados: dict, db: Session = Depends(get_db)):
+    estudante = _buscar_estudante(estudante_id, db)
+    limpos = ficha_pap.validar("contrato", dados)
+    ficha_pap.conferir_contrato(limpos)
+    contrato = ContratoAprendizagem(estudante_id=estudante.id, **limpos)
+    db.add(contrato)
+    if contrato.status == "Ativo":
+        _marcar_contratado_pelo_contrato(estudante, contrato, db)
+    estudante.cadastro_atualizado_em = hoje_na_escola()
+    db.commit()
+    db.refresh(contrato)
+    return ficha_pap.contrato_para_dict(contrato)
+
+
+@router.put("/contratos/{contrato_id}", dependencies=protegido)
+def atualizar_contrato(contrato_id: int, dados: dict, db: Session = Depends(get_db)):
+    contrato = db.query(ContratoAprendizagem).filter(ContratoAprendizagem.id == contrato_id).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato não encontrado")
+    limpos = ficha_pap.validar("contrato", dados)
+    ficha_pap.conferir_contrato(limpos)
+    for campo, valor in limpos.items():
+        setattr(contrato, campo, valor)
+    estudante = _buscar_estudante(contrato.estudante_id, db)
+    if contrato.status == "Ativo":
+        _marcar_contratado_pelo_contrato(estudante, contrato, db)
+    # Contrato finalizado não muda o status sozinho: a escola escolhe se o aluno volta
+    # pro "No aguardo", se foi desistência ou expirou (bloco de status da ficha)
+    estudante.cadastro_atualizado_em = hoje_na_escola()
+    db.commit()
+    return ficha_pap.contrato_para_dict(contrato)
+
+
+@router.delete("/contratos/{contrato_id}", dependencies=protegido)
+def apagar_contrato(contrato_id: int, db: Session = Depends(get_db)):
+    """Pra corrigir um cadastro errado."""
+    contrato = db.query(ContratoAprendizagem).filter(ContratoAprendizagem.id == contrato_id).first()
+    if not contrato:
+        raise HTTPException(status_code=404, detail="Contrato não encontrado")
+    db.delete(contrato)
+    db.commit()
+    return {"sucesso": True}
 
 
 @router.put("/estudantes/{estudante_id}/status", dependencies=protegido)
 def mudar_status_contratacao(estudante_id: int, data: StatusContratacaoRequest, db: Session = Depends(get_db)):
     """
-    Marca o aluno como contratado (com a empresa) ou devolve pra fila.
+    Status do aprendiz como na planilha: contratado (com a empresa), no aguardo
+    (fila), desistência ou expirado.
     Toda mudança fica registrada em mudancas_status_contratacao.
     """
     if data.status not in STATUS_CONTRATACAO:
@@ -400,6 +489,8 @@ def mudar_status_contratacao(estudante_id: int, data: StatusContratacaoRequest, 
         estudante.empresa_contratante = None
         estudante.contratado_em = None
     estudante.status_contratacao = data.status
+    # O selo do app vira "Contratado" (ou volta pro nível do XP) junto com a marcação da escola
+    estudante.categoria_status = AIService.calcular_categoria_status(estudante.xp_total or 0, data.status == "contratado")
     db.add(MudancaStatusContratacao(estudante_id=estudante.id, status=data.status, empresa=empresa))
     db.commit()
     return {
@@ -413,6 +504,12 @@ def mudar_status_contratacao(estudante_id: int, data: StatusContratacaoRequest, 
 @router.get("/estudantes/{estudante_id}/foto", dependencies=protegido)
 def foto_do_aluno(estudante_id: int, db: Session = Depends(get_db)):
     return resposta_da_foto(_buscar_estudante(estudante_id, db))
+
+
+@router.get("/estudantes/{estudante_id}/foto-curriculo", dependencies=protegido)
+def foto_do_curriculo_do_aluno(estudante_id: int, db: Session = Depends(get_db)):
+    """Só leitura: a foto do currículo quem escolhe e envia é o aluno."""
+    return resposta_da_foto_curriculo(_buscar_estudante(estudante_id, db))
 
 
 @router.put("/estudantes/{estudante_id}/foto", dependencies=protegido)

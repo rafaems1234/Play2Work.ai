@@ -1,0 +1,41 @@
+{
+  "palavras_minimas": 12,
+  "maximos": { "experiencias": 6, "hard_skills": 10, "soft_skills": 6, "areas": 4 },
+  "recusas": {
+    "curto": "Conte um pouco mais sobre você para a gente montar o currículo: escola, cursos, projetos, o que você sabe fazer e do que gosta. Pelo menos duas ou três frases.",
+    "sem_sentido": "Não deu para entender o texto. Escreva frases sobre você: o que estuda, cursos que fez, projetos, atividades e habilidades.",
+    "inadequado": "O texto tem palavras inadequadas para um currículo. Reescreva com um tom profissional.",
+    "fora_do_tema": "Esse texto não fala sobre você. O currículo é montado só com o que você contar da sua vida: escola, cursos, projetos e habilidades.",
+    "dados_pessoais": "Não precisa escrever CPF, telefone, endereço ou senha: seus dados de contato já vêm do cadastro da escola. Fale só das suas experiências e habilidades."
+  },
+  "verbos_experiencia": [
+    "fiz", "faco", "participei", "participo", "ajudo", "ajudei", "organizo", "organizei", "trabalho", "trabalhei", "criei", "crio",
+    "desenvolvi", "monitor", "voluntari", "curso", "projeto", "gremio", "olimpiada", "feira", "aprendi", "liderei", "apresentei"
+  ],
+  "habilidades_conhecidas": [
+    "Python", "SQL", "Excel", "Power BI", "JavaScript", "React", "HTML", "CSS", "Arduino", "Robótica", "Matemática", "Inglês",
+    "Espanhol", "Redação", "Pacote Office", "Word", "PowerPoint", "Canva", "Atendimento", "Digitação", "Informática", "Programação",
+    "Planilhas", "Biologia", "Química", "Física", "LGPD", "Edição de vídeo", "Design", "Libras",
+    "Direito", "Contratos", "Redação Jurídica", "Arquivo",
+    "Estatística", "Visualização de Dados", "Análise de Dados",
+    "Rotinas Administrativas", "Controle de Estoque", "Financeiro", "Fluxo de Caixa", "Faturamento", "Notas Fiscais",
+    "Recrutamento", "Seleção", "Departamento Pessoal", "Folha de Pagamento", "CLT", "Integração de Funcionários",
+    "Eletrônica", "Elétrica", "Mecânica", "Automação", "CLP", "Sensores", "Solda", "Desenho Técnico", "AutoCAD",
+    "Inteligência Artificial", "Machine Learning", "Aprendizado de Máquina", "ChatGPT", "Engenharia de Prompt", "Chatbots"
+  ],
+  "soft_por_palavra": [
+    [["equipe", "grupo", "gremio", "time", "turma", "colegas", "juntos"], "Trabalho em equipe"],
+    [["organiz", "planej", "agenda"], "Organização"],
+    [["apresent", "comunic", "falar", "conversar", "atend"], "Comunicação"],
+    [["lider", "coorden", "capitao", "representante"], "Liderança"],
+    [["ajud", "volunt", "doacao", "campanha"], "Colaboração"],
+    [["aprend", "curios", "estud", "pesquis", "sozinho"], "Vontade de aprender"],
+    [["pontual", "responsab", "compromet", "cumpr"], "Responsabilidade"],
+    [["criativ", "ideia", "inventei", "criei"], "Criatividade"]
+  ],
+  "palavras_vazias": [
+    "para", "pela", "pelo", "como", "mais", "muito", "muita", "minha", "minhas", "meus", "meu", "sobre", "quando", "porque",
+    "tambem", "entao", "desde", "ainda", "sempre", "estou", "tenho", "gosto", "estudo", "estudante", "escola", "fazer", "sou",
+    "esse", "essa", "isso", "aqui", "onde", "tudo", "todo", "toda", "cada", "outro", "outra", "pouco", "anos", "coisa", "coisas"
+  ]
+}

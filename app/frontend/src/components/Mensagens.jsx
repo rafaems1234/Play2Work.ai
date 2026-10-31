@@ -4,6 +4,7 @@ import { IconChat, IconGrupo, IconMegafone, IconGraduationCap, IconSino } from '
 import { apiFetch, lerErro } from '../api';
 import Conversa, { ESTILOS_CONVERSA } from './Conversa';
 import { tocarSomMensagem } from '../utils/sound';
+import { useTema } from '../hooks/useTema';
 
 // Mensagens do aluno ("o WhatsApp da escola"):
 //   - Sininho no topo: notificações -- o que chegou de novo; clicar leva
@@ -100,8 +101,8 @@ export const SinoNotificacoes = ({ total, aoAbrirCanal }) => {
         aria-expanded={aberto}
         style={{
           position: 'relative', width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
-          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
-          color: total ? 'var(--accent-soft)' : '#94a3b8', cursor: 'pointer', fontSize: '16px',
+          background: 'rgb(var(--tinta-rgb) / 0.03)', border: '1px solid rgb(var(--tinta-rgb) / 0.08)',
+          color: total ? 'var(--accent-soft)' : 'var(--txt-3)', cursor: 'pointer', fontSize: '16px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
       >
@@ -120,12 +121,12 @@ export const SinoNotificacoes = ({ total, aoAbrirCanal }) => {
             style={{
               position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: '320px', maxWidth: '88vw', zIndex: 70,
               background: 'rgb(var(--surface-rgb) / 0.98)', backdropFilter: 'blur(20px)', border: '1px solid rgb(var(--accent-rgb) / 0.2)',
-              borderRadius: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', overflow: 'hidden',
+              borderRadius: '16px', boxShadow: '0 20px 50px rgb(var(--campo-rgb) / 0.5)', overflow: 'hidden',
             }}
           >
-            <div style={{ padding: '12px 14px', fontWeight: 800, color: '#f1f5f9', fontSize: '14px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Notificações</div>
-            {itens === null && <div style={{ padding: '14px', color: '#64748b', fontSize: '13px' }}>Carregando…</div>}
-            {itens?.length === 0 && <div style={{ padding: '18px 14px', color: '#64748b', fontSize: '13px', textAlign: 'center' }}>Nada novo por aqui.</div>}
+            <div style={{ padding: '12px 14px', fontWeight: 800, color: 'var(--txt-1)', fontSize: '14px', borderBottom: '1px solid rgb(var(--tinta-rgb) / 0.06)' }}>Notificações</div>
+            {itens === null && <div style={{ padding: '14px', color: 'var(--txt-4)', fontSize: '13px' }}>Carregando…</div>}
+            {itens?.length === 0 && <div style={{ padding: '18px 14px', color: 'var(--txt-4)', fontSize: '13px', textAlign: 'center' }}>Nada novo por aqui.</div>}
             {itens?.map((c) => {
               const Icone = ICONE_CANAL[c.tipo];
               return (
@@ -133,17 +134,17 @@ export const SinoNotificacoes = ({ total, aoAbrirCanal }) => {
                   <span className={`msg-icone ${c.tipo}`} style={{ width: '34px', height: '34px', fontSize: '16px' }}><Icone /></span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
-                      <strong style={{ color: '#f1f5f9', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</strong>
+                      <strong style={{ color: 'var(--txt-1)', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</strong>
                       <span style={{ fontSize: '11px', color: '#22c55e', flex: '0 0 auto' }}>{horaCurta(c.ultima_mensagem?.enviada_em)}</span>
                     </span>
-                    <span style={{ display: 'block', fontSize: '12px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ display: 'block', fontSize: '12px', color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {c.nao_lidas > 1 ? `${c.nao_lidas} mensagens novas · ` : ''}{c.ultima_mensagem?.texto}
                     </span>
                   </span>
                 </button>
               );
             })}
-            <button type="button" onClick={() => ir(null)} style={{ width: '100%', padding: '11px', background: 'rgba(255,255,255,0.03)', border: 'none', borderTop: '1px solid rgba(255,255,255,0.06)', color: 'var(--accent-soft)', fontWeight: 700, fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button type="button" onClick={() => ir(null)} style={{ width: '100%', padding: '11px', background: 'rgb(var(--tinta-rgb) / 0.03)', border: 'none', borderTop: '1px solid rgb(var(--tinta-rgb) / 0.06)', color: 'var(--accent-soft)', fontWeight: 700, fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}>
               Ver todas as conversas
             </button>
           </motion.div>
@@ -155,6 +156,7 @@ export const SinoNotificacoes = ({ total, aoAbrirCanal }) => {
 
 // ---------------------------------------------------------------- uma conversa
 const ConversaAberta = ({ canal, aoVoltar, aoMudou }) => {
+  const [tema] = useTema();
   const [dados, setDados] = useState(null);
   const ultimoIdRef = useRef(0);
 
@@ -190,14 +192,15 @@ const ConversaAberta = ({ canal, aoVoltar, aoMudou }) => {
         <button type="button" className="msg-voltar" onClick={aoVoltar} aria-label="Voltar pras conversas">←</button>
         <span className={`msg-icone ${canal.tipo}`}><Icone /></span>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 800, color: '#f1f5f9', fontSize: '15px' }}>{canal.nome}</div>
-          <div style={{ fontSize: '11px', color: '#64748b' }}>
+          <div style={{ fontWeight: 800, color: 'var(--txt-1)', fontSize: '15px' }}>{canal.nome}</div>
+          <div style={{ fontSize: '11px', color: 'var(--txt-4)' }}>
             {canal.tipo === 'direto' ? 'Conversa com a coordenação da escola' : canal.tipo === 'grupo' ? 'Aprendizes da empresa e a coordenação' : 'Avisos da escola pra todos os alunos'}
           </div>
         </div>
       </div>
       {dados ? (
         <Conversa
+          tema={tema}
           mensagens={dados.mensagens}
           minhaSe={(m) => m.minha}
           mostrarAutor={canal.tipo === 'grupo'}
@@ -206,7 +209,7 @@ const ConversaAberta = ({ canal, aoVoltar, aoMudou }) => {
           aoEnviar={enviar}
           vistoEm={canal.tipo === 'direto' ? dados.escola_leu_em : undefined}
         />
-      ) : <p style={{ color: '#64748b', padding: '16px' }}>Carregando…</p>}
+      ) : <p style={{ color: 'var(--txt-4)', padding: '16px' }}>Carregando…</p>}
     </div>
   );
 };
@@ -215,10 +218,10 @@ const ConversaAberta = ({ canal, aoVoltar, aoMudou }) => {
 export const ESTILOS_MENSAGENS = `
   .msg-icone { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 19px; flex: 0 0 auto; }
   .msg-icone.direto { background: rgb(var(--accent-rgb) / 0.18); color: var(--accent-soft); }
-  .msg-icone.grupo { background: rgba(52,211,153,0.15); color: #6ee7b7; }
-  .msg-icone.geral { background: rgba(251,191,36,0.15); color: #fcd34d; }
-  .notif-item { width: 100%; display: flex; gap: 10px; align-items: center; padding: 10px 14px; background: none; border: none; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; text-align: left; font-family: inherit; color: inherit; }
-  .notif-item:hover { background: rgba(255,255,255,0.04); }
+  .msg-icone.grupo { background: rgba(52,211,153,0.15); color: var(--ok-suave); }
+  .msg-icone.geral { background: rgba(251,191,36,0.15); color: var(--aviso-suave); }
+  .notif-item { width: 100%; display: flex; gap: 10px; align-items: center; padding: 10px 14px; background: none; border: none; border-bottom: 1px solid rgb(var(--tinta-rgb) / 0.04); cursor: pointer; text-align: left; font-family: inherit; color: inherit; }
+  .notif-item:hover { background: rgb(var(--tinta-rgb) / 0.04); }
 `;
 
 const ChatAluno = ({ canalInicial, aoMudou }) => {
@@ -246,14 +249,14 @@ const ChatAluno = ({ canalInicial, aoMudou }) => {
       <style>{`
         ${ESTILOS_CONVERSA}
         .chat-caixa { display: grid; grid-template-columns: 320px minmax(0, 1fr); height: min(72vh, 760px); border-radius: 22px; overflow: hidden;
-          background: rgba(255,255,255,0.045); border: 1px solid rgb(var(--accent-rgb) / 0.15); }
-        .chat-lista { border-right: 1px solid rgba(255,255,255,0.06); overflow-y: auto; display: flex; flex-direction: column; }
-        .msg-topo { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
-        .msg-voltar { background: rgba(255,255,255,0.06); border: none; border-radius: 50%; width: 32px; height: 32px; color: #cbd5e1; cursor: pointer; font-size: 16px; display: none; align-items: center; justify-content: center; flex: 0 0 auto; }
-        .msg-item { width: 100%; display: flex; gap: 12px; align-items: center; padding: 12px 14px; background: none; border: none; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; text-align: left; font-family: inherit; color: inherit; }
-        .msg-item:hover { background: rgba(255,255,255,0.03); }
+          background: rgb(var(--tinta-rgb) / 0.045); border: 1px solid rgb(var(--accent-rgb) / 0.15); }
+        .chat-lista { border-right: 1px solid rgb(var(--tinta-rgb) / 0.06); overflow-y: auto; display: flex; flex-direction: column; }
+        .msg-topo { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid rgb(var(--tinta-rgb) / 0.06); }
+        .msg-voltar { background: rgb(var(--tinta-rgb) / 0.06); border: none; border-radius: 50%; width: 32px; height: 32px; color: var(--txt-2); cursor: pointer; font-size: 16px; display: none; align-items: center; justify-content: center; flex: 0 0 auto; }
+        .msg-item { width: 100%; display: flex; gap: 12px; align-items: center; padding: 12px 14px; background: none; border: none; border-bottom: 1px solid rgb(var(--tinta-rgb) / 0.04); cursor: pointer; text-align: left; font-family: inherit; color: inherit; }
+        .msg-item:hover { background: rgb(var(--tinta-rgb) / 0.03); }
         .msg-item.ativo { background: rgb(var(--accent-rgb) / 0.1); }
-        .chat-vazio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 100%; color: #64748b; font-size: 13px; text-align: center; padding: 20px; }
+        .chat-vazio { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 100%; color: var(--txt-4); font-size: 13px; text-align: center; padding: 20px; }
         @media (max-width: 760px) {
           .chat-caixa { grid-template-columns: 1fr; height: calc(100vh - 230px); min-height: 420px; }
           .chat-caixa.com-conversa .chat-lista { display: none; }
@@ -263,9 +266,9 @@ const ChatAluno = ({ canalInicial, aoMudou }) => {
       `}</style>
       <div className={`chat-caixa ${aberto ? 'com-conversa' : ''}`}>
         <div className="chat-lista">
-          <div className="msg-topo"><div style={{ fontWeight: 800, color: '#f1f5f9', fontSize: '18px' }}>Chat</div></div>
+          <div className="msg-topo"><div style={{ fontWeight: 800, color: 'var(--txt-1)', fontSize: '18px' }}>Chat</div></div>
           <div style={{ flex: 1 }}>
-            {canais === null && <p style={{ color: '#64748b', padding: '16px' }}>Carregando…</p>}
+            {canais === null && <p style={{ color: 'var(--txt-4)', padding: '16px' }}>Carregando…</p>}
             {canais?.map((c) => {
               const Icone = ICONE_CANAL[c.tipo];
               return (
@@ -273,11 +276,11 @@ const ChatAluno = ({ canalInicial, aoMudou }) => {
                   <span className={`msg-icone ${c.tipo}`}><Icone /></span>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                      <strong style={{ color: '#f1f5f9', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</strong>
-                      <span style={{ fontSize: '11px', color: c.nao_lidas ? '#22c55e' : '#64748b', flex: '0 0 auto' }}>{horaCurta(c.ultima_mensagem?.enviada_em)}</span>
+                      <strong style={{ color: 'var(--txt-1)', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nome}</strong>
+                      <span style={{ fontSize: '11px', color: c.nao_lidas ? '#22c55e' : 'var(--txt-4)', flex: '0 0 auto' }}>{horaCurta(c.ultima_mensagem?.enviada_em)}</span>
                     </span>
                     <span style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
-                      <span style={{ fontSize: '13px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--txt-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {c.ultima_mensagem ? c.ultima_mensagem.texto : c.tipo === 'direto' ? 'Fale com a coordenação por aqui' : 'Nenhuma mensagem ainda'}
                       </span>
                       <ContadorBolinha total={c.nao_lidas} style={{ minWidth: '20px', height: '20px' }} />
@@ -287,7 +290,7 @@ const ChatAluno = ({ canalInicial, aoMudou }) => {
               );
             })}
           </div>
-          <p style={{ fontSize: '11px', color: '#475569', padding: '10px 14px', margin: 0, lineHeight: 1.5 }}>
+          <p style={{ fontSize: '11px', color: 'var(--txt-5)', padding: '10px 14px', margin: 0, lineHeight: 1.5 }}>
             As conversas ficam registradas pela escola. No grupo da empresa, seus colegas veem só o seu nome curto.
           </p>
         </div>

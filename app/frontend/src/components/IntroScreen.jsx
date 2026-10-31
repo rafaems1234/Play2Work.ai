@@ -16,11 +16,11 @@ const LINHAS_TITULO = [
 ];
 
 const LINHAS_TERMINAL = [
-  { prefixo: '>', texto: 'carregando perfil: estudante · ensino médio', cor: '#94a3b8' },
-  { prefixo: '>', texto: 'itinerário: Tecnologia e Ciência de Dados', cor: '#94a3b8' },
-  { prefixo: '>', texto: 'cruzando 5 habilidades com 6 vagas...', cor: '#94a3b8' },
+  { prefixo: '>', texto: 'carregando perfil: estudante · ensino médio', cor: 'var(--txt-3)' },
+  { prefixo: '>', texto: 'itinerário: Ciência de Dados', cor: 'var(--txt-3)' },
+  { prefixo: '>', texto: 'cruzando 5 habilidades com 6 vagas...', cor: 'var(--txt-3)' },
   { prefixo: '✓', texto: 'match 100% · Jovem Aprendiz — Ciência de Dados', cor: 'var(--accent-2)' },
-  { prefixo: '✓', texto: 'quiz do dia gerado pela IA · 10 perguntas', cor: 'var(--accent-2)' },
+  { prefixo: '✓', texto: 'quiz do dia do banco da escola · 10 perguntas', cor: 'var(--accent-2)' },
   { prefixo: '★', texto: 'nível 3 · 270 XP · ofensiva de 6 dias · Liga Prata', cor: 'var(--accent)' },
 ];
 
@@ -105,7 +105,7 @@ const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
         .intro-raiz {
           position: relative;
           min-height: 100vh;
-          color: #cbd5e1;
+          color: var(--txt-2);
           font-family: var(--sans);
           overflow-x: hidden;
         }
@@ -115,8 +115,8 @@ const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
           display: flex; align-items: center; justify-content: space-between; gap: 16px;
           padding: 24px 0; border-bottom: 1px solid var(--border);
         }
-        .intro-marca { display: flex; align-items: center; gap: 12px; font-family: var(--heading); font-weight: 800; font-size: 20px; color: #fff; }
-        .intro-topo-tag { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #64748b; }
+        .intro-marca { display: flex; align-items: center; gap: 12px; font-family: var(--heading); font-weight: 800; font-size: 20px; color: var(--txt-1); }
+        .intro-topo-tag { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--txt-4); }
 
         .intro-hero {
           display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
@@ -125,7 +125,7 @@ const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
         .intro-titulo {
           font-family: var(--heading); font-weight: 800; text-transform: uppercase;
           font-size: clamp(40px, 6.4vw, 92px); line-height: 0.92; letter-spacing: -0.04em;
-          color: #fff; margin: 22px 0 28px;
+          color: var(--txt-1); margin: 22px 0 28px;
         }
         .intro-titulo-linha { display: block; overflow: hidden; padding-bottom: 0.04em; }
         .intro-titulo-linha > span { display: inline-block; }
@@ -133,8 +133,8 @@ const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
           background: linear-gradient(90deg, var(--accent), var(--accent-soft) 45%, var(--accent-2));
           -webkit-background-clip: text; background-clip: text; color: transparent;
         }
-        .intro-sub { font-size: 18px; line-height: 1.6; color: #94a3b8; max-width: 560px; }
-        .intro-sub strong { color: #fff; font-weight: 700; }
+        .intro-sub { font-size: 18px; line-height: 1.6; color: var(--txt-3); max-width: 560px; }
+        .intro-sub strong { color: var(--txt-1); font-weight: 700; }
 
         .intro-acoes { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; align-items: center; }
         .intro-btn {
@@ -149,21 +149,21 @@ const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
         .intro-btn:hover .intro-btn-seta { transform: translateX(4px); }
         .intro-btn-sec {
           font-family: var(--mono); font-size: 13px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
-          color: #e2e8f0; background: transparent; border: 1px solid rgba(255,255,255,0.18); padding: 17px 24px; cursor: pointer;
+          color: var(--txt-1b); background: transparent; border: 1px solid rgb(var(--tinta-rgb) / 0.18); padding: 17px 24px; cursor: pointer;
           transition: border-color 0.2s ease, color 0.2s ease;
         }
         .intro-btn-sec:hover { border-color: var(--accent); color: var(--accent); }
-        .intro-dica-tecla { font-family: var(--mono); font-size: 11px; color: #475569; letter-spacing: 1px; }
-        .intro-dica-tecla kbd { border: 1px solid #334155; border-radius: 4px; padding: 2px 6px; color: #94a3b8; font-family: inherit; }
+        .intro-dica-tecla { font-family: var(--mono); font-size: 11px; color: var(--txt-5); letter-spacing: 1px; }
+        .intro-dica-tecla kbd { border: 1px solid var(--txt-5); border-radius: 4px; padding: 2px 6px; color: var(--txt-3); font-family: inherit; }
 
         .intro-terminal {
           background: rgb(var(--surface-rgb) / 0.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-          border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; overflow: hidden;
-          box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 0 1px rgb(var(--accent-rgb) / 0.08), 0 0 60px rgb(var(--accent-rgb) / 0.12);
+          border: 1px solid rgb(var(--tinta-rgb) / 0.1); border-radius: 14px; overflow: hidden;
+          box-shadow: 0 30px 80px rgb(var(--campo-rgb) / 0.6), 0 0 0 1px rgb(var(--accent-rgb) / 0.08), 0 0 60px rgb(var(--accent-rgb) / 0.12);
         }
-        .intro-terminal-barra { display: flex; align-items: center; gap: 7px; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+        .intro-terminal-barra { display: flex; align-items: center; gap: 7px; padding: 12px 16px; border-bottom: 1px solid rgb(var(--tinta-rgb) / 0.07); }
         .intro-terminal-barra > span { width: 11px; height: 11px; border-radius: 50%; }
-        .intro-terminal-titulo { margin-left: 10px; font-family: var(--mono); font-size: 11px; color: #64748b; letter-spacing: 1px; }
+        .intro-terminal-titulo { margin-left: 10px; font-family: var(--mono); font-size: 11px; color: var(--txt-4); letter-spacing: 1px; }
         .intro-terminal-corpo { padding: 22px 20px 26px; font-family: var(--mono); font-size: 13px; line-height: 2; min-height: 236px; }
         .intro-cursor { color: var(--accent); animation: introPisca 1s steps(1) infinite; }
         @keyframes introPisca { 50% { opacity: 0; } }
@@ -174,36 +174,36 @@ const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
         }
         .intro-numero { padding: 30px 24px; border-right: 1px solid var(--border); }
         .intro-numero:last-child { border-right: none; }
-        .intro-numero-valor { font-family: var(--heading); font-weight: 800; font-size: 54px; line-height: 1; color: #fff; letter-spacing: -0.03em; }
-        .intro-numero-rotulo { margin-top: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: #64748b; }
+        .intro-numero-valor { font-family: var(--heading); font-weight: 800; font-size: 54px; line-height: 1; color: var(--txt-1); letter-spacing: -0.03em; }
+        .intro-numero-rotulo { margin-top: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--txt-4); }
 
         .intro-secao { padding: 88px 0 40px; }
         .intro-secao-titulo {
-          font-family: var(--heading); font-weight: 800; text-transform: uppercase; color: #fff;
+          font-family: var(--heading); font-weight: 800; text-transform: uppercase; color: var(--txt-1);
           font-size: clamp(32px, 4.6vw, 60px); line-height: 0.98; letter-spacing: -0.03em; margin: 16px 0 48px; max-width: 900px;
         }
         .intro-modulos { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
         .intro-modulo {
           position: relative; padding: 32px 28px 36px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
-          background: rgba(255,255,255,0.0); transition: background 0.25s ease;
+          background: rgb(var(--tinta-rgb) / 0.0); transition: background 0.25s ease;
         }
         .intro-modulo::before {
           content: ''; position: absolute; left: 0; top: 0; height: 2px; width: 0; background: var(--accent); transition: width 0.35s ease;
         }
-        .intro-modulo:hover { background: rgba(255,255,255,0.025); }
+        .intro-modulo:hover { background: rgb(var(--tinta-rgb) / 0.025); }
         .intro-modulo:hover::before { width: 100%; }
-        .intro-modulo-num { font-family: var(--mono); font-size: 12px; color: #475569; letter-spacing: 1px; }
+        .intro-modulo-num { font-family: var(--mono); font-size: 12px; color: var(--txt-5); letter-spacing: 1px; }
         .intro-modulo-icone { font-size: 26px; color: var(--accent); margin: 28px 0 18px; transition: transform 0.25s ease; }
         .intro-modulo:hover .intro-modulo-icone { transform: translateY(-3px); }
-        .intro-modulo h3 { font-family: var(--heading); font-size: 22px; font-weight: 700; color: #fff; margin: 0 0 10px; text-transform: uppercase; letter-spacing: -0.01em; }
-        .intro-modulo p { font-size: 15px; line-height: 1.6; color: #8b95a7; }
+        .intro-modulo h3 { font-family: var(--heading); font-size: 22px; font-weight: 700; color: var(--txt-1); margin: 0 0 10px; text-transform: uppercase; letter-spacing: -0.01em; }
+        .intro-modulo p { font-size: 15px; line-height: 1.6; color: var(--txt-3); }
 
         .intro-cta-final {
           margin: 64px 0 0; padding: 56px 0 72px; border-top: 1px solid var(--border);
           display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 28px;
         }
         .intro-cta-final h2 { font-size: clamp(28px, 3.6vw, 46px); text-transform: uppercase; letter-spacing: -0.03em; line-height: 1; margin: 0; }
-        .intro-rodape { padding: 20px 0 32px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-family: var(--mono); font-size: 11px; letter-spacing: 1px; color: #475569; text-transform: uppercase; }
+        .intro-rodape { padding: 20px 0 32px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-family: var(--mono); font-size: 11px; letter-spacing: 1px; color: var(--txt-5); text-transform: uppercase; }
 
         @media (max-width: 960px) {
           .intro-hero { grid-template-columns: 1fr; gap: 40px; padding: 48px 0; }

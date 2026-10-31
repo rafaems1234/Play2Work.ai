@@ -3,12 +3,14 @@ import { AnimatePresence } from 'framer-motion';
 import { IconWarning, IconCheckCircle, IconTrash, IconCsv, IconDocument, IconBook } from './icons';
 import { apiFetch, lerErro, baixarArquivo } from '../api';
 import Gaveta from './Gaveta';
-import { dataHoraIsoParaBr } from '../utils/formatos';
+import { dataHoraIsoParaBr, dataIsoParaBr, linkWhatsapp } from '../utils/formatos';
 import { baixarCsv, carimboArquivo } from '../utils/exportar';
+import RetiradaCertificado, { ChipCertificado } from './RetiradaCertificado';
 
 // Trilha EAD no painel da escola: os professores montam módulos e aulas
 // (vídeo do YouTube não listado, texto, áudio/PDF de apoio, fixação), e a
-// coordenação acompanha a carga horária concluída por aluno.
+// coordenação acompanha a carga horária concluída por aluno e registra quem
+// já retirou na escola o certificado de conclusão.
 
 const horas = (minutos) => `${Math.floor(minutos / 60)}h${String(minutos % 60).padStart(2, '0')}`;
 const segundosParaMmSs = (s) => (s ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : '');
@@ -290,10 +292,11 @@ const COLUNAS_RELATORIO = [
   ['Carga concluída (min)', (l) => l.carga_concluida_minutos],
   ['Carga prevista (min)', (l) => l.carga_prevista_minutos],
   ['Módulos concluídos', (l) => l.modulos_concluidos.map((m) => m.modulo).join(' | ')],
-  ['Certificados enviados', (l) => l.total_certificados],
+  ['Certificados retirados', (l) => l.modulos_concluidos.filter((m) => m.retirado_em).length],
+  ['Certificados a retirar', (l) => l.modulos_concluidos.filter((m) => !m.retirado_em).length],
 ];
 
-const Relatorio = ({ turmas, trilha }) => {
+const Relatorio = ({ turmas, trilha, aoVerCertificados }) => {
   const [turmaId, setTurmaId] = useState('');
   const [moduloId, setModuloId] = useState('');
   const [dados, setDados] = useState(null);
@@ -310,7 +313,7 @@ const Relatorio = ({ turmas, trilha }) => {
   useEffect(() => { carregar(); }, [carregar]);
 
   const linhas = dados?.alunos || [];
-  const faltaCertificado = linhas.filter((l) => l.modulos_concluidos.some((m) => !m.tem_certificado));
+  const faltaRetirar = linhas.filter((l) => l.modulos_concluidos.some((m) => !m.retirado_em));
   return (
     <div>
       <div className="adm-filtros">
@@ -326,9 +329,9 @@ const Relatorio = ({ turmas, trilha }) => {
           <IconCsv style={{ verticalAlign: '-2px' }} /> Exportar CSV
         </button>
       </div>
-      {faltaCertificado.length > 0 && (
+      {faltaRetirar.length > 0 && (
         <div className="adm-aviso" style={{ marginBottom: '12px' }}>
-          <IconWarning /> {faltaCertificado.length} aluno{faltaCertificado.length > 1 ? 's' : ''} {faltaCertificado.length > 1 ? 'concluíram' : 'concluiu'} um módulo e ainda {faltaCertificado.length > 1 ? 'estão' : 'está'} sem certificado: {faltaCertificado.slice(0, 3).map((l) => l.nome).join(', ')}{faltaCertificado.length > 3 ? '…' : ''}. Envie pela ficha do aluno (aba Certificados).
+          <IconWarning /> <span>{faltaRetirar.length} aluno{faltaRetirar.length > 1 ? 's' : ''} {faltaRetirar.length > 1 ? 'concluíram' : 'concluiu'} um módulo e ainda não {faltaRetirar.length > 1 ? 'retiraram' : 'retirou'} o certificado: {faltaRetirar.slice(0, 3).map((l) => l.nome).join(', ')}{faltaRetirar.length > 3 ? '…' : ''}. <button type="button" className="adm-link" style={{ color: 'inherit', textDecoration: 'underline' }} onClick={aoVerCertificados}>Ver certificados</button></span>
         </div>
       )}
       <div className="adm-tabela-wrap">
@@ -344,7 +347,7 @@ const Relatorio = ({ turmas, trilha }) => {
                   <td className="num">{horas(l.carga_concluida_minutos)} / {horas(l.carga_prevista_minutos)}</td>
                   <td>
                     {l.modulos_concluidos.length === 0 ? <span className="adm-vazio">—</span> : l.modulos_concluidos.map((m) => (
-                      <span key={m.modulo_id} className={`adm-chip ${m.tem_certificado ? 'verde' : ''}`} style={{ marginRight: '4px' }}>{m.modulo}{m.tem_certificado ? ' · certificado' : ' · sem certificado'}</span>
+                      <span key={m.modulo_id} className={`adm-chip ${m.retirado_em ? 'verde' : 'amarelo'}`} style={{ marginRight: '4px' }}>{m.modulo}{m.retirado_em ? ' · certificado retirado' : ' · certificado a retirar'}</span>
                     ))}
                   </td>
                 </tr>
@@ -379,6 +382,87 @@ const Relatorio = ({ turmas, trilha }) => {
   );
 };
 
+// ---------------------------------------------------------------- certificados (retirada na escola)
+const COLUNAS_CERTIFICADOS = [
+  ['Aluno', (l) => l.nome],
+  ['CPF', (l) => l.cpf || ''],
+  ['Turma', (l) => l.turma || ''],
+  ['Módulo', (l) => l.modulo],
+  ['Concluído em', (l) => dataIsoParaBr(l.concluido_em)],
+  ['Situação', (l) => (l.retirado_em ? 'Retirado' : 'A retirar')],
+  ['Retirado em', (l) => dataIsoParaBr(l.retirado_em)],
+  ['Observação', (l) => l.observacao || ''],
+  ['Celular do aluno', (l) => l.telefone || ''],
+  ['Responsável', (l) => l.responsavel_nome || ''],
+  ['Celular do responsável', (l) => l.responsavel_telefone || ''],
+];
+
+const Certificados = ({ turmas }) => {
+  const [turmaId, setTurmaId] = useState('');
+  const [situacao, setSituacao] = useState('a_retirar');
+  const [busca, setBusca] = useState('');
+  const [linhas, setLinhas] = useState(null);
+
+  const carregar = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (turmaId) params.set('turma_id', turmaId);
+    const r = await apiFetch(`/api/admin/certificados?${params}`);
+    if (r.ok) setLinhas(await r.json());
+  }, [turmaId]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const todas = linhas || [];
+  const termo = busca.trim().toLowerCase();
+  const visiveis = todas.filter((l) => (situacao === 'a_retirar' ? !l.retirado_em : situacao === 'retirado' ? l.retirado_em : true)
+    && (!termo || l.nome.toLowerCase().includes(termo) || (l.cpf || '').includes(termo.replace(/\D/g, '') || '-')));
+  const contagem = { a_retirar: todas.filter((l) => !l.retirado_em).length, retirado: todas.filter((l) => l.retirado_em).length, todos: todas.length };
+
+  return (
+    <div>
+      <div className="adm-segmentado" role="group" aria-label="Situação do certificado">
+        {[['a_retirar', 'A retirar'], ['retirado', 'Retirados'], ['todos', 'Todos']].map(([id, rotulo]) => (
+          <button key={id} className={situacao === id ? 'ativo' : ''} aria-pressed={situacao === id} onClick={() => setSituacao(id)}>{rotulo}<span>{contagem[id]}</span></button>
+        ))}
+      </div>
+      <div className="adm-filtros">
+        <input className="adm-input" placeholder="Buscar por nome ou CPF" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ flex: '2 1 220px' }} aria-label="Buscar aluno" />
+        <select className="adm-input" value={turmaId} onChange={(e) => setTurmaId(e.target.value)} style={{ flex: '1 1 160px' }} aria-label="Turma">
+          <option value="">Todas as turmas</option>
+          {turmas.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+        </select>
+        <button type="button" className="adm-btn secundario pequeno" disabled={!visiveis.length} onClick={() => baixarCsv(`certificados_${carimboArquivo()}.csv`, visiveis, COLUNAS_CERTIFICADOS)}>
+          <IconCsv style={{ verticalAlign: '-2px' }} /> Exportar CSV
+        </button>
+      </div>
+      {linhas === null ? <p className="adm-vazio">Carregando…</p> : visiveis.length === 0 ? (
+        <p className="adm-vazio" style={{ padding: '20px 4px' }}>
+          {situacao === 'a_retirar' && !termo ? 'Ninguém com certificado pra retirar: todos os alunos que concluíram já buscaram.' : 'Nenhum certificado com esses filtros.'}
+        </p>
+      ) : visiveis.map((l) => {
+        const whats = linkWhatsapp(l.telefone) || linkWhatsapp(l.responsavel_telefone);
+        return (
+          <div key={`${l.estudante_id}-${l.modulo_id}`} className="adm-hist-item">
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: '8px' }}>
+              <div>
+                <div style={{ fontWeight: 700, color: 'var(--adm-texto-forte)', fontSize: '13px' }}>{l.nome}{l.turma ? <span style={{ fontWeight: 600, color: 'var(--adm-suave)' }}> · {l.turma}</span> : null}</div>
+                <div style={{ fontSize: '11px', color: 'var(--adm-suave)' }}>
+                  {l.modulo}{l.concluido_em ? ` · concluiu em ${dataIsoParaBr(l.concluido_em)}` : ''}{l.observacao ? ` · ${l.observacao}` : ''}
+                  {!l.retirado_em && whats && <> · <a className="adm-link" href={whats} target="_blank" rel="noopener noreferrer">avisar no WhatsApp</a></>}
+                </div>
+              </div>
+              <ChipCertificado retiradoEm={l.retirado_em} />
+            </div>
+            <RetiradaCertificado estudanteId={l.estudante_id} certificado={l} aoMudar={carregar} />
+          </div>
+        );
+      })}
+      <p style={{ fontSize: '12px', color: 'var(--adm-suave)', margin: '10px 2px' }}>
+        O certificado é entregue em mãos. Quando o aluno conclui todas as aulas publicadas de um módulo, ele aparece aqui como "a retirar" e o app avisa pra ele procurar a coordenação.
+      </p>
+    </div>
+  );
+};
+
 // ---------------------------------------------------------------- aba
 const AbaTrilha = ({ itinerarios, turmas }) => {
   const [secao, setSecao] = useState('conteudo');
@@ -395,10 +479,11 @@ const AbaTrilha = ({ itinerarios, turmas }) => {
       <div className="adm-segmentado" role="group" aria-label="Seção da trilha">
         <button className={secao === 'conteudo' ? 'ativo' : ''} onClick={() => setSecao('conteudo')} aria-pressed={secao === 'conteudo'}>Módulos e aulas</button>
         <button className={secao === 'relatorio' ? 'ativo' : ''} onClick={() => setSecao('relatorio')} aria-pressed={secao === 'relatorio'}>Relatório de carga horária</button>
+        <button className={secao === 'certificados' ? 'ativo' : ''} onClick={() => setSecao('certificados')} aria-pressed={secao === 'certificados'}>Certificados</button>
       </div>
-      {secao === 'conteudo'
-        ? <Conteudo itinerarios={itinerarios} trilha={trilha} recarregar={recarregar} />
-        : <Relatorio turmas={turmas} trilha={trilha} />}
+      {secao === 'conteudo' && <Conteudo itinerarios={itinerarios} trilha={trilha} recarregar={recarregar} />}
+      {secao === 'relatorio' && <Relatorio turmas={turmas} trilha={trilha} aoVerCertificados={() => setSecao('certificados')} />}
+      {secao === 'certificados' && <Certificados turmas={turmas} />}
     </div>
   );
 };

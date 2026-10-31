@@ -51,8 +51,8 @@ const LoginAluno = ({ aoEntrar, aoVoltar, aoAbrirAdmin }) => {
           padding: 14px 52px 14px 16px;
           border-radius: 14px;
           border: 1px solid rgb(var(--accent-rgb) / 0.2);
-          background: rgba(255,255,255,0.04);
-          color: #f1f5f9;
+          background: rgb(var(--tinta-rgb) / 0.04);
+          color: var(--txt-1);
           font-size: 20px;
           font-weight: 700;
           letter-spacing: 1.5px;
@@ -67,7 +67,7 @@ const LoginAluno = ({ aoEntrar, aoVoltar, aoAbrirAdmin }) => {
         .login-link {
           background: none;
           border: none;
-          color: #64748b;
+          color: var(--txt-4);
           font-size: 13px;
           font-weight: 600;
           cursor: pointer;
@@ -87,12 +87,12 @@ const LoginAluno = ({ aoEntrar, aoVoltar, aoAbrirAdmin }) => {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center', marginBottom: '24px' }}>
           <Logo size={34} />
-          <span style={{ fontSize: '22px', fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: '800', color: '#f1f5f9' }}>
+          <span style={{ fontSize: '22px', fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: '800', color: 'var(--txt-1)' }}>
             Play2Work<span className="gradient-text-live">.ai</span>
           </span>
         </div>
 
-        <label htmlFor="login-senha" style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#cbd5e1', marginBottom: '8px' }}>Senha</label>
+        <label htmlFor="login-senha" style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: 'var(--txt-2)', marginBottom: '8px' }}>Senha</label>
         <div style={{ position: 'relative' }}>
           <input
             id="login-senha"
@@ -109,15 +109,15 @@ const LoginAluno = ({ aoEntrar, aoVoltar, aoAbrirAdmin }) => {
             type="button"
             onClick={() => setMostrar((m) => !m)}
             aria-label={mostrar ? 'Esconder senha' : 'Mostrar senha'}
-            style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '18px', padding: '6px', display: 'flex' }}
+            style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--txt-4)', cursor: 'pointer', fontSize: '18px', padding: '6px', display: 'flex' }}
           >
             {mostrar ? <IconEyeSlash /> : <IconEye />}
           </button>
         </div>
-        <p style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>A senha é o seu CPF (só os números).</p>
+        <p style={{ fontSize: '12px', color: 'var(--txt-4)', marginTop: '8px' }}>A senha é o seu CPF (só os números).</p>
 
         {erro && (
-          <div role="alert" style={{ marginTop: '14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '12px', padding: '12px', color: '#fca5a5', fontSize: '13px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+          <div role="alert" style={{ marginTop: '14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '12px', padding: '12px', color: 'var(--erro-suave)', fontSize: '13px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
             <IconWarning style={{ flexShrink: 0, marginTop: '2px' }} /> {erro}
           </div>
         )}
@@ -127,9 +127,9 @@ const LoginAluno = ({ aoEntrar, aoVoltar, aoAbrirAdmin }) => {
         </button>
 
         {DEMO_MODE && (
-          <div style={{ marginTop: '18px', fontSize: '12px', color: '#fbbf24', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: '12px', padding: '10px 12px', lineHeight: 1.6 }}>
+          <div style={{ marginTop: '18px', fontSize: '12px', color: 'var(--aviso)', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: '12px', padding: '10px 12px', lineHeight: 1.6 }}>
             <IconMask style={{ verticalAlign: '-2px' }} /> Demonstração: senha <strong>529.982.247-25</strong>{' '}
-            <button type="button" className="login-link" style={{ color: '#fbbf24', textDecoration: 'underline', padding: 0 }} onClick={() => setSenha('529.982.247-25')}>
+            <button type="button" className="login-link" style={{ color: 'var(--aviso)', textDecoration: 'underline', padding: 0 }} onClick={() => setSenha('529.982.247-25')}>
               preencher
             </button>
           </div>

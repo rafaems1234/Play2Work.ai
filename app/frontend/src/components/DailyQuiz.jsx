@@ -18,9 +18,9 @@ const sortear = (lista) => lista[Math.floor(Math.random() * lista.length)];
 // Cor/intensidade do combo: amarelo → laranja → vermelho → roxo "em chamas"
 const estiloCombo = (combo) => {
   if (combo >= 8) return { cor: '#c084fc', rotulo: 'IMPARÁVEL', chamas: 3 };
-  if (combo >= 5) return { cor: '#f87171', rotulo: 'EM CHAMAS', chamas: 2 };
+  if (combo >= 5) return { cor: 'var(--erro)', rotulo: 'EM CHAMAS', chamas: 2 };
   if (combo >= 3) return { cor: '#fb923c', rotulo: 'Pegando fogo', chamas: 1 };
-  return { cor: '#fbbf24', rotulo: 'Combo', chamas: 1 };
+  return { cor: 'var(--aviso)', rotulo: 'Combo', chamas: 1 };
 };
 
 const formatarEspera = (isoData) => {
@@ -177,6 +177,8 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
       const dados = await response.json();
       if (!response.ok) throw new Error();
       setFeedback(dados);
+      // A vida cai (ou volta pelo combo) na hora -- os corações acompanham
+      if (typeof dados.vidas === 'number') setStatus((prev) => ({ ...prev, vidas: dados.vidas, proxima_vida_em: dados.proxima_vida_em }));
       if (dados.correta) {
         const novoCombo = dados.combo ?? combo + 1;
         if (novoCombo >= 2) tocarSomCombo(novoCombo); else tocarSomAcerto();
@@ -267,7 +269,7 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
         .quiz-card {
           width: 100%;
           max-width: 820px;
-          background: rgba(255,255,255,0.045);
+          background: rgb(var(--tinta-rgb) / 0.045);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
           border: 1px solid rgb(var(--accent-rgb) / 0.15);
@@ -281,7 +283,7 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
           gap: 6px;
           background: none;
           border: none;
-          color: #64748b;
+          color: var(--txt-4);
           font-size: 12px;
           font-weight: 600;
           cursor: pointer;
@@ -298,8 +300,8 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
           padding: 14px 18px;
           border-radius: 14px;
           border: 1px solid rgb(var(--accent-rgb) / 0.15);
-          background: rgba(255,255,255,0.03);
-          color: #e2e8f0;
+          background: rgb(var(--tinta-rgb) / 0.03);
+          color: var(--txt-1b);
           font-weight: 600;
           font-size: 14px;
           cursor: pointer;
@@ -319,8 +321,8 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
           padding: 14px 18px;
           border-radius: 14px;
           border: 1px solid rgb(var(--accent-rgb) / 0.15);
-          background: rgba(255,255,255,0.03);
-          color: #e2e8f0;
+          background: rgb(var(--tinta-rgb) / 0.03);
+          color: var(--txt-1b);
           font-weight: 600;
           font-size: 14px;
           cursor: pointer;
@@ -336,14 +338,14 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
         .quiz-option-btn.correct {
           border-color: rgba(52,211,153,0.5);
           background: rgba(52,211,153,0.12);
-          color: #6ee7b7;
+          color: var(--ok-suave);
           animation: quizPulseCorreta 0.35s ease;
         }
 
         .quiz-option-btn.wrong {
           border-color: rgba(239,68,68,0.5);
           background: rgba(239,68,68,0.1);
-          color: #fca5a5;
+          color: var(--erro-suave);
           animation: quizShakeErrada 0.4s ease;
         }
 
@@ -403,19 +405,19 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
           display: flex;
           align-items: center;
           gap: 6px;
-          background: rgba(255,255,255,0.03);
-          border: 1px solid rgba(255,255,255,0.08);
+          background: rgb(var(--tinta-rgb) / 0.03);
+          border: 1px solid rgb(var(--tinta-rgb) / 0.08);
           padding: 6px 12px;
           border-radius: 20px;
           font-size: 12px;
           font-weight: 700;
-          color: #e2e8f0;
+          color: var(--txt-1b);
         }
 
         .quiz-tool-btn {
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.1);
-          color: #cbd5e1;
+          background: rgb(var(--tinta-rgb) / 0.04);
+          border: 1px solid rgb(var(--tinta-rgb) / 0.1);
+          color: var(--txt-2);
           font-size: 11px;
           font-weight: 700;
           padding: 6px 12px;
@@ -428,7 +430,7 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
         .quiz-tool-btn:hover:not(:disabled) {
           border-color: rgb(var(--accent-rgb) / 0.4);
           background: rgb(var(--accent-rgb) / 0.1);
-          color: #e2e8f0;
+          color: var(--txt-1b);
         }
 
         .quiz-tool-btn:disabled {
@@ -439,7 +441,7 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
         .quiz-combo-badge {
           font-size: 12px;
           font-weight: 800;
-          color: #fbbf24;
+          color: var(--aviso);
           display: inline-block;
         }
 
@@ -462,12 +464,12 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
         .quiz-feedback.certo {
           background: rgba(52,211,153,0.1);
           border-color: rgba(52,211,153,0.4);
-          color: #6ee7b7;
+          color: var(--ok-suave);
         }
         .quiz-feedback.errado {
           background: rgba(239,68,68,0.08);
           border-color: rgba(239,68,68,0.35);
-          color: #fca5a5;
+          color: var(--erro-suave);
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -486,10 +488,10 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
         <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div>
             <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px' }}>Quiz do Dia</div>
-            <h2 style={{ fontSize: '26px', fontWeight: '800', color: '#f1f5f9', letterSpacing: '-0.5px' }}>
+            <h2 style={{ fontSize: '26px', fontWeight: '800', color: 'var(--txt-1)', letterSpacing: '-0.5px' }}>
               Teste o que <span className="gradient-text-live">você sabe</span>
             </h2>
-            <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, marginTop: '8px', maxWidth: '440px' }}>
+            <p style={{ color: 'var(--txt-4)', fontSize: '14px', lineHeight: 1.6, marginTop: '8px', maxWidth: '440px' }}>
               10 perguntas sobre o seu curso — o mesmo usado pela IA Recrutadora no Simulador. Errou, perde uma vida; acertou, ganha XP.
               {' '}<strong style={{ color: '#fb7185' }}>{status?.acertos_seguidos_para_vida ?? 5} acertos seguidos devolvem 1 vida</strong>, e cada vida perdida volta sozinha a cada {status?.minutos_para_regenerar_vida ?? 30} min.
             </p>
@@ -501,11 +503,11 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '28px' }}>
             <div className="quiz-stat">
               {Array.from({ length: status.vidas_maximas }).map((_, i) => (
-                <IconHeart key={i} style={{ color: i < status.vidas ? '#f43f5e' : 'rgba(255,255,255,0.15)' }} />
+                <IconHeart key={i} style={{ color: i < status.vidas ? '#f43f5e' : 'rgb(var(--tinta-rgb) / 0.15)' }} />
               ))}
             </div>
             {status.congelamentos_disponiveis > 0 && (
-              <div className="quiz-stat"><IconSnowflake style={{ color: 'var(--accent-2)' }} /> {status.congelamentos_disponiveis} congelamento{status.congelamentos_disponiveis > 1 ? 's' : ''}</div>
+              <div className="quiz-stat" title="Cada congelamento salva a ofensiva em 1 dia sem prática. A cada 7 dias seguidos você ganha 2 (até 4 guardados)."><IconSnowflake style={{ color: 'var(--accent-2)' }} /> {status.congelamentos_disponiveis} congelamento{status.congelamentos_disponiveis > 1 ? 's' : ''}</div>
             )}
           </div>
         )}
@@ -513,11 +515,11 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
         {semVidas && !quiz && (
           <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '16px', padding: '22px', textAlign: 'center', marginBottom: '24px' }}>
             <IconHeart style={{ fontSize: '28px', color: '#f43f5e', marginBottom: '10px' }} />
-            <div style={{ color: '#e2e8f0', fontWeight: '700', marginBottom: '6px' }}>Você está sem vidas</div>
-            <div style={{ color: '#64748b', fontSize: '13px' }}>
+            <div style={{ color: 'var(--txt-1b)', fontWeight: '700', marginBottom: '6px' }}>Você está sem vidas</div>
+            <div style={{ color: 'var(--txt-4)', fontSize: '13px' }}>
               {status?.proxima_vida_em ? `Próxima vida em ${formatarEspera(status.proxima_vida_em)} — depois, mais 1 a cada ${status.minutos_para_regenerar_vida ?? 30} min até encher.` : 'Suas vidas voltam sozinhas com o tempo.'}
             </div>
-            <div style={{ color: '#64748b', fontSize: '13px', marginTop: '8px' }}>
+            <div style={{ color: 'var(--txt-4)', fontSize: '13px', marginTop: '8px' }}>
               Enquanto isso, dá pra treinar no Simulador ou nas situações de trabalho, na aba Competências.
             </div>
           </div>
@@ -526,7 +528,7 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
         {!quiz && !carregando && !semVidas && status?.itinerario && (
           <div style={{ background: 'rgb(var(--accent-rgb) / 0.06)', border: '1px solid rgb(var(--accent-rgb) / 0.2)', borderRadius: '16px', padding: '22px' }}>
             <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Seu curso atual</div>
-            <div style={{ fontSize: '18px', fontWeight: '800', color: '#f1f5f9', marginBottom: '16px' }}>{status.itinerario}</div>
+            <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--txt-1)', marginBottom: '16px' }}>{status.itinerario}</div>
             <button onClick={gerarQuiz} className="quiz-next-btn" style={{ margin: 0 }}>
               Começar quiz de hoje →
             </button>
@@ -536,8 +538,8 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
         {!quiz && !carregando && !semVidas && !status?.itinerario && (
           <div style={{ background: 'rgb(var(--accent-rgb) / 0.06)', border: '1px dashed rgb(var(--accent-rgb) / 0.25)', borderRadius: '16px', padding: '28px', textAlign: 'center' }}>
             <IconGraduationCap style={{ fontSize: '30px', color: 'var(--accent)', marginBottom: '12px' }} />
-            <div style={{ color: '#e2e8f0', fontWeight: '700', marginBottom: '6px' }}>Seu itinerário ainda não foi cadastrado</div>
-            <div style={{ color: '#64748b', fontSize: '13px', marginBottom: '18px' }}>
+            <div style={{ color: 'var(--txt-1b)', fontWeight: '700', marginBottom: '6px' }}>Seu itinerário ainda não foi cadastrado</div>
+            <div style={{ color: 'var(--txt-4)', fontSize: '13px', marginBottom: '18px' }}>
               Quem define o itinerário é a escola. Enquanto isso, você pode treinar com perguntas gerais de soft skills.
             </div>
             <button onClick={gerarQuiz} className="quiz-next-btn" style={{ maxWidth: '260px', margin: '0 auto' }}>
@@ -557,7 +559,7 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
         )}
 
         {erro && (
-          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '16px', padding: '18px', textAlign: 'center', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '16px', padding: '18px', textAlign: 'center', color: 'var(--erro)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
             <IconWarning /> {erro}
           </div>
         )}
@@ -566,15 +568,15 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <span style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{quiz.tema}</span>
-              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>{indiceAtual + 1} / {quiz.perguntas.length}</span>
+              <span style={{ fontSize: '12px', color: 'var(--txt-4)', fontWeight: '600' }}>{indiceAtual + 1} / {quiz.perguntas.length}</span>
             </div>
 
             {/* Barra de progresso: enche a cada pergunta e esquenta de cor com o combo */}
-            <div style={{ height: '10px', borderRadius: '99px', background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: '14px' }}>
+            <div style={{ height: '10px', borderRadius: '99px', background: 'rgb(var(--tinta-rgb) / 0.07)', overflow: 'hidden', marginBottom: '14px' }}>
               <motion.div
                 animate={{
                   width: `${((indiceAtual + (feedback ? 1 : 0)) / quiz.perguntas.length) * 100}%`,
-                  backgroundColor: combo >= 2 ? estiloCombo(combo).cor : '#34d399',
+                  backgroundColor: combo >= 2 ? estiloCombo(combo).cor : 'var(--ok)',
                 }}
                 transition={{ type: 'spring', stiffness: 140, damping: 20 }}
                 style={{ height: '100%', borderRadius: '99px' }}
@@ -583,7 +585,7 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><IconTimer /> {formatarTempo(tempoDecorrido)}</span>
+                <span style={{ fontSize: '12px', color: 'var(--txt-4)', fontFamily: 'monospace', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><IconTimer /> {formatarTempo(tempoDecorrido)}</span>
                 <AnimatePresence>
                   {combo >= 2 && (
                     <motion.span
@@ -621,7 +623,7 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
                 exit={{ opacity: 0, x: -16 }}
                 transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               >
-                <h3 style={{ fontSize: '17px', fontWeight: '700', color: '#e2e8f0', marginBottom: '18px', lineHeight: 1.5 }}>
+                <h3 style={{ fontSize: '17px', fontWeight: '700', color: 'var(--txt-1b)', marginBottom: '18px', lineHeight: 1.5 }}>
                   {perguntaAtual.pergunta}
                 </h3>
 
@@ -663,13 +665,13 @@ const DailyQuiz = ({ aoGanharXp, aoVoltarInicio }) => {
                           initial={{ opacity: 0, y: 10, scale: 0.6 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           transition={{ delay: 0.1, type: 'spring', stiffness: 400 }}
-                          style={{ fontSize: '13px', fontWeight: '800', color: '#fbbf24' }}
+                          style={{ fontSize: '13px', fontWeight: '800', color: 'var(--aviso)' }}
                         >
                           +{XP_POR_ACERTO} XP
                         </motion.span>
                       )}
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', fontSize: '13px', color: '#cbd5e1', lineHeight: 1.6 }}>
+                    <div style={{ display: 'flex', gap: '8px', fontSize: '13px', color: 'var(--txt-2)', lineHeight: 1.6 }}>
                       <IconSparkle style={{ flexShrink: 0, marginTop: '3px', opacity: 0.8 }} />
                       <span>{feedback.explicacao}</span>
                     </div>

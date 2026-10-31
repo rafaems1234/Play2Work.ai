@@ -1,0 +1,37 @@
+{
+  "contratado": "💼 Contratado",
+  "niveis": [
+    {
+      "xp_minimo": 0,
+      "nome": "🌌 Na Jornada"
+    },
+    {
+      "xp_minimo": 100,
+      "nome": "🧭 Explorador de Carreiras"
+    },
+    {
+      "xp_minimo": 250,
+      "nome": "⚔️ Sobrevivente do RH"
+    },
+    {
+      "xp_minimo": 450,
+      "nome": "📋 Currículo em Forma"
+    },
+    {
+      "xp_minimo": 700,
+      "nome": "👔 Pronto para a Dinâmica"
+    },
+    {
+      "xp_minimo": 1000,
+      "nome": "🎯 Destaque na Entrevista"
+    },
+    {
+      "xp_minimo": 1400,
+      "nome": "⭐ Talento em Ascensão"
+    },
+    {
+      "xp_minimo": 1900,
+      "nome": "🚀 Pronto pra Contratação"
+    }
+  ]
+}

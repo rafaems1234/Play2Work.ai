@@ -5,7 +5,7 @@ export const SkeletonStyles = () => (
     .p2w-skeleton {
       position: relative;
       overflow: hidden;
-      background: rgba(255,255,255,0.045);
+      background: rgb(var(--tinta-rgb) / 0.045);
       border-radius: 8px;
     }
     .p2w-skeleton::after {
@@ -28,7 +28,7 @@ export const Skeleton = ({ style, className = '' }) => (
 
 export const JobCardSkeleton = () => (
   <div style={{
-    background: 'rgba(255,255,255,0.02)',
+    background: 'rgb(var(--tinta-rgb) / 0.02)',
     border: '1px solid rgb(var(--accent-rgb) / 0.1)',
     borderRadius: '20px',
     padding: '24px',
@@ -52,7 +52,7 @@ export const JobCardSkeleton = () => (
 export const RowSkeleton = () => (
   <div style={{
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '16px 20px', background: 'rgba(0,0,0,0.15)',
+    padding: '16px 20px', background: 'rgb(var(--campo-rgb) / 0.15)',
     border: '1px solid rgb(var(--accent-rgb) / 0.06)', borderRadius: '14px',
   }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>

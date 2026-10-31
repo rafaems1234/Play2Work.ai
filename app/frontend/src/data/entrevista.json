@@ -1,0 +1,75 @@
+{
+  "pergunta_inicial": "Olá! Eu sou a entrevistadora e vou conduzir sua simulação de entrevista para Jovem Aprendiz. Para começar: me conte um pouco sobre você e por que tem interesse na sua área?",
+  "pergunta_recomeco": "Vamos para mais uma rodada. Me conte sobre uma experiência na escola, num curso ou fora dela de que você se orgulha.",
+  "perguntas": [
+    "Me conte sobre uma dificuldade que você teve recentemente e como lidou com ela.",
+    "Como você organiza seu tempo entre os estudos e as outras responsabilidades?",
+    "Me dê um exemplo de quando você trabalhou em equipe para resolver alguma coisa.",
+    "Por que você quer ser Jovem Aprendiz na sua área?",
+    "O que você faria se discordasse de uma decisão do seu responsável no trabalho?",
+    "Quais são seus pontos fortes? Me dê um exemplo em que um deles fez diferença.",
+    "Qual ponto você ainda quer melhorar, e o que está fazendo para isso?",
+    "Conte uma situação em que você aprendeu algo novo sozinho. Como foi?",
+    "Como você reage quando recebe uma crítica sobre um trabalho seu?",
+    "Onde você se imagina daqui a dois anos?"
+  ],
+  "pesos": { "relevancia": 0.35, "clareza": 0.2, "exemplos": 0.3, "postura": 0.15 },
+  "xp_maximo": 50,
+  "relevancia_minima": 3,
+  "mensagens": {
+    "fora_do_tema": {
+      "feedback": "Fora do tema: aqui é uma entrevista de emprego, então perguntas ou assuntos que não têm a ver com a pergunta não valem XP. Responda sobre você.",
+      "fala": "Aqui eu estou como sua entrevistadora, então vamos manter o foco na entrevista."
+    },
+    "sem_conteudo": {
+      "feedback": "Resposta curta demais ou sem sentido. Numa entrevista de verdade isso elimina o candidato. Escreva frases completas e conte detalhes.",
+      "fala": "Não consegui entender sua resposta. Pode me contar com mais calma?"
+    },
+    "repetida": {
+      "feedback": "Você já mandou essa mesma resposta. Repetir texto não vale XP: responda o que foi perguntado agora.",
+      "fala": "Essa resposta eu já ouvi. Vamos para a pergunta de agora."
+    },
+    "inadequada": {
+      "feedback": "Linguagem inadequada para uma entrevista. Palavrão, ofensa ou brincadeira de mau gosto eliminam o candidato na hora. Mantenha um tom profissional.",
+      "fala": "Numa entrevista é importante manter o respeito e um tom profissional. Vamos tentar de novo."
+    },
+    "dados_pessoais": {
+      "feedback": "Cuidado com seus dados: nunca mande CPF, telefone, endereço ou senha numa conversa. A empresa pede esses dados no momento certo, por um canal oficial.",
+      "fala": "Não precisa me passar dados pessoais aqui. Vamos falar das suas experiências."
+    },
+    "precisa_de_ajuda": {
+      "feedback": "Isso é mais importante do que a entrevista. Você não está sozinho: converse com a coordenação da escola ou com um adulto de confiança. Se precisar falar com alguém agora, ligue 188 (CVV, gratuito, 24 horas).",
+      "fala": "Obrigada por confiar em mim. Vamos pausar a entrevista: procure a coordenação da escola ou um adulto de confiança. Quando quiser, a gente continua."
+    }
+  },
+  "fala_volta_pergunta": "Voltando à pergunta:",
+  "dicas": {
+    "relevancia": "Responda diretamente o que foi perguntado: comece pela resposta e depois explique.",
+    "clareza_curta": "Desenvolva mais: duas ou três frases completas mostram que você sabe se comunicar.",
+    "clareza_longa": "Boa vontade, mas tente ser mais objetivo: o recrutador quer a ideia principal em poucas frases.",
+    "exemplos": "Conte uma situação concreta: o que você fez, onde e qual foi o resultado. Exemplo real vale mais que adjetivo.",
+    "postura": "Evite gírias e abreviações: fale como falaria com alguém que acabou de conhecer numa empresa.",
+    "otima": "Ótima resposta: direta, com exemplo concreto e postura profissional. É assim que se passa numa entrevista!"
+  },
+  "palavras_inadequadas": [
+    "porra", "caralho", "merda", "foda", "foder", "fuder", "fodido", "fudido", "fodase", "fudeu", "puta", "puto", "viado", "buceta", "cu", "arrombado",
+    "desgraca", "vagabundo", "vagabunda", "otario", "otaria", "idiota", "imbecil", "retardado", "corno", "piranha",
+    "pqp", "vsf", "tnc", "fdp", "krl", "crl"
+  ],
+  "sinais_de_ajuda": [
+    "me matar", "quero morrer", "suicid", "me cortar", "me machucar", "nao quero mais viver", "acabar com tudo",
+    "me bate", "me batem", "apanho em casa", "abuso", "abusou", "me tocou", "me ameaca", "violencia em casa"
+  ],
+  "pedidos_fora_do_tema": [
+    "qual e a capital", "qual a capital", "me conta uma piada", "conta uma piada", "me ajuda com a tarefa", "me ajuda na tarefa",
+    "faz minha tarefa", "faca minha tarefa", "tarefa de casa", "licao de casa", "dever de casa", "receita de bolo",
+    "ignore as instrucoes", "ignore suas instrucoes", "ignora as instrucoes", "esqueca as instrucoes", "esqueca suas instrucoes",
+    "voce e uma ia", "voce e um robo", "voce e o chatgpt", "chatgpt", "finja que voce", "finge que voce"
+  ],
+  "girias": ["mano", "vei", "kkk", "kkkk", "kkkkk", "sla", "tlgd", "mds", "slk", "pprt", "tmj"],
+  "marcas_de_exemplo": [
+    "escola", "curso", "projeto", "trabalho", "feira", "equipe", "grupo", "time", "turma", "professor", "professora",
+    "ajudei", "organizei", "aprendi", "fiz", "criei", "participei", "liderei", "resolvi", "consegui", "voluntario",
+    "por exemplo", "uma vez", "quando eu", "na pratica", "meu pai", "minha mae", "familia", "loja", "igreja", "esporte"
+  ]
+}

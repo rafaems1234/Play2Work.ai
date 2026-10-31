@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Literal, Optional
 
 # Importações do ecossistema do projeto
 from models import Estudante, Vaga, HistoricoEntrevista, Curriculo, Candidatura, QuizSessao
@@ -31,10 +31,12 @@ from services import (
 )
 from auth import hash_senha, verificar_senha, criar_token, get_estudante_atual, gerar_senha_temporaria, normalizar_cpf
 from limiter import limiter
-from fuso import hoje as hoje_na_escola, agora_utc
+from fuso import hoje as hoje_na_escola, agora_utc, inicio_do_dia_utc
 from competencias import registrar_evidencias, mapa_para_tela
 from atividades import proxima_situacao, responder_situacao
-from fotos import FotoRequest, salvar_foto, remover_foto, resposta_da_foto
+from fotos import FotoRequest, salvar_foto, remover_foto, resposta_da_foto, salvar_foto_curriculo, remover_foto_curriculo, resposta_da_foto_curriculo
+from entrevista import conduzir, PERGUNTA_INICIAL, PERGUNTA_RECOMECO, TAMANHO_MAXIMO_RESPOSTA
+from curriculo import gerar as gerar_curriculo, dados_do_sistema, TextoRecusado
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +90,14 @@ class ExperienciaRequest(BaseModel):
     ja_trabalhou: bool
     experiencia_previa: Optional[str] = Field(default=None, max_length=2000)
 
+XP_CURRICULO_DO_DIA = 10  # primeiro currículo gerado no dia
+
+
 class ChatMessageRequest(BaseModel):
-    mensagem_usuario: str
+    mensagem_usuario: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_RESPOSTA)
+    # Primeira mensagem de uma simulação: qual abertura o app mostrou. Só o
+    # nome -- o texto da pergunta vem do servidor, o aluno não escolhe a pergunta.
+    abertura: Optional[Literal["inicial", "recomeco"]] = None
 
 class LinkedInExportRequest(BaseModel):
     texto_curriculo: str
@@ -336,9 +344,24 @@ def get_job_detail(vaga_id: int, estudante: Estudante = Depends(get_estudante_at
 @router.post("/resume/generate", status_code=status.HTTP_201_CREATED)
 def generate_resume(data: ResumeRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     """
-    Envia o texto informal do aluno para o Gemini estruturar um currículo profissional real.
+    Monta o currículo: cabeçalho com o cadastro da escola e conteúdo escrito a
+    partir do texto do aluno (a IA organiza, sem inventar). Texto que não fala
+    do aluno não gera currículo (422). Regras em curriculo.py.
     """
-    curriculo_ia_dados = AIService.gerar_curriculo_ia(data.habilidades_texto, estudante.nome)
+    try:
+        curriculo_ia_dados = gerar_curriculo(
+            data.habilidades_texto, estudante,
+            lambda texto: AIService.gerar_curriculo_ia(texto, estudante.itinerario, list(estudante.habilidades or [])),
+        )
+    except TextoRecusado as recusa:
+        raise HTTPException(status_code=422, detail=str(recusa))
+
+    # Montar o currículo é prática concluída: mantém a ofensiva do dia. O XP só
+    # vem no primeiro do dia, pra gerar de novo não virar fábrica de XP.
+    ja_gerou_hoje = db.query(Curriculo).filter(
+        Curriculo.estudante_id == estudante.id, Curriculo.gerado_em >= inicio_do_dia_utc(),
+    ).first() is not None
+    xp_concedido = 0 if ja_gerou_hoje else XP_CURRICULO_DO_DIA
 
     # Cada geração é uma versão nova (nada é sobrescrito); o painel da escola
     # sempre lê a mais recente -- é assim que o currículo "sincroniza".
@@ -350,9 +373,16 @@ def generate_resume(data: ResumeRequest, estudante: Estudante = Depends(get_estu
 
     try:
         db.add(novo_curriculo)
+        mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
         db.commit()
         db.refresh(novo_curriculo)
-        return {"sucesso": True, "curriculo": curriculo_ia_dados, "gerado_em": novo_curriculo.gerado_em.isoformat() if novo_curriculo.gerado_em else None}
+        return {
+            "sucesso": True, "curriculo": curriculo_ia_dados, "dados_pessoais": dados_do_sistema(estudante),
+            "gerado_em": novo_curriculo.gerado_em.isoformat() if novo_curriculo.gerado_em else None,
+            "xp_concedido": xp_concedido, "novos_pontos_totais": estudante.xp_total, "nivel_atual": estudante.nivel_gamificacao,
+            "ofensiva_dias": estudante.ofensiva_dias, "categoria_status": estudante.categoria_status, "liga": estudante.liga,
+            "mudanca_liga": mudanca_liga,
+        }
     except Exception:
         db.rollback()
         logger.exception("Erro ao salvar currículo do estudante %s", estudante.id)
@@ -363,21 +393,38 @@ def generate_resume(data: ResumeRequest, estudante: Estudante = Depends(get_estu
 @router.post("/chat/message")
 def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     """
-    Processa o chat avaliando a resposta do usuário.
+    Uma rodada da entrevista: triagem local, avaliação da IA no papel de
+    entrevistadora e XP calculado aqui a partir das notas (ver entrevista.py).
     """
-    historico = db.query(HistoricoEntrevista).filter(
+    historico = list(reversed(db.query(HistoricoEntrevista).filter(
         HistoricoEntrevista.estudante_id == estudante.id
-    ).order_by(HistoricoEntrevista.enviado_em.desc()).limit(4).all()
+    ).order_by(HistoricoEntrevista.enviado_em.desc(), HistoricoEntrevista.id.desc()).limit(20).all()))
+    respostas_anteriores = [m.mensagem for m in historico if m.remetente == "user"]
 
-    historico_texto = " ".join([f"{m.remetente}: {m.mensagem}" for m in reversed(historico)])
+    if data.abertura or not any(m.remetente == "ai" for m in historico):
+        # Começo de simulação: a pergunta é a abertura que o app mostrou, e a
+        # conversa anterior não entra no contexto da IA
+        pergunta_atual = PERGUNTA_RECOMECO if data.abertura == "recomeco" else PERGUNTA_INICIAL
+        contexto = []
+    else:
+        pergunta_atual = next(m.mensagem for m in reversed(historico) if m.remetente == "ai")
+        contexto = historico[-6:]
+    historico_texto = "\n".join(f"{'Entrevistadora' if m.remetente == 'ai' else 'Candidato'}: {m.mensagem}" for m in contexto)
 
-    resultado_ia = AIService.processar_entrevista_ia(data.mensagem_usuario, historico_texto, estudante.itinerario)
-
-    feedback_gerado = resultado_ia.get("analise_feedback")
-    xp_concedido = resultado_ia.get("xp_concedido", 0)
-    proxima_pergunta = resultado_ia.get("proxima_pergunta")
+    rodada = conduzir(
+        data.mensagem_usuario, pergunta_atual, respostas_anteriores,
+        perguntas_ja_feitas=sum(1 for m in historico if m.remetente == "ai"),
+        avaliar_com_ia=lambda mensagem, pergunta: AIService.processar_entrevista_ia(mensagem, pergunta, historico_texto, estudante.itinerario),
+    )
+    feedback_gerado = rodada["analise_feedback"]
+    xp_concedido = rodada["xp_concedido"]
+    proxima_pergunta = rodada["fala"]
 
     try:
+        if not contexto:
+            # Guarda a pergunta de abertura antes da resposta: a ficha do aluno mostra cada resposta com a pergunta dela
+            db.add(HistoricoEntrevista(estudante_id=estudante.id, remetente="ai", mensagem=pergunta_atual))
+
         msg_usuario = HistoricoEntrevista(
             estudante_id=estudante.id,
             remetente="user",
@@ -394,18 +441,23 @@ def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_
         )
         db.add(msg_ia)
 
-        mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
-        # Nota da resposta (0-50 XP) vira evidência 0-100 nos eixos que uma entrevista exercita
-        nota_resposta = max(0, min(50, int(xp_concedido or 0))) * 2
-        registrar_evidencias(db, estudante.id, {
-            "comunicacao": nota_resposta, "trabalho_projeto_vida": nota_resposta, "autoconhecimento": nota_resposta,
-        }, origem="entrevista")
+        mudanca_liga = None
+        if rodada["categoria"] == "resposta":
+            # Só resposta de entrevista conta como treino do dia e vira evidência
+            # (0-50 XP -> 0-100) nos eixos que uma entrevista exercita
+            mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
+            nota_resposta = max(0, min(50, int(xp_concedido or 0))) * 2
+            registrar_evidencias(db, estudante.id, {
+                "comunicacao": nota_resposta, "trabalho_projeto_vida": nota_resposta, "autoconhecimento": nota_resposta,
+            }, origem="entrevista")
         db.commit()
 
         return {
             "feedback_ia": feedback_gerado,
             "resposta_ia": proxima_pergunta,
             "xp_concedido": xp_concedido,
+            "categoria": rodada["categoria"],
+            "notas": rodada["notas"],
             "novos_pontos_totais": estudante.xp_total,
             "nivel_atual": estudante.nivel_gamificacao,
             "ofensiva_dias": estudante.ofensiva_dias,
@@ -506,7 +558,7 @@ def generate_quiz(estudante: Estudante = Depends(get_estudante_atual), db: Sessi
         )
     db.commit()
 
-    # Perguntas dos últimos quizzes do aluno -- o sorteio (ou a IA) evita repetir
+    # Perguntas dos últimos quizzes do aluno -- o sorteio evita repetir
     sessoes_recentes = db.query(QuizSessao).filter(
         QuizSessao.estudante_id == estudante.id,
     ).order_by(QuizSessao.criado_em.desc()).limit(SESSOES_RECENTES_SEM_REPETIR).all()
@@ -518,7 +570,7 @@ def generate_quiz(estudante: Estudante = Depends(get_estudante_atual), db: Sessi
     }
 
     tema = AIService.tema_quiz_do_dia(estudante.itinerario)
-    quiz = AIService.gerar_quiz_ia(tema, estudante.itinerario, perguntas_recentes)
+    quiz = AIService.montar_quiz(tema, estudante.itinerario, perguntas_recentes)
 
     sessao = QuizSessao(
         estudante_id=estudante.id,
@@ -587,18 +639,27 @@ def responder_quiz(data: ResponderQuizRequest, estudante: Estudante = Depends(ge
         registro = {"pulou": False, "correta": correta}
 
     sessao.respostas = sessao.respostas + [registro]
+    combo = combo_final(sessao.respostas)
+    # A vida cai na hora do erro (e o combo devolve na hora): sair do quiz no
+    # meio não escapa da perda. Dá pra terminar o quiz mesmo chegando a zero;
+    # sem vida, só não começa outro.
+    AIService.regenerar_vidas(estudante)
+    ganhou_vida_combo = False
+    if not registro["pulou"] and not registro["correta"]:
+        AIService.perder_vida(estudante)
+    elif combo > 0 and combo % ACERTOS_SEGUIDOS_PARA_VIDA == 0:
+        ganhou_vida_combo = AIService.ganhar_vidas(estudante, 1) > 0
     db.commit()
 
     gabarito_pergunta = sessao.gabarito[data.indice_pergunta]
-    combo = combo_final(sessao.respostas)
     return {
         "correta": None if registro["pulou"] else registro["correta"],
         "resposta_correta_index": gabarito_pergunta["resposta_correta_index"],
         "explicacao": gabarito_pergunta["explicacao"],
         "combo": combo,
-        # A vida entra de fato no /quiz/submit (junto com as perdidas por erro),
-        # aqui só avisa o front pra comemorar na hora.
-        "ganhou_vida_combo": combo > 0 and combo % ACERTOS_SEGUIDOS_PARA_VIDA == 0,
+        "ganhou_vida_combo": ganhou_vida_combo,
+        "vidas": estudante.vidas,
+        "proxima_vida_em": estudante.proxima_vida_em.isoformat() if estudante.proxima_vida_em else None,
     }
 
 
@@ -639,17 +700,14 @@ def submit_quiz(data: QuizSubmitRequest, estudante: Estudante = Depends(get_estu
 
     acertos = sum(1 for r in sessao.respostas if r["correta"])
     pulos = sum(1 for r in sessao.respostas if r["pulou"])
-    errados = max(0, total - acertos - pulos)  # pular não conta como erro nem custa vida
     xp_concedido = acertos * 8  # 8 XP por acerto, mesma ordem de grandeza do simulador
 
     try:
+        # Vidas perdidas e devolvidas pelo combo já entraram em /quiz/responder.
+        # XP e ofensiva só aqui: quiz que não chega ao fim não vale nada.
         sessao.concluido = True
         AIService.regenerar_vidas(estudante)
-        for _ in range(errados):
-            AIService.perder_vida(estudante)
-        # Combo de acertos seguidos devolve vida -- depois das perdas, pra
-        # recuperar justamente as que o aluno perdeu errando no mesmo quiz.
-        vidas_recuperadas_combo = AIService.ganhar_vidas(estudante, vidas_ganhas_por_combo(sessao.respostas))
+        vidas_recuperadas_combo = vidas_ganhas_por_combo(sessao.respostas)
 
         vida_bonus_ganha = AIService.avaliar_bonus_por_desempenho(estudante, acertos, total)
         mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
@@ -699,7 +757,7 @@ def get_status_gamificacao(estudante: Estudante = Depends(get_estudante_atual), 
         "congelamentos_disponiveis": estudante.congelamentos_disponiveis,
         "quizzes_perfeitos_seguidos": estudante.quizzes_perfeitos_seguidos,
         "quizzes_perfeitos_para_bonus": QUIZZES_PERFEITOS_PARA_VIDA_BONUS,
-        "ofensiva_dias": estudante.ofensiva_dias,
+        "ofensiva_dias": estado_ofensiva["ofensiva_atual"],
         "treinou_hoje": estado_ofensiva["treinou_hoje"],
         "ofensiva_em_risco": estado_ofensiva["em_risco"],
         "itinerario": estudante.itinerario,
@@ -776,9 +834,10 @@ def get_curriculo_atual(estudante: Estudante = Depends(get_estudante_atual), db:
     """Último currículo gerado, pra tela abrir com ele em vez de vazia."""
     curriculo = _curriculo_mais_recente(estudante.id, db)
     if not curriculo:
-        return {"curriculo": None, "foto_no_curriculo": bool(estudante.foto_no_curriculo)}
+        return {"curriculo": None, "foto_no_curriculo": bool(estudante.foto_no_curriculo), "tem_foto_curriculo": estudante.foto_curriculo_atualizada_em is not None, "foto_curriculo_atualizada_em": estudante.foto_curriculo_atualizada_em.isoformat() if estudante.foto_curriculo_atualizada_em else None, "dados_pessoais": dados_do_sistema(estudante)}
     return {
-        "foto_no_curriculo": bool(estudante.foto_no_curriculo),
+        "foto_no_curriculo": bool(estudante.foto_no_curriculo), "tem_foto_curriculo": estudante.foto_curriculo_atualizada_em is not None, "foto_curriculo_atualizada_em": estudante.foto_curriculo_atualizada_em.isoformat() if estudante.foto_curriculo_atualizada_em else None,
+        "dados_pessoais": dados_do_sistema(estudante),
         "curriculo": json.loads(curriculo.texto_curriculo_formatado),
         "texto_original": curriculo.texto_original,
         "gerado_em": curriculo.gerado_em.isoformat() if curriculo.gerado_em else None,
@@ -819,10 +878,32 @@ def post_responder_situacao(data: ResponderSituacaoRequest, estudante: Estudante
 
 @router.put("/estudante/me/preferencias-curriculo")
 def salvar_preferencias_curriculo(data: PreferenciasCurriculoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
-    """Foto no currículo é escolha do aluno -- e só aparece se ele tiver foto cadastrada."""
+    """Currículo "com foto" ou "sem foto": escolha do aluno. Com foto, usa a foto do currículo que ele enviar."""
     estudante.foto_no_curriculo = data.foto_no_curriculo
     db.commit()
     return {"foto_no_curriculo": estudante.foto_no_curriculo}
+
+
+@router.get("/estudante/me/foto-curriculo")
+def get_minha_foto_curriculo(estudante: Estudante = Depends(get_estudante_atual)):
+    return resposta_da_foto_curriculo(estudante)
+
+
+@router.put("/estudante/me/foto-curriculo")
+def enviar_minha_foto_curriculo(data: FotoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    """A foto do currículo é outra, separada da de identificação. Enviar já marca o currículo como "com foto"."""
+    salvar_foto_curriculo(db, estudante, data.imagem_base64)
+    estudante.foto_no_curriculo = True
+    db.commit()
+    return {"sucesso": True, "foto_no_curriculo": True, "foto_curriculo_atualizada_em": estudante.foto_curriculo_atualizada_em.isoformat()}
+
+
+@router.delete("/estudante/me/foto-curriculo")
+def apagar_minha_foto_curriculo(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+    remover_foto_curriculo(estudante)
+    estudante.foto_no_curriculo = False
+    db.commit()
+    return {"sucesso": True, "foto_no_curriculo": False}
 
 
 # --- Rota Nova: Calendário de ofensiva do mês ---

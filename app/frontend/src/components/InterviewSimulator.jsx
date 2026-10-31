@@ -6,6 +6,11 @@ import { apiFetch } from '../api';
 import { useCountUp } from '../hooks/useCountUp';
 import Typewriter from './Typewriter';
 import { tocarSomAcerto, tocarSomErro } from '../utils/sound';
+import { PERGUNTA_INICIAL, PERGUNTA_RECOMECO } from '../entrevistaDemo';
+
+// Notas por critério (0-10) que a entrevistadora deu; o XP sai delas, no servidor
+const CRITERIOS = [['relevancia', 'Respondeu a pergunta'], ['clareza', 'Clareza'], ['exemplos', 'Exemplos reais'], ['postura', 'Postura']];
+const corDaNota = (n) => (n >= 8 ? 'var(--ok)' : n >= 5 ? 'var(--aviso)' : 'var(--erro)');
 
 const dispararConfete = () => {
   const cores = ['#2e7bff', '#00e5ff', '#1652e0', '#34d399'];
@@ -20,11 +25,13 @@ const InterviewSimulator = ({ aoGanharXp }) => {
     {
       id: 1,
       remetente: 'ai',
-      texto: 'Olá! Que bom ter você aqui. Para começarmos nossa simulação de entrevista, me conte um pouco sobre você e por que tem interesse na área de tecnologia?',
+      texto: PERGUNTA_INICIAL,
       feedback: null,
       xp_ganho: null
     }
   ]);
+  // Primeira resposta de uma rodada avisa o servidor qual abertura foi mostrada
+  const [abertura, setAbertura] = useState('inicial');
   const [carregando, setCarregando] = useState(false);
   const [sessaoConcluida, setSessaoConcluida] = useState(false);
 
@@ -48,11 +55,12 @@ const InterviewSimulator = ({ aoGanharXp }) => {
       {
         id: Date.now(),
         remetente: 'ai',
-        texto: 'Bora de novo! Me conta sobre outra experiência ou habilidade sua para praticarmos.',
+        texto: PERGUNTA_RECOMECO,
         feedback: null,
         xp_ganho: null,
       },
     ]);
+    setAbertura('recomeco');
   };
 
   const enviarMensagem = async () => {
@@ -71,10 +79,11 @@ const InterviewSimulator = ({ aoGanharXp }) => {
     try {
       const response = await apiFetch('/api/chat/message', {
         method: 'POST',
-        body: JSON.stringify({ mensagem_usuario: mensagemUsuario }),
+        body: JSON.stringify({ mensagem_usuario: mensagemUsuario, ...(abertura ? { abertura } : {}) }),
       });
 
       if (!response.ok) throw new Error('Erro ao conversar com o servidor');
+      setAbertura(null);
 
       const dados = await response.json();
       
@@ -115,7 +124,9 @@ const InterviewSimulator = ({ aoGanharXp }) => {
           remetente: 'ai',
           texto: dados.resposta_ia,
           feedback: dados.feedback_ia,
-          xp_ganho: dados.xp_concedido // Guarda o XP ganho nessa rodada específica
+          xp_ganho: dados.xp_concedido, // Guarda o XP ganho nessa rodada específica
+          categoria: dados.categoria,
+          notas: dados.notas,
         }
       ]);
     } catch (error) {
@@ -135,7 +146,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
       <style>{`
         .sim-stat-card {
-          background: rgba(255,255,255,0.03);
+          background: rgb(var(--tinta-rgb) / 0.03);
           border: 1px solid rgb(var(--accent-rgb) / 0.12);
           border-radius: 14px;
           padding: 10px 20px;
@@ -147,7 +158,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         .sim-xp-bar-track {
           width: 120px;
           height: 5px;
-          background: rgba(255,255,255,0.08);
+          background: rgb(var(--tinta-rgb) / 0.08);
           border-radius: 99px;
           overflow: hidden;
         }
@@ -160,9 +171,9 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         }
 
         .sim-msg-ai {
-          background: rgba(255,255,255,0.04);
+          background: rgb(var(--tinta-rgb) / 0.04);
           border: 1px solid rgb(var(--accent-rgb) / 0.15);
-          color: #cbd5e1;
+          color: var(--txt-2);
           border-radius: 16px;
           border-top-left-radius: 4px;
           padding: 14px 18px;
@@ -174,7 +185,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         .sim-msg-user {
           background: rgb(var(--accent-rgb) / 0.16);
           border: 1px solid rgb(var(--accent-rgb) / 0.3);
-          color: #e2e8f0;
+          color: var(--txt-1b);
           border-radius: 16px;
           border-top-right-radius: 4px;
           padding: 14px 18px;
@@ -186,7 +197,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         .sim-feedback-card {
           background: rgba(52,211,153,0.06);
           border: 1px solid rgba(52,211,153,0.2);
-          color: #94a3b8;
+          color: var(--txt-3);
           border-radius: 16px;
           border-top-left-radius: 4px;
           padding: 14px 18px;
@@ -194,21 +205,30 @@ const InterviewSimulator = ({ aoGanharXp }) => {
           font-size: 13px;
           line-height: 1.6;
         }
+        .sim-feedback-card.alerta { background: rgba(251,191,36,0.07); border-color: rgba(251,191,36,0.3); }
+        .sim-feedback-titulo { font-size: 11px; font-weight: 700; color: var(--ok); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px; }
+        .sim-feedback-card.alerta .sim-feedback-titulo { color: var(--aviso); }
+        .sim-notas { display: grid; gap: 5px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgb(var(--tinta-rgb) / 0.06); }
+        .sim-nota { display: grid; grid-template-columns: 140px 1fr 22px; align-items: center; gap: 8px; font-size: 12px; }
+        .sim-nota-barra { height: 5px; border-radius: 3px; background: rgb(var(--tinta-rgb) / 0.08); overflow: hidden; }
+        .sim-nota-barra > div { height: 100%; border-radius: 3px; }
+        .sim-nota strong { text-align: right; }
+        @media (max-width: 480px) { .sim-nota { grid-template-columns: 110px 1fr 20px; } }
 
         .sim-input {
           flex: 1;
-          background: rgba(255,255,255,0.04);
+          background: rgb(var(--tinta-rgb) / 0.04);
           border: 1px solid rgb(var(--accent-rgb) / 0.2);
           border-radius: 12px;
           padding: 13px 18px;
-          color: #e2e8f0;
+          color: var(--txt-1b);
           font-size: 14px;
           outline: none;
           transition: border-color 0.2s;
           font-family: inherit;
         }
 
-        .sim-input::placeholder { color: #475569; }
+        .sim-input::placeholder { color: var(--txt-5); }
         .sim-input:focus { border-color: rgb(var(--accent-rgb) / 0.5); }
         .sim-input:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -245,7 +265,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
 
         .sim-typing {
           animation: simTyping 1.2s infinite;
-          color: #64748b;
+          color: var(--txt-4);
           font-size: 13px;
           font-style: italic;
         }
@@ -256,9 +276,9 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         }
 
         .sim-end-btn {
-          background: rgba(255,255,255,0.06);
-          border: 1px solid rgba(255,255,255,0.12);
-          color: #cbd5e1;
+          background: rgb(var(--tinta-rgb) / 0.06);
+          border: 1px solid rgb(var(--tinta-rgb) / 0.12);
+          color: var(--txt-2);
           font-size: 11px;
           font-weight: 700;
           padding: 6px 12px;
@@ -271,7 +291,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
         .sim-end-btn:hover {
           background: rgb(var(--accent-rgb) / 0.18);
           border-color: rgb(var(--accent-rgb) / 0.35);
-          color: #e2e8f0;
+          color: var(--txt-1b);
         }
 
         .sim-complete-card {
@@ -319,15 +339,15 @@ const InterviewSimulator = ({ aoGanharXp }) => {
             <span style={{ fontSize: '20px', color: '#f97316', display: 'inline-flex' }}><IconFire /></span>
             <div>
               <div style={{ fontSize: '16px', fontWeight: '800', color: '#f97316', lineHeight: 1 }}>{ofensiva}</div>
-              <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>dias</div>
+              <div style={{ fontSize: '10px', color: 'var(--txt-4)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>dias</div>
             </div>
           </div>
 
           <div className="sim-stat-card" title="Quests cumpridas hoje">
-            <span style={{ fontSize: '20px', color: '#34d399', display: 'inline-flex' }}><IconTarget /></span>
+            <span style={{ fontSize: '20px', color: 'var(--ok)', display: 'inline-flex' }}><IconTarget /></span>
             <div>
-              <div style={{ fontSize: '16px', fontWeight: '800', color: '#34d399', lineHeight: 1 }}>{missoes}</div>
-              <div style={{ fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>diárias</div>
+              <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--ok)', lineHeight: 1 }}>{missoes}</div>
+              <div style={{ fontSize: '10px', color: 'var(--txt-4)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>diárias</div>
             </div>
           </div>
         </div>
@@ -337,7 +357,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
       <div style={{
         maxWidth: '920px',
         width: '100%',
-        background: 'rgba(255,255,255,0.04)',
+        background: 'rgb(var(--tinta-rgb) / 0.04)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         border: '1px solid rgb(var(--accent-rgb) / 0.15)',
@@ -357,15 +377,15 @@ const InterviewSimulator = ({ aoGanharXp }) => {
           justifyContent: 'space-between',
         }}>
           <div>
-            <div style={{ fontSize: '18px', fontWeight: '800', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '-0.3px' }}>
+            <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--txt-1b)', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '-0.3px' }}>
               <IconRobot /> IA Recrutadora
             </div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Simulador de Entrevista · Vaga Jovem Aprendiz</div>
+            <div style={{ fontSize: '12px', color: 'var(--txt-3)', marginTop: '2px' }}>Simulador de Entrevista · Vaga Jovem Aprendiz</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div className="sim-pulse" style={{ background: carregando ? '#facc15' : '#34d399' }} />
-              <span style={{ fontSize: '12px', color: '#64748b' }}>{carregando ? 'analisando' : 'online'}</span>
+              <div className="sim-pulse" style={{ background: carregando ? '#facc15' : 'var(--ok)' }} />
+              <span style={{ fontSize: '12px', color: 'var(--txt-4)' }}>{carregando ? 'analisando' : 'online'}</span>
             </div>
             {!sessaoConcluida && historico.some((m) => m.remetente === 'user') && (
               <button onClick={encerrarSimulacao} className="sim-end-btn">
@@ -380,7 +400,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
           flex: 1,
           padding: '24px',
           overflowY: 'auto',
-          background: 'rgba(0,0,0,0.2)',
+          background: 'rgb(var(--campo-rgb) / 0.2)',
           display: 'flex',
           flexDirection: 'column',
           gap: '16px',
@@ -408,11 +428,22 @@ const InterviewSimulator = ({ aoGanharXp }) => {
 
               {msg.remetente === 'ai' && msg.feedback && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start', paddingLeft: '36px' }}>
-                  <div className="sim-feedback-card">
-                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#34d399', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <IconSparkle /> Feedback em tempo real {msg.xp_ganho !== null ? `· +${msg.xp_ganho} XP` : ''}
+                  <div className={`sim-feedback-card ${msg.categoria && msg.categoria !== 'resposta' ? 'alerta' : ''}`}>
+                    <div className="sim-feedback-titulo">
+                      <IconSparkle /> {msg.categoria && msg.categoria !== 'resposta' ? 'Não valeu XP' : 'Feedback em tempo real'} {msg.xp_ganho !== null && msg.xp_ganho !== undefined ? `· +${msg.xp_ganho} XP` : ''}
                     </div>
                     {msg.feedback}
+                    {msg.notas && (
+                      <div className="sim-notas">
+                        {CRITERIOS.map(([id, rotulo]) => (
+                          <div key={id} className="sim-nota">
+                            <span>{rotulo}</span>
+                            <div className="sim-nota-barra"><div style={{ width: `${msg.notas[id] * 10}%`, background: corDaNota(msg.notas[id]) }} /></div>
+                            <strong style={{ color: corDaNota(msg.notas[id]) }}>{msg.notas[id]}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -422,7 +453,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
           {carregando && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--accent-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: 'white', flexShrink: 0 }}><IconRobot /></div>
-              <p className="sim-typing">A IA está analisando sua resposta...</p>
+              <p className="sim-typing">A entrevistadora está avaliando sua resposta...</p>
             </div>
           )}
         </div>
@@ -438,10 +469,10 @@ const InterviewSimulator = ({ aoGanharXp }) => {
               style={{ padding: '20px' }}
             >
               <div className="sim-complete-card">
-                <div style={{ fontSize: '15px', fontWeight: '800', color: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--txt-1b)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                   <IconTrophy /> Simulação concluída!
                 </div>
-                <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '6px' }}>
+                <div style={{ fontSize: '13px', color: 'var(--txt-3)', marginTop: '6px' }}>
                   Você ganhou <strong style={{ color: 'var(--accent-2)' }}>{xpGanhoSessao} XP</strong> nessa sessão de prática.
                 </div>
                 <button onClick={novaSimulacao} className="sim-restart-btn">
@@ -454,7 +485,7 @@ const InterviewSimulator = ({ aoGanharXp }) => {
               key="input"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              style={{ padding: '16px 20px', background: 'rgba(0,0,0,0.3)', borderTop: '1px solid rgb(var(--accent-rgb) / 0.1)', display: 'flex', gap: '10px' }}
+              style={{ padding: '16px 20px', background: 'rgb(var(--campo-rgb) / 0.3)', borderTop: '1px solid rgb(var(--accent-rgb) / 0.1)', display: 'flex', gap: '10px' }}
             >
               <input
                 type="text"

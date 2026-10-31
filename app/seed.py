@@ -87,7 +87,7 @@ def popular_banco():
             ultimo_treino=ontem,
             missoes_diarias_concluidas=2,
             habilidades=habilidades_estudante,
-            itinerario="Tecnologia e Ciência de Dados",
+            itinerario="Ciência de Dados",
             turma_id=2,
         )
         db.add(estudante_teste)
@@ -95,18 +95,18 @@ def popular_banco():
         print("👥 Inserindo colegas de turma (todos os itinerários)...")
         # (nome, turma, itinerário, xp, ofensiva, habilidades, taxa de acerto no quiz em %)
         colegas = [
-            ("Bianca Ferreira", 2, "Tecnologia e Ciência de Dados", 640, 18, ["Python", "SQL", "Análise de Dados", "Comunicação"], 90),
-            ("Lucas Andrade", 3, "Tecnologia e Ciência de Dados", 210, 3, ["JavaScript", "React", "CSS"], 60),
-            ("Júlia Martins", 2, "Robótica e Automação", 480, 12, ["Arduino", "Lógica de Programação", "Trabalho em Equipe"], 80),
-            ("Gabriel Souza", 1, "Robótica e Automação", 150, 1, ["Arduino", "Matemática"], 50),
-            ("Ana Clara Lima", 2, "Ciências Jurídicas / Serviços Jurídicos", 560, 21, ["Comunicação", "Organização", "Redação", "LGPD"], 90),
-            ("Matheus Rocha", 3, "Ciências Jurídicas / Serviços Jurídicos", 320, 6, ["Redação", "Atendimento"], 70),
-            ("Beatriz Nunes", 3, "Recursos Humanos e Gestão de Pessoas", 590, 15, ["Comunicação", "Organização", "Pacote Office", "Atendimento"], 80),
-            ("Isabela Duarte", 1, "Recursos Humanos e Gestão de Pessoas", 260, 4, ["Comunicação", "Trabalho em Equipe"], 70),
-            ("Guilherme Pires", 1, "Ciências da Natureza e Matemática", 410, 9, ["Biologia", "Química", "Matemática"], 80),
-            ("Mariana Costa", 3, "Ciências da Natureza e Matemática", 180, 2, ["Biologia", "Organização"], 60),
+            ("Bianca Ferreira", 2, "Ciência de Dados", 640, 18, ["Python", "SQL", "Análise de Dados", "Comunicação"], 90),
+            ("Lucas Andrade", 3, "Ciência de Dados", 210, 3, ["JavaScript", "React", "CSS"], 60),
+            ("Júlia Martins", 2, "Mecatrônica", 480, 12, ["Arduino", "Lógica de Programação", "Trabalho em Equipe"], 80),
+            ("Gabriel Souza", 1, "Mecatrônica", 150, 1, ["Arduino", "Matemática"], 50),
+            ("Ana Clara Lima", 2, "Serviços Jurídicos", 560, 21, ["Comunicação", "Organização", "Redação", "LGPD"], 90),
+            ("Matheus Rocha", 3, "Serviços Jurídicos", 320, 6, ["Redação", "Atendimento"], 70),
+            ("Beatriz Nunes", 3, "Recursos Humanos", 590, 15, ["Comunicação", "Organização", "Pacote Office", "Atendimento"], 80),
+            ("Isabela Duarte", 1, "Recursos Humanos", 260, 4, ["Comunicação", "Trabalho em Equipe"], 70),
+            ("Guilherme Pires", 1, "Administração", 410, 9, ["Pacote Office", "Organização", "Matemática"], 80),
+            ("Mariana Costa", 3, "Inteligência Artificial", 180, 2, ["Python", "Organização"], 60),
             # Outro Rafael com sobrenome em S: vira "Rafael Si." no ranking, não um segundo "Rafael S."
-            ("Rafael Silva", 1, "Tecnologia e Ciência de Dados", 300, 5, ["Python", "Excel"], 70),
+            ("Rafael Silva", 1, "Ciência de Dados", 300, 5, ["Python", "Excel"], 70),
         ]
         inicio_semana = hoje_na_escola() - timedelta(days=hoje_na_escola().weekday())
         nomes_usados = {"rafael s."}
@@ -142,11 +142,11 @@ def popular_banco():
                 localizacao="São Paulo - SP",
                 tipo_modalidade="Híbrido",
                 habilidades_exigidas=["Python", "SQL", "Análise de Dados"],
-                area_itinerario="Tecnologia e Ciência de Dados",
+                area_itinerario="Ciência de Dados",
                 descricao_completa=(
                     "Você vai apoiar o time de dados da Vivo em análises de churn e "
                     "consumo, aprendendo Python, SQL e visualização de dados na prática. "
-                    "Ideal pra quem está no itinerário de Tecnologia e Ciência de Dados "
+                    "Ideal pra quem está no itinerário de Ciência de Dados "
                     "e quer o primeiro contato real com um time de analytics."
                 ),
                 link_inscricao="https://vagas.vivo.com.br",
@@ -159,7 +159,7 @@ def popular_banco():
                 localizacao="Remoto",
                 tipo_modalidade="Remoto",
                 habilidades_exigidas=["React", "JavaScript", "CSS"],
-                area_itinerario="Tecnologia e Ciência de Dados",
+                area_itinerario="Ciência de Dados",
                 descricao_completa=(
                     "Squad pequeno construindo produtos web com React. Você vai revisar "
                     "PRs de verdade, aprender componentização e boas práticas de front-end "
@@ -175,7 +175,7 @@ def popular_banco():
                 localizacao="Três Lagoas - MS",
                 tipo_modalidade="Presencial",
                 habilidades_exigidas=["Lógica de Programação", "SQL"],
-                area_itinerario="Tecnologia e Ciência de Dados",
+                area_itinerario="Ciência de Dados",
                 descricao_completa=(
                     "Suporte ao time de infraestrutura de TI da unidade fabril: "
                     "manutenção de estações de trabalho, apoio em chamados e primeiros "
@@ -191,7 +191,7 @@ def popular_banco():
                 localizacao="Campinas - SP",
                 tipo_modalidade="Presencial",
                 habilidades_exigidas=["Lógica de Programação", "Arduino", "Trabalho em Equipe"],
-                area_itinerario="Robótica e Automação",
+                area_itinerario="Mecatrônica",
                 descricao_completa=(
                     "Você vai acompanhar a equipe de automação industrial em projetos "
                     "de prototipagem com Arduino e sensores, entendendo como uma linha "
@@ -207,7 +207,7 @@ def popular_banco():
                 localizacao="São Paulo - SP",
                 tipo_modalidade="Híbrido",
                 habilidades_exigidas=["Comunicação", "Organização", "Redação"],
-                area_itinerario="Ciências Jurídicas / Serviços Jurídicos",
+                area_itinerario="Serviços Jurídicos",
                 descricao_completa=(
                     "Apoio em rotinas administrativas de um escritório de Direito "
                     "Digital e LGPD: organização de processos, elaboração de peças "
@@ -217,20 +217,18 @@ def popular_banco():
             ),
             models.Vaga(
                 id=6,
-                titulo_vaga="Jovem Aprendiz - Laboratório de Análises",
-                empresa="Instituto Butantan",
-                cnpj_empresa="60979457000186",
-                localizacao="São Paulo - SP",
+                titulo_vaga="Jovem Aprendiz - Auxiliar Administrativo",
+                empresa="Prefeitura Municipal (parceira)",
+                cnpj_empresa=None,
+                localizacao="Três Lagoas - MS",
                 tipo_modalidade="Presencial",
-                habilidades_exigidas=["Biologia", "Química", "Organização"],
-                area_itinerario="Ciências da Natureza e Matemática",
+                habilidades_exigidas=["Pacote Office", "Organização", "Atendimento"],
+                area_itinerario="Administração",
                 descricao_completa=(
-                    "Apoio em rotinas de laboratório sob supervisão de pesquisadores: "
-                    "preparo de amostras, registro de dados experimentais e noções "
-                    "básicas de biossegurança. Ótimo pra quem mira vestibular na área "
-                    "de ciências biológicas ou exatas."
+                    "Apoio no protocolo e no arquivo de documentos, atendimento ao "
+                    "público, controle de planilhas e rotinas de compras e almoxarifado."
                 ),
-                link_inscricao="https://butantan.gov.br/trabalhe-conosco",
+                link_inscricao=None,
             ),
             models.Vaga(
                 id=7,
@@ -239,7 +237,7 @@ def popular_banco():
                 localizacao="Três Lagoas - MS",
                 tipo_modalidade="Presencial",
                 habilidades_exigidas=["Redação", "Organização", "Atendimento", "LGPD"],
-                area_itinerario="Ciências Jurídicas / Serviços Jurídicos",
+                area_itinerario="Serviços Jurídicos",
                 descricao_completa=(
                     "Apoio no atendimento ao público, triagem e digitalização de "
                     "documentos, controle de prazos e organização de processos, sempre "
@@ -254,7 +252,7 @@ def popular_banco():
                 localizacao="Três Lagoas - MS",
                 tipo_modalidade="Presencial",
                 habilidades_exigidas=["Comunicação", "Organização", "Pacote Office", "Atendimento"],
-                area_itinerario="Recursos Humanos e Gestão de Pessoas",
+                area_itinerario="Recursos Humanos",
                 descricao_completa=(
                     "Você vai apoiar o time de RH em recrutamento e seleção (triagem de "
                     "currículos, agendamento de entrevistas), integração de novos "
@@ -269,10 +267,24 @@ def popular_banco():
                 localizacao="Campo Grande - MS",
                 tipo_modalidade="Híbrido",
                 habilidades_exigidas=["Organização", "Pacote Office", "Comunicação"],
-                area_itinerario="Recursos Humanos e Gestão de Pessoas",
+                area_itinerario="Recursos Humanos",
                 descricao_completa=(
                     "Apoio em admissões, conferência de folha de ponto, organização de "
                     "documentos de funcionários e atendimento a dúvidas sobre férias e benefícios."
+                ),
+            ),
+            models.Vaga(
+                id=10,
+                titulo_vaga="Jovem Aprendiz - Inteligência Artificial",
+                empresa="TechSoluções",
+                cnpj_empresa="42541295000100",
+                localizacao="Remoto",
+                tipo_modalidade="Remoto",
+                habilidades_exigidas=["Python", "Lógica de Programação", "Análise de Dados"],
+                area_itinerario="Inteligência Artificial",
+                descricao_completa=(
+                    "Apoio ao time que treina modelos de IA: organização e limpeza de dados, "
+                    "testes de chatbots e documentação dos resultados."
                 ),
             ),
         ]

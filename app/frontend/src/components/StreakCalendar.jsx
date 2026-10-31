@@ -34,12 +34,12 @@ const StreakCalendar = ({ ano, mes, dias = [] }) => {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
         <IconCalendar style={{ color: 'var(--accent)' }} />
-        <span style={{ fontSize: '13px', fontWeight: '700', color: '#e2e8f0' }}>{NOMES_MES[mes - 1]}</span>
+        <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--txt-1b)' }}>{NOMES_MES[mes - 1]}</span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px' }}>
         {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((letra, i) => (
-          <div key={i} style={{ fontSize: '10px', color: '#475569', textAlign: 'center', fontWeight: '700' }}>{letra}</div>
+          <div key={i} style={{ fontSize: '10px', color: 'var(--txt-5)', textAlign: 'center', fontWeight: '700' }}>{letra}</div>
         ))}
         {celulas.map((cel, i) => {
           if (!cel) return <div key={`vazio-${i}`} />;
@@ -57,9 +57,9 @@ const StreakCalendar = ({ ano, mes, dias = [] }) => {
                 justifyContent: 'center',
                 fontSize: '11px',
                 fontWeight: '600',
-                background: cores ? cores.bg : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${cores ? cores.border : ehHoje ? 'rgb(var(--accent-rgb) / 0.5)' : 'rgba(255,255,255,0.06)'}`,
-                color: cores ? '#e2e8f0' : '#475569',
+                background: cores ? cores.bg : 'rgb(var(--tinta-rgb) / 0.03)',
+                border: `1px solid ${cores ? cores.border : ehHoje ? 'rgb(var(--accent-rgb) / 0.5)' : 'rgb(var(--tinta-rgb) / 0.06)'}`,
+                color: cores ? 'var(--txt-1b)' : 'var(--txt-5)',
               }}
             >
               {cel.dia}
@@ -69,13 +69,13 @@ const StreakCalendar = ({ ano, mes, dias = [] }) => {
       </div>
 
       <div style={{ display: 'flex', gap: '14px', marginTop: '14px', flexWrap: 'wrap' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: '#64748b' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--txt-4)' }}>
           <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: CORES_STATUS.feito.bg, border: `1px solid ${CORES_STATUS.feito.border}` }} /> praticou
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: '#64748b' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--txt-4)' }}>
           <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: CORES_STATUS.congelado.bg, border: `1px solid ${CORES_STATUS.congelado.border}` }} /> congelado
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: '#64748b' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--txt-4)' }}>
           <span style={{ width: '10px', height: '10px', borderRadius: '3px', background: CORES_STATUS.perdido.bg, border: `1px solid ${CORES_STATUS.perdido.border}` }} /> perdido
         </span>
       </div>

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { dataIsoParaBr, mascararTelefone } from '../utils/formatos';
 
 // Folha A4 do currículo -- a mesma no app do aluno e na ficha do painel da
 // escola, pra coordenação ver (e baixar) exatamente o que o aluno vê.
@@ -43,19 +44,35 @@ export const ESTILOS_FOLHA = `
   }
 `;
 
+// Linhas do cabeçalho com o cadastro da escola (dados_do_sistema em curriculo.py) --
+// a folha, o texto copiado e o PDF usam a mesma montagem
+export const linhasDoCabecalho = (perfil) => ({
+  pessoais: [
+    perfil.idade != null && `${perfil.idade} anos`,
+    perfil.data_nascimento && `Nascimento: ${dataIsoParaBr(perfil.data_nascimento)}`,
+  ].filter(Boolean),
+  contato: [
+    perfil.email,
+    perfil.telefone && mascararTelefone(perfil.telefone),
+    perfil.linkedin && perfil.linkedin.replace(/^https?:\/\//, ''),
+  ].filter(Boolean),
+  formacao: `Ensino Médio${perfil.turma ? ` (${perfil.turma})` : ''}`,
+});
+
+// Modelo fixo: o cabeçalho e a formação vêm de 'perfil' (o cadastro que a
+// escola fez); a IA só escreve objetivo, experiências e competências ('cv').
 // foto: object URL da foto do aluno, só quando ele escolheu pôr a foto no currículo
 export const FolhaCurriculo = ({ cv, perfil, foto = null }) => {
   const experiencias = listar(cv.experiencias);
+  const { pessoais, contato, formacao } = linhasDoCabecalho(perfil);
   return (
     <div className="cv-folha permitir-copia">
       <header className="cv-cabecalho">
         {foto && <img className="cv-foto" src={foto} alt="" />}
         <div>
-          <h1>{cv.nome_candidato || perfil.nome}</h1>
-          <div className="cv-contato">
-            {perfil.email && <span>{perfil.email}</span>}
-            {perfil.linkedin && <span>{perfil.linkedin.replace(/^https?:\/\//, '')}</span>}
-          </div>
+          <h1>{perfil.nome}</h1>
+          {pessoais.length > 0 && <div className="cv-contato">{pessoais.map((l) => <span key={l}>{l}</span>)}</div>}
+          {contato.length > 0 && <div className="cv-contato">{contato.map((l) => <span key={l}>{l}</span>)}</div>}
         </div>
       </header>
 
@@ -67,7 +84,7 @@ export const FolhaCurriculo = ({ cv, perfil, foto = null }) => {
       <section>
         <h2>Formação</h2>
         <p>
-          <strong>Ensino Médio</strong>
+          <strong>{formacao}</strong>
           {perfil.itinerario && <> — Itinerário formativo em {perfil.itinerario}</>}
         </p>
       </section>

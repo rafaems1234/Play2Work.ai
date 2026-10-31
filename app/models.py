@@ -59,7 +59,7 @@ class Estudante(Base):
     # ❤️ Vidas e congelamento de ofensiva (estilo Duolingo)
     vidas = Column(Integer, default=5)                       # Vidas atuais (máx. VIDAS_MAXIMAS)
     proxima_vida_em = Column(DateTime, nullable=True)        # Quando a próxima vida perdida regenera (None = vidas cheias)
-    congelamentos_disponiveis = Column(Integer, default=0)   # "Congelamentos de ofensiva" acumulados, gastos automaticamente quando falta um dia
+    congelamentos_disponiveis = Column(Integer, default=0)   # "Congelamentos de ofensiva": +2 a cada 7 dias seguidos (teto 4), 1 gasto por dia sem prática
     quizzes_perfeitos_seguidos = Column(Integer, default=0)  # Contador de quizzes com 100% de acerto em sequência (reseta a cada erro)
 
     # ARRAY do PostgreSQL para guardar as habilidades
@@ -73,8 +73,23 @@ class Estudante(Base):
     ja_trabalhou = Column(Boolean, nullable=True)            # Experiência prévia informada no primeiro acesso (None = não respondeu)
     experiencia_previa = Column(Text, nullable=True)         # Onde/o que fez, em texto livre
     foto_atualizada_em = Column(DateTime, nullable=True)     # None = sem foto. A imagem fica em FotoEstudante, fora da linha do aluno
-    foto_no_curriculo = Column(Boolean, nullable=False, default=False, server_default="false")  # o aluno escolhe; desligado por padrão (evita discriminação por aparência)
+    foto_no_curriculo = Column(Boolean, nullable=False, default=False, server_default="false")  # "com foto" / "sem foto" no currículo: o aluno escolhe; desligado por padrão (evita discriminação por aparência)
+    foto_curriculo_atualizada_em = Column(DateTime, nullable=True)  # None = sem foto do currículo. É outra foto, que o aluno envia (FotoCurriculo)
     onboarding_concluido_em = Column(DateTime, nullable=True)  # None = ainda não passou pelo primeiro acesso
+
+    # 📋 Ficha do PAP (colunas da planilha de controle da escola -- ver data/ficha_pap.json).
+    # Só a escola preenche e vê; perfil_desenvolvimento é dado sensível.
+    numero_cadastro_sed = Column(String(30), nullable=True)
+    sexo = Column(String(10), nullable=True)
+    perfil_desenvolvimento = Column(String(10), nullable=True)
+    ano_escolar_inicial = Column(String(12), nullable=True)
+    ano_escolar_atual = Column(String(12), nullable=True)
+    turno_escolar = Column(String(12), nullable=True)
+    formacao_mundo_trabalho_em = Column(Date, nullable=True)
+    status_estudante = Column(String(20), nullable=True)
+    endereco = Column(String(255), nullable=True)
+    documentos = Column(String(255), nullable=True)
+    cadastro_atualizado_em = Column(Date, nullable=True)       # "data atualização" da planilha: muda quando a escola edita
 
     criado_em = Column(DateTime, server_default=func.now())
 
@@ -85,6 +100,7 @@ class Estudante(Base):
     candidaturas = relationship("Candidatura", back_populates="estudante", cascade="all, delete-orphan")
     turma = relationship("Turma", back_populates="estudantes")
     foto = relationship("FotoEstudante", uselist=False, cascade="all, delete-orphan", passive_deletes=True)
+    foto_curriculo = relationship("FotoCurriculo", uselist=False, cascade="all, delete-orphan", passive_deletes=True)
     observacoes = relationship("ObservacaoEstudante", back_populates="estudante", cascade="all, delete-orphan", order_by="ObservacaoEstudante.criada_em.desc()")
     mudancas_status = relationship("MudancaStatusContratacao", back_populates="estudante", cascade="all, delete-orphan", order_by="MudancaStatusContratacao.registrada_em.desc()")
 
@@ -103,6 +119,21 @@ class FotoEstudante(Base):
     conteudo = Column(LargeBinary, nullable=False)
     tipo_mime = Column(String(20), nullable=False)
     enviada_por = Column(String(10), nullable=False)  # 'aluno' | 'escola'
+    atualizada_em = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class FotoCurriculo(Base):
+    """
+    Modelo que representa a tabela 'fotos_curriculo'.
+    A foto que vai no currículo, separada da foto de identificação
+    (FotoEstudante, que é pra escola reconhecer o aluno no painel). Opcional:
+    só o aluno envia, e só aparece se ele marcar "com foto" no currículo.
+    """
+    __tablename__ = 'fotos_curriculo'
+
+    estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), primary_key=True)
+    conteudo = Column(LargeBinary, nullable=False)
+    tipo_mime = Column(String(20), nullable=False)
     atualizada_em = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
@@ -456,25 +487,54 @@ class LogFrequencia(Base):
     registrado_em = Column(DateTime, server_default=func.now(), index=True)
 
 
-class Certificado(Base):
+class ContratoAprendizagem(Base):
     """
-    Modelo que representa a tabela 'certificados'.
-    Certificado emitido pelo PAP (ex: o da integração), que a escola envia
-    em PDF pro aluno baixar. A plataforma não gera o certificado -- só
-    guarda, controla o acesso e mostra no painel quem já tem. 'modulo_id'
-    liga ao módulo da trilha EAD a que ele se refere, quando houver.
+    Modelo que representa a tabela 'contratos_aprendizagem'.
+    Contrato de Jovem Aprendiz como a escola controla na planilha do PAP:
+    empresa, local, turno, tipo de contratação, vigência, aditivo, carga
+    horária, status, motivo do encerramento e efetivação. Um aluno pode ter
+    vários ao longo do tempo (o histórico fica); o mais recente é o atual.
     """
-    __tablename__ = 'certificados'
+    __tablename__ = 'contratos_aprendizagem'
 
     id = Column(Integer, primary_key=True, index=True)
     estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False, index=True)
-    modulo_id = Column(Integer, ForeignKey('modulos_trilha.id', ondelete="SET NULL"), nullable=True, index=True)
-    titulo = Column(String(150), nullable=False)           # ex: "Integração -- Programa de Aprendizagem 2026"
-    emitido_em = Column(Date, nullable=True)               # data que consta no certificado
-    nome_arquivo = Column(String(150), nullable=False)
-    tamanho_bytes = Column(Integer, nullable=False)
-    conteudo = deferred(Column(LargeBinary, nullable=False))  # PDF; só carrega no download
-    enviado_em = Column(DateTime, server_default=func.now())
+    empresa = Column(String(100), nullable=False)
+    cnpj = Column(String(14), nullable=True)
+    local_atuacao = Column(String(150), nullable=True)
+    turno_trabalho = Column(String(12), nullable=True)
+    tipo_contratacao = Column(String(12), nullable=True)      # Direta | Alternativa
+    data_inicial = Column(Date, nullable=False)
+    data_final = Column(Date, nullable=True)
+    aditivo = Column(String(3), nullable=True)                # Sim | Não
+    aditivo_inicio = Column(Date, nullable=True)
+    aditivo_fim = Column(Date, nullable=True)
+    horas_teoria = Column(Integer, nullable=True)             # carga horária semanal
+    horas_pratica = Column(Integer, nullable=True)
+    status = Column(String(12), nullable=False, default="Ativo")  # Ativo | Finalizado
+    motivo = Column(String(60), nullable=True)
+    efetivado = Column(String(15), nullable=True)             # Efetivado | Não efetivado
+    observacao = Column(Text, nullable=True)
+    criado_em = Column(DateTime, server_default=func.now())
+
+
+class RetiradaCertificado(Base):
+    """
+    Modelo que representa a tabela 'retiradas_certificado'.
+    O certificado de conclusão de um módulo da trilha EAD é entregue em mãos
+    na escola -- a plataforma não guarda nem gera o documento. Quando o aluno
+    conclui o módulo, ele é avisado pra procurar a coordenação; quando busca,
+    a coordenação registra aqui. Sem linha = concluiu e ainda não retirou.
+    """
+    __tablename__ = 'retiradas_certificado'
+    __table_args__ = (UniqueConstraint('estudante_id', 'modulo_id', name='uq_retirada_estudante_modulo'),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False, index=True)
+    modulo_id = Column(Integer, ForeignKey('modulos_trilha.id', ondelete="CASCADE"), nullable=False, index=True)
+    retirado_em = Column(Date, nullable=False)             # dia da entrega, informado pela coordenação
+    observacao = Column(String(200), nullable=True)        # ex: "retirado pela mãe"
+    registrado_em = Column(DateTime, server_default=func.now())
 
 
 # ------------------------------------------------------------------ Mensagens (3 tipos de canal)

@@ -100,18 +100,18 @@ export const ESTILOS_PLAYER = `
   .player-caixa { border-radius: 16px; overflow: hidden; background: #000; border: 1px solid rgb(var(--accent-rgb) / 0.2); }
   .player-video { position: relative; aspect-ratio: 16 / 9; background: #000; }
   .player-video iframe, .player-video > div { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-  .player-controles { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: rgba(255,255,255,0.04); }
+  .player-controles { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: rgb(var(--tinta-rgb) / 0.04); }
   .player-btn { min-width: 40px; height: 36px; padding: 0 12px; border-radius: 10px; border: none; font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit;
     background: linear-gradient(135deg, var(--accent-strong), var(--accent-2-strong)); color: #fff; }
-  .player-btn.secundario { background: rgba(255,255,255,0.08); color: #e2e8f0; }
+  .player-btn.secundario { background: rgb(var(--tinta-rgb) / 0.08); color: var(--txt-1b); }
   .player-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .player-trilho { position: relative; flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; }
+  .player-trilho { position: relative; flex: 1; height: 6px; border-radius: 3px; background: rgb(var(--tinta-rgb) / 0.1); overflow: hidden; }
   .player-trilho-assistido { position: absolute; inset: 0 auto 0 0; background: rgb(var(--accent-rgb) / 0.35); }
   .player-trilho-atual { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
-  .player-tempo { font-size: 12px; color: #94a3b8; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .player-aviso { font-size: 12px; color: #64748b; padding: 8px 12px 10px; background: rgba(255,255,255,0.02); }
+  .player-tempo { font-size: 12px; color: var(--txt-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .player-aviso { font-size: 12px; color: var(--txt-4); padding: 8px 12px 10px; background: rgb(var(--tinta-rgb) / 0.02); }
   .player-demo { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-    background: radial-gradient(circle at 30% 30%, rgb(var(--accent-rgb) / 0.35), #05060c 70%); color: #e2e8f0; text-align: center; padding: 20px; }
+    background: radial-gradient(circle at 30% 30%, rgb(var(--accent-rgb) / 0.35), #05060c 70%); color: var(--txt-1b); text-align: center; padding: 20px; }
 `;
 
 // ---------------------------------------------------------------- YouTube
@@ -198,9 +198,9 @@ export const PlayerDemo = ({ titulo, duracao, limiteInicial, aoTrecho }) => {
     <div className="player-caixa">
       <div className="player-video">
         <div className="player-demo">
-          <div style={{ fontSize: '11px', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#fbbf24', fontWeight: 800 }}>Vídeo simulado · modo demonstração</div>
+          <div style={{ fontSize: '11px', letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--aviso)', fontWeight: 800 }}>Vídeo simulado · modo demonstração</div>
           <div style={{ fontSize: '20px', fontWeight: 800 }}>{titulo}</div>
-          <div style={{ fontSize: '13px', color: '#94a3b8' }}>Aqui entra o vídeo que o professor gravou (YouTube não listado).</div>
+          <div style={{ fontSize: '13px', color: 'var(--txt-3)' }}>Aqui entra o vídeo que o professor gravou (YouTube não listado).</div>
           <div style={{ fontSize: '34px', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{formatarTempo(posicao)}</div>
         </div>
       </div>
@@ -234,7 +234,7 @@ export const TempoDeEstudo = ({ duracao, limiteInicial, aoTrecho }) => {
   const { posicao } = useSemAvanco({ obterTempo, irPara, tocando: contando, limiteInicial, aoTrecho });
 
   return (
-    <div className="player-caixa" style={{ background: 'rgba(255,255,255,0.03)' }}>
+    <div className="player-caixa" style={{ background: 'rgb(var(--tinta-rgb) / 0.03)' }}>
       <div className="player-controles">
         <button type="button" className="player-btn" onClick={() => setEstudando((e) => !e)} disabled={posicao >= duracao}>
           {estudando ? 'Pausar estudo' : posicao > 0 ? 'Continuar estudo' : 'Começar estudo'}
@@ -268,7 +268,7 @@ export const PlayerAudio = ({ caminho, nome }) => {
   const { posicao, limite, voltar10 } = useSemAvanco({ obterTempo, irPara, tocando, limiteInicial: 0 });
 
   return (
-    <div className="player-caixa" style={{ background: 'rgba(255,255,255,0.03)' }}>
+    <div className="player-caixa" style={{ background: 'rgb(var(--tinta-rgb) / 0.03)' }}>
       {url && (
         <audio
           ref={audioRef}
@@ -280,7 +280,7 @@ export const PlayerAudio = ({ caminho, nome }) => {
           onRateChange={(e) => { if (e.currentTarget.playbackRate !== 1) e.currentTarget.playbackRate = 1; }}
         />
       )}
-      <div style={{ padding: '10px 12px 0', fontSize: '13px', fontWeight: 700, color: '#e2e8f0' }}>🎧 {nome}</div>
+      <div style={{ padding: '10px 12px 0', fontSize: '13px', fontWeight: 700, color: 'var(--txt-1b)' }}>🎧 {nome}</div>
       <Controles
         tocando={tocando}
         aoAlternar={() => (tocando ? audioRef.current?.pause() : audioRef.current?.play())}

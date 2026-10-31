@@ -1,18 +1,18 @@
 import re
 from typing import Optional
 from datetime import date
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from models import Estudante, ModuloTrilha, Aula, PerguntaFixacao, MaterialAula, ProgressoAula, LogFrequencia, Certificado
+from models import Estudante, ModuloTrilha, Aula, PerguntaFixacao, MaterialAula, ProgressoAula, LogFrequencia, RetiradaCertificado
 from database import get_db
 from auth import get_admin_atual, get_estudante_atual
 from services import ITINERARIOS_QUIZ, AIService
-from fuso import agora_utc
+from fuso import agora_utc, hoje
 from aulas import (
     extrair_video, buscar_ou_iniciar_progresso, registrar_trecho, estado_do_progresso,
-    sortear_fixacao, corrigir_fixacao,
+    sortear_fixacao, corrigir_fixacao, certificados_dos_alunos, XP_MODULO_CONCLUIDO,
 )
 
 # Trilha EAD. A escola (professores) cadastra módulos, aulas, materiais e a
@@ -101,6 +101,11 @@ class TrechoRequest(BaseModel):
 
 class FixacaoRequest(BaseModel):
     respostas: list[Optional[int]] = Field(max_length=30)
+
+
+class RetiradaRequest(BaseModel):
+    retirado_em: Optional[date] = None  # sem data = hoje
+    observacao: Optional[str] = Field(default=None, max_length=200)
 
 
 # ---------------------------------------------------------------- auxiliares
@@ -331,9 +336,10 @@ def relatorio_frequencia(turma_id: Optional[int] = Query(None), modulo_id: Optio
         ).all()
     }
 
-    certificados_por_aluno: dict[int, list[Certificado]] = {}
-    for c in db.query(Certificado).filter(Certificado.estudante_id.in_([a.id for a in alunos] or [0])).all():
-        certificados_por_aluno.setdefault(c.estudante_id, []).append(c)
+    retiradas = {
+        (r.estudante_id, r.modulo_id): r.retirado_em
+        for r in db.query(RetiradaCertificado).filter(RetiradaCertificado.estudante_id.in_([a.id for a in alunos] or [0])).all()
+    }
 
     linhas = []
     for aluno in alunos:
@@ -351,15 +357,15 @@ def relatorio_frequencia(turma_id: Optional[int] = Query(None), modulo_id: Optio
                 "concluida_em": _iso(p.concluida_em) if p else None,
             })
         concluidas = [d for d in detalhes if d["concluida_em"]]
-        # Módulos que o aluno terminou -- e se a escola já enviou o certificado
-        # daquele módulo (é o "pra quem falta mandar certificado" da coordenação)
+        # Módulos que o aluno terminou -- e se ele já retirou o certificado
+        # na escola (é o "quem falta buscar o certificado" da coordenação)
         modulos_concluidos = []
         for modulo in {a.modulo for a in aplicaveis}:
             do_modulo = [d for d in detalhes if d["modulo"] == modulo.titulo]
             if do_modulo and all(d["concluida_em"] for d in do_modulo):
                 modulos_concluidos.append({
                     "modulo_id": modulo.id, "modulo": modulo.titulo,
-                    "tem_certificado": any(c.modulo_id == modulo.id for c in certificados_por_aluno.get(aluno.id, [])),
+                    "retirado_em": _iso(retiradas.get((aluno.id, modulo.id))),
                 })
         linhas.append({
             "estudante_id": aluno.id, "nome": aluno.nome, "cpf": aluno.cpf,
@@ -368,14 +374,13 @@ def relatorio_frequencia(turma_id: Optional[int] = Query(None), modulo_id: Optio
             "carga_prevista_minutos": sum(d["carga_horaria_minutos"] for d in detalhes),
             "carga_concluida_minutos": sum(d["carga_horaria_minutos"] for d in concluidas),
             "modulos_concluidos": sorted(modulos_concluidos, key=lambda m: m["modulo"]),
-            "total_certificados": len(certificados_por_aluno.get(aluno.id, [])),
             "aulas": detalhes,
         })
     return {"gerado_em": _iso(agora_utc()), "alunos": linhas}
 
 
 def situacao_do_modulo(db: Session, estudante_id: int, modulo: Optional[ModuloTrilha]) -> dict:
-    """Quantas aulas publicadas do módulo o aluno já concluiu -- é o que libera o certificado."""
+    """Quantas aulas publicadas do módulo o aluno já concluiu."""
     if modulo is None:
         return {"aulas_total": 0, "aulas_concluidas": 0, "concluido": True}
     publicadas = [a.id for a in modulo.aulas if a.publicada]
@@ -387,86 +392,65 @@ def situacao_do_modulo(db: Session, estudante_id: int, modulo: Optional[ModuloTr
     return {"aulas_total": len(publicadas), "aulas_concluidas": concluidas, "concluido": bool(publicadas) and concluidas >= len(publicadas)}
 
 
-def _certificado_para_dict(c: Certificado, situacao: dict) -> dict:
-    """
-    'liberado' = o aluno já pode baixar. Certificado ligado a um módulo só
-    libera com todas as aulas publicadas dele concluídas; sem módulo, libera
-    na hora (a escola só quis entregar o documento).
-    """
-    return {
-        "id": c.id, "estudante_id": c.estudante_id, "modulo_id": c.modulo_id, "titulo": c.titulo,
-        "emitido_em": _iso(c.emitido_em), "nome_arquivo": c.nome_arquivo, "tamanho_bytes": c.tamanho_bytes,
-        "enviado_em": _iso(c.enviado_em),
-        "liberado": situacao["concluido"],
-        "aulas_total": situacao["aulas_total"],
-        "aulas_concluidas": situacao["aulas_concluidas"],
-    }
-
-
-def _certificados_com_situacao(db: Session, estudante_id: int) -> list[dict]:
-    certificados = db.query(Certificado).filter(Certificado.estudante_id == estudante_id).order_by(Certificado.enviado_em.desc()).all()
-    modulos = {m.id: m for m in db.query(ModuloTrilha).filter(ModuloTrilha.id.in_([c.modulo_id for c in certificados if c.modulo_id] or [0])).all()}
-    return [_certificado_para_dict(c, situacao_do_modulo(db, estudante_id, modulos.get(c.modulo_id))) for c in certificados]
-
-
-def _resposta_certificado(c: Certificado) -> Response:
-    return Response(
-        content=c.conteudo,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{_nome_arquivo_seguro(c.nome_arquivo)}"',
-            "Cache-Control": "private, no-store",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
-
-
-@router_admin.post("/estudantes/{estudante_id}/certificados", status_code=status.HTTP_201_CREATED)
-async def enviar_certificado(
-    estudante_id: int,
-    arquivo: UploadFile = File(...),
-    titulo: str = Form(..., min_length=2, max_length=150),
-    emitido_em: Optional[date] = Form(None),
-    modulo_id: Optional[int] = Form(None),
+# Certificado de conclusão: entregue em mãos na escola. A plataforma avisa o
+# aluno quando ele conclui um módulo e a coordenação registra quem já buscou.
+@router_admin.get("/certificados")
+def certificados_da_escola(
+    turma_id: Optional[int] = Query(None),
+    situacao: Optional[str] = Query(None, pattern="^(a_retirar|retirado)$"),
     db: Session = Depends(get_db),
 ):
-    """
-    A escola guarda o PDF do certificado emitido pelo PAP. Ligado a um módulo
-    (ex: a integração), ele fica guardado e só libera pro aluno baixar quando
-    ele concluir o módulo; sem módulo, libera na hora.
-    """
-    _buscar(db, Estudante, estudante_id, "Aluno")
-    modulo = _buscar(db, ModuloTrilha, modulo_id, "Módulo") if modulo_id is not None else None
-    conteudo = await arquivo.read(TAMANHO_MAXIMO_MATERIAL + 1)
-    if len(conteudo) > TAMANHO_MAXIMO_MATERIAL:
-        raise HTTPException(status_code=413, detail="Arquivo grande demais (máximo 10 MB).")
-    if not conteudo.startswith(b"%PDF"):
-        raise HTTPException(status_code=400, detail="Envie o certificado em PDF.")
-    certificado = Certificado(
-        estudante_id=estudante_id, modulo_id=modulo_id, titulo=titulo.strip(), emitido_em=emitido_em,
-        nome_arquivo=_nome_arquivo_seguro(arquivo.filename or "certificado.pdf"), tamanho_bytes=len(conteudo), conteudo=conteudo,
-    )
-    db.add(certificado)
-    db.commit()
-    db.refresh(certificado)
-    return _certificado_para_dict(certificado, situacao_do_modulo(db, estudante_id, modulo))
+    """Todos os certificados de conclusão (um por aluno e módulo concluído), os a retirar primeiro."""
+    consulta = db.query(Estudante)
+    if turma_id is not None:
+        consulta = consulta.filter(Estudante.turma_id == turma_id)
+    alunos = consulta.order_by(Estudante.nome).all()
+    por_aluno = certificados_dos_alunos(db, alunos)
+    linhas = []
+    for aluno in alunos:
+        for c in por_aluno[aluno.id]:
+            if (situacao == "a_retirar" and c["retirado_em"]) or (situacao == "retirado" and not c["retirado_em"]):
+                continue
+            linhas.append({
+                "estudante_id": aluno.id, "nome": aluno.nome, "cpf": aluno.cpf,
+                "turma": aluno.turma.nome if aluno.turma else None, "telefone": aluno.telefone,
+                "responsavel_nome": aluno.responsavel_nome, "responsavel_telefone": aluno.responsavel_telefone,
+                **c,
+            })
+    linhas.sort(key=lambda l: (l["retirado_em"] is not None, l["nome"].lower()))
+    return linhas
 
 
 @router_admin.get("/estudantes/{estudante_id}/certificados")
 def certificados_do_aluno_admin(estudante_id: int, db: Session = Depends(get_db)):
-    _buscar(db, Estudante, estudante_id, "Aluno")
-    return _certificados_com_situacao(db, estudante_id)
+    aluno = _buscar(db, Estudante, estudante_id, "Aluno")
+    return certificados_dos_alunos(db, [aluno])[aluno.id]
 
 
-@router_admin.get("/certificados/{certificado_id}")
-def baixar_certificado_admin(certificado_id: int, db: Session = Depends(get_db)):
-    return _resposta_certificado(_buscar(db, Certificado, certificado_id, "Certificado"))
+@router_admin.put("/estudantes/{estudante_id}/certificados/{modulo_id}")
+def registrar_retirada(estudante_id: int, modulo_id: int, data: RetiradaRequest, db: Session = Depends(get_db)):
+    """A coordenação marca que o aluno (ou o responsável) buscou o certificado. Chamar de novo corrige a data/observação."""
+    aluno = _buscar(db, Estudante, estudante_id, "Aluno")
+    modulo = _buscar(db, ModuloTrilha, modulo_id, "Módulo")
+    if not any(c["modulo_id"] == modulo.id for c in certificados_dos_alunos(db, [aluno])[aluno.id]):
+        raise HTTPException(status_code=409, detail=f"{aluno.nome} ainda não concluiu todas as aulas de \"{modulo.titulo}\".")
+    retirado_em = data.retirado_em or hoje()
+    if retirado_em > hoje():
+        raise HTTPException(status_code=400, detail="A data da retirada não pode ser no futuro.")
+    observacao = (data.observacao or "").strip() or None
+    retirada = db.query(RetiradaCertificado).filter(RetiradaCertificado.estudante_id == aluno.id, RetiradaCertificado.modulo_id == modulo.id).first()
+    if retirada:
+        retirada.retirado_em, retirada.observacao = retirado_em, observacao
+    else:
+        db.add(RetiradaCertificado(estudante_id=aluno.id, modulo_id=modulo.id, retirado_em=retirado_em, observacao=observacao))
+    db.commit()
+    return {"modulo_id": modulo.id, "retirado_em": retirado_em.isoformat(), "observacao": observacao}
 
 
-@router_admin.delete("/certificados/{certificado_id}")
-def apagar_certificado(certificado_id: int, db: Session = Depends(get_db)):
-    """Pra corrigir um envio errado (arquivo ou aluno trocado)."""
-    db.delete(_buscar(db, Certificado, certificado_id, "Certificado"))
+@router_admin.delete("/estudantes/{estudante_id}/certificados/{modulo_id}")
+def desfazer_retirada(estudante_id: int, modulo_id: int, db: Session = Depends(get_db)):
+    """Pra corrigir uma marcação errada (aluno ou módulo trocado): volta a "a retirar"."""
+    db.query(RetiradaCertificado).filter(RetiradaCertificado.estudante_id == estudante_id, RetiradaCertificado.modulo_id == modulo_id).delete()
     db.commit()
     return {"sucesso": True}
 
@@ -547,7 +531,7 @@ def registrar_progresso(aula_id: int, data: TrechoRequest, estudante: Estudante 
     aula = _aula_do_aluno(db, estudante, aula_id)
     progresso = _progresso(db, estudante, aula, bloquear=True) or buscar_ou_iniciar_progresso(db, estudante, aula)
     estado = registrar_trecho(db, estudante, aula, progresso, data.de_segundo, data.ate_segundo)
-    db.commit()
+    db.commit()  # assistir só registra frequência; XP e ofensiva vêm ao concluir a aula
     return estado
 
 
@@ -569,9 +553,21 @@ def responder_fixacao(aula_id: int, data: FixacaoRequest, estudante: Estudante =
     if not progresso:
         raise HTTPException(status_code=403, detail=f"Assista pelo menos {aula.percentual_minimo_assistido}% da aula antes da atividade.")
     resultado = corrigir_fixacao(db, estudante, aula, progresso, data.respostas)
-    mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, resultado["xp_concedido"]) if resultado["concluiu_agora"] else None
+    modulo_concluido = False
+    mudanca_liga = None
+    if resultado["concluiu_agora"]:
+        db.flush()  # a conclusão desta aula entra na contagem do módulo
+        modulo_concluido = situacao_do_modulo(db, estudante.id, aula.modulo)["concluido"]
+        if modulo_concluido:
+            resultado["xp_concedido"] += XP_MODULO_CONCLUIDO  # bônus por terminar o módulo inteiro
+        mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, resultado["xp_concedido"])
     db.commit()
-    return {**resultado, "novos_pontos_totais": estudante.xp_total, "nivel_atual": estudante.nivel_gamificacao, "mudanca_liga": mudanca_liga}
+    return {
+        **resultado, "novos_pontos_totais": estudante.xp_total, "nivel_atual": estudante.nivel_gamificacao, "mudanca_liga": mudanca_liga,
+        # Terminou a última aula do módulo: o app avisa pra buscar o certificado na escola
+        "modulo_concluido_agora": modulo_concluido, "modulo": aula.modulo.titulo,
+        "xp_bonus_modulo": XP_MODULO_CONCLUIDO if modulo_concluido else 0,
+    }
 
 
 @router_aluno.get("/aulas/{aula_id}/materiais/{material_id}")
@@ -585,20 +581,5 @@ def baixar_material(aula_id: int, material_id: int, estudante: Estudante = Depen
 
 @router_aluno.get("/certificados")
 def meus_certificados(estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
-    """Inclusive os ainda bloqueados -- o aluno vê o que falta pra liberar."""
-    return _certificados_com_situacao(db, estudante.id)
-
-
-@router_aluno.get("/certificados/{certificado_id}")
-def baixar_meu_certificado(certificado_id: int, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
-    certificado = db.query(Certificado).filter(Certificado.id == certificado_id, Certificado.estudante_id == estudante.id).first()
-    if not certificado:
-        raise HTTPException(status_code=404, detail="Certificado não encontrado")
-    modulo = db.query(ModuloTrilha).filter(ModuloTrilha.id == certificado.modulo_id).first() if certificado.modulo_id else None
-    situacao = situacao_do_modulo(db, estudante.id, modulo)
-    if not situacao["concluido"]:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Seu certificado libera quando você concluir todas as aulas de \"{modulo.titulo}\" ({situacao['aulas_concluidas']} de {situacao['aulas_total']}).",
-        )
-    return _resposta_certificado(certificado)
+    """Módulos concluídos e se o certificado já foi retirado na escola (a observação é só da coordenação)."""
+    return certificados_dos_alunos(db, [estudante], com_observacao=False)[estudante.id]

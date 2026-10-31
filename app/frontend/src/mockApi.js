@@ -4,6 +4,10 @@ import BANCO_QUESTOES from './data/banco_questoes.json';
 import SITUACOES_LISTA from './data/situacoes.json';
 import { criarMockTrilha } from './mockTrilha';
 import { criarMockMensagens } from './mockMensagens';
+import { conduzirDemo, PERGUNTA_INICIAL, PERGUNTA_RECOMECO } from './entrevistaDemo';
+import { gerarCurriculoDemo } from './curriculoDemo';
+import { statusPorXp, STATUS_CONTRATADO, STATUS_INICIAL } from './statusCarreira';
+import { validarFicha, conferirContrato, STATUS_APRENDIZ } from './fichaPapDemo';
 
 // Modo demonstração: simula todas as rotas da API inteiramente no navegador,
 // com dados fictícios e uma "gamificação" leve simulada em memória -- pra dar
@@ -11,47 +15,27 @@ import { criarMockMensagens } from './mockMensagens';
 // nem banco de dados. Ativado/desativado em api.js (ver DEMO_MODE).
 
 const ITINERARIOS = [
-  {
-    nome: 'Tecnologia e Ciência de Dados',
-    descricao: 'Análise estatística, Big Data, Python e SQL, visualização de dados e IA aplicadas ao mercado de trabalho.',
-  },
-  {
-    nome: 'Robótica e Automação',
-    descricao: 'Desenvolvimento de protótipos, projetos em Arduino, automação e integração entre programação e hardware.',
-  },
-  {
-    nome: 'Ciências Jurídicas / Serviços Jurídicos',
-    descricao: 'Fundamentos do Direito, Direito Digital, LGPD, ética na era digital e rotinas administrativas/jurídicas.',
-  },
-  {
-    nome: 'Ciências da Natureza e Matemática',
-    descricao: 'Aprofundamento em Biologia, Física, Química e Matemática, com foco prático e preparação para vestibulares e ENEM.',
-  },
-  {
-    nome: 'Recursos Humanos e Gestão de Pessoas',
-    descricao: 'Recrutamento e seleção, departamento pessoal, legislação trabalhista básica (CLT), comunicação e clima organizacional.',
-  },
+  { nome: 'Serviços Jurídicos', descricao: 'Fundamentos do Direito, Direito Digital, LGPD, ética e rotinas administrativas de escritórios e departamentos jurídicos.' },
+  { nome: 'Ciência de Dados', descricao: 'Análise de dados, Python e SQL, planilhas e visualização de dados aplicadas ao mercado de trabalho.' },
+  { nome: 'Administração', descricao: 'Rotinas administrativas, finanças básicas, estoque, atendimento ao cliente e organização de documentos.' },
+  { nome: 'Recursos Humanos', descricao: 'Recrutamento e seleção, departamento pessoal, legislação trabalhista básica (CLT), comunicação e clima organizacional.' },
+  { nome: 'Mecatrônica', descricao: 'Mecânica, eletrônica e programação juntas: sensores, atuadores, Arduino e automação industrial.' },
+  { nome: 'Inteligência Artificial', descricao: 'Como a IA funciona, aprendizado de máquina, uso responsável de ferramentas de IA, dados e ética.' },
 ];
 
 const VAGAS = [
-  { id: 1, titulo_vaga: 'Jovem Aprendiz - Ciência de Dados', empresa: 'Vivo Telefônica', razao_social_real: 'TELEFÔNICA BRASIL S.A.', localizacao: 'São Paulo - SP', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Python', 'SQL', 'Análise de Dados'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Você vai apoiar o time de dados da Vivo em análises de churn e consumo, aprendendo Python, SQL e visualização de dados na prática.', link_inscricao: 'https://vagas.vivo.com.br' },
-  { id: 2, titulo_vaga: 'Desenvolvedor Front-end Júnior', empresa: 'TechSoluções', razao_social_real: 'Parceiro Verificado', localizacao: 'Remoto', tipo_modalidade: 'Remoto', habilidades_exigidas: ['React', 'JavaScript', 'CSS'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Squad pequeno construindo produtos web com React. Você vai revisar PRs de verdade e aprender boas práticas de front-end com mentoria semanal.', link_inscricao: 'https://techsolucoes.com/carreiras' },
-  { id: 3, titulo_vaga: 'Assistente de TI', empresa: 'Suzano Papel e Celulose', razao_social_real: 'SUZANO S.A.', localizacao: 'Três Lagoas - MS', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Lógica de Programação', 'SQL'], area_itinerario: 'Tecnologia e Ciência de Dados', descricao_completa: 'Suporte ao time de infraestrutura de TI da unidade fabril: manutenção de estações de trabalho e apoio em chamados.', link_inscricao: 'https://suzano.gupy.io' },
-  { id: 4, titulo_vaga: 'Jovem Aprendiz - Automação e Robótica', empresa: 'Bosch Manufatura', razao_social_real: 'ROBERT BOSCH LTDA', localizacao: 'Campinas - SP', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Lógica de Programação', 'Arduino', 'Trabalho em Equipe'], area_itinerario: 'Robótica e Automação', descricao_completa: 'Você vai acompanhar a equipe de automação industrial em projetos de prototipagem com Arduino e sensores.', link_inscricao: 'https://carreiras.bosch.com.br' },
-  { id: 5, titulo_vaga: 'Estagiário de Departamento Jurídico', empresa: 'Machado Advogados Associados', razao_social_real: 'Parceiro Verificado', localizacao: 'São Paulo - SP', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Comunicação', 'Organização', 'Redação'], area_itinerario: 'Ciências Jurídicas / Serviços Jurídicos', descricao_completa: 'Apoio em rotinas administrativas de um escritório de Direito Digital e LGPD.', link_inscricao: 'https://machadoadvogados.com.br/carreiras' },
-  { id: 7, titulo_vaga: 'Jovem Aprendiz - Assistente Jurídico', empresa: 'Defensoria Parceira (Programa Jovem Cidadão)', razao_social_real: 'Parceiro Verificado', localizacao: 'Três Lagoas - MS', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Redação', 'Organização', 'Atendimento', 'LGPD'], area_itinerario: 'Ciências Jurídicas / Serviços Jurídicos', descricao_completa: 'Apoio no atendimento ao público, triagem e digitalização de documentos, controle de prazos e organização de processos, com sigilo e supervisão.', link_inscricao: null },
-  { id: 8, titulo_vaga: 'Jovem Aprendiz - Recursos Humanos', empresa: 'Suzano Papel e Celulose', razao_social_real: 'SUZANO S.A.', localizacao: 'Três Lagoas - MS', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Comunicação', 'Organização', 'Pacote Office', 'Atendimento'], area_itinerario: 'Recursos Humanos e Gestão de Pessoas', descricao_completa: 'Apoio ao RH em recrutamento e seleção (triagem de currículos, agendamento de entrevistas), integração de novos colaboradores e rotinas de departamento pessoal.', link_inscricao: 'https://suzano.gupy.io' },
-  { id: 9, titulo_vaga: 'Auxiliar de Departamento Pessoal (Aprendiz)', empresa: 'Contabilidade Horizonte', razao_social_real: 'Parceiro Verificado', localizacao: 'Campo Grande - MS', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Organização', 'Pacote Office', 'Comunicação'], area_itinerario: 'Recursos Humanos e Gestão de Pessoas', descricao_completa: 'Apoio em admissões, conferência de folha de ponto, organização de documentos de funcionários e atendimento a dúvidas sobre férias e benefícios.', link_inscricao: null },
-  { id: 6, titulo_vaga: 'Jovem Aprendiz - Laboratório de Análises', empresa: 'Instituto Butantan', razao_social_real: 'INSTITUTO BUTANTAN', localizacao: 'São Paulo - SP', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Biologia', 'Química', 'Organização'], area_itinerario: 'Ciências da Natureza e Matemática', descricao_completa: 'Apoio em rotinas de laboratório sob supervisão de pesquisadores: preparo de amostras e registro de dados experimentais.', link_inscricao: 'https://butantan.gov.br/trabalhe-conosco' },
+  { id: 1, titulo_vaga: 'Jovem Aprendiz - Ciência de Dados', empresa: 'Vivo Telefônica', razao_social_real: 'TELEFÔNICA BRASIL S.A.', localizacao: 'São Paulo - SP', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Python', 'SQL', 'Análise de Dados'], area_itinerario: 'Ciência de Dados', descricao_completa: 'Você vai apoiar o time de dados da Vivo em análises de churn e consumo, aprendendo Python, SQL e visualização de dados na prática.', link_inscricao: 'https://vagas.vivo.com.br' },
+  { id: 2, titulo_vaga: 'Desenvolvedor Front-end Júnior', empresa: 'TechSoluções', razao_social_real: 'Parceiro Verificado', localizacao: 'Remoto', tipo_modalidade: 'Remoto', habilidades_exigidas: ['React', 'JavaScript', 'CSS'], area_itinerario: 'Ciência de Dados', descricao_completa: 'Squad pequeno construindo produtos web com React. Você vai revisar PRs de verdade e aprender boas práticas de front-end com mentoria semanal.', link_inscricao: 'https://techsolucoes.com/carreiras' },
+  { id: 3, titulo_vaga: 'Assistente de TI', empresa: 'Suzano Papel e Celulose', razao_social_real: 'SUZANO S.A.', localizacao: 'Três Lagoas - MS', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Lógica de Programação', 'SQL'], area_itinerario: 'Ciência de Dados', descricao_completa: 'Suporte ao time de infraestrutura de TI da unidade fabril: manutenção de estações de trabalho e apoio em chamados.', link_inscricao: 'https://suzano.gupy.io' },
+  { id: 4, titulo_vaga: 'Jovem Aprendiz - Automação e Robótica', empresa: 'Bosch Manufatura', razao_social_real: 'ROBERT BOSCH LTDA', localizacao: 'Campinas - SP', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Lógica de Programação', 'Arduino', 'Trabalho em Equipe'], area_itinerario: 'Mecatrônica', descricao_completa: 'Você vai acompanhar a equipe de automação industrial em projetos de prototipagem com Arduino e sensores.', link_inscricao: 'https://carreiras.bosch.com.br' },
+  { id: 5, titulo_vaga: 'Estagiário de Departamento Jurídico', empresa: 'Machado Advogados Associados', razao_social_real: 'Parceiro Verificado', localizacao: 'São Paulo - SP', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Comunicação', 'Organização', 'Redação'], area_itinerario: 'Serviços Jurídicos', descricao_completa: 'Apoio em rotinas administrativas de um escritório de Direito Digital e LGPD.', link_inscricao: 'https://machadoadvogados.com.br/carreiras' },
+  { id: 7, titulo_vaga: 'Jovem Aprendiz - Assistente Jurídico', empresa: 'Defensoria Parceira (Programa Jovem Cidadão)', razao_social_real: 'Parceiro Verificado', localizacao: 'Três Lagoas - MS', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Redação', 'Organização', 'Atendimento', 'LGPD'], area_itinerario: 'Serviços Jurídicos', descricao_completa: 'Apoio no atendimento ao público, triagem e digitalização de documentos, controle de prazos e organização de processos, com sigilo e supervisão.', link_inscricao: null },
+  { id: 8, titulo_vaga: 'Jovem Aprendiz - Recursos Humanos', empresa: 'Suzano Papel e Celulose', razao_social_real: 'SUZANO S.A.', localizacao: 'Três Lagoas - MS', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Comunicação', 'Organização', 'Pacote Office', 'Atendimento'], area_itinerario: 'Recursos Humanos', descricao_completa: 'Apoio ao RH em recrutamento e seleção (triagem de currículos, agendamento de entrevistas), integração de novos colaboradores e rotinas de departamento pessoal.', link_inscricao: 'https://suzano.gupy.io' },
+  { id: 9, titulo_vaga: 'Auxiliar de Departamento Pessoal (Aprendiz)', empresa: 'Contabilidade Horizonte', razao_social_real: 'Parceiro Verificado', localizacao: 'Campo Grande - MS', tipo_modalidade: 'Híbrido', habilidades_exigidas: ['Organização', 'Pacote Office', 'Comunicação'], area_itinerario: 'Recursos Humanos', descricao_completa: 'Apoio em admissões, conferência de folha de ponto, organização de documentos de funcionários e atendimento a dúvidas sobre férias e benefícios.', link_inscricao: null },
+  { id: 6, titulo_vaga: 'Jovem Aprendiz - Auxiliar Administrativo', empresa: 'Prefeitura Municipal (parceira)', razao_social_real: 'Parceiro Verificado', localizacao: 'Três Lagoas - MS', tipo_modalidade: 'Presencial', habilidades_exigidas: ['Pacote Office', 'Organização', 'Atendimento'], area_itinerario: 'Administração', descricao_completa: 'Apoio no protocolo e no arquivo de documentos, atendimento ao público, controle de planilhas e rotinas de compras e almoxarifado.', link_inscricao: null },
+  { id: 10, titulo_vaga: 'Jovem Aprendiz - Inteligência Artificial', empresa: 'TechSoluções', razao_social_real: 'Parceiro Verificado', localizacao: 'Remoto', tipo_modalidade: 'Remoto', habilidades_exigidas: ['Python', 'Lógica de Programação', 'Análise de Dados'], area_itinerario: 'Inteligência Artificial', descricao_completa: 'Apoio ao time que treina modelos de IA: organização e limpeza de dados, testes de chatbots e documentação dos resultados.', link_inscricao: null },
 ];
 
-const PERGUNTAS_ENTREVISTA = [
-  'Legal! Me conta agora sobre uma dificuldade que você teve recentemente e como lidou com ela.',
-  'Ótimo. E como você organiza seu tempo entre estudos e outras responsabilidades?',
-  'Show. Me dá um exemplo de quando você trabalhou em equipe pra resolver algo.',
-  'Perfeito. Por que você tem interesse nessa área específica de atuação?',
-  'Boa! O que você faria se discordasse de uma decisão do seu líder?',
-];
 
 const VIDAS_MAXIMAS = 5;
 const MINUTOS_PARA_REGENERAR_VIDA = 30;
@@ -75,8 +59,8 @@ const estado = {
   xp_semanal: 180,
   nivel_gamificacao: 3,
   ofensiva_dias: 6,
-  itinerario: 'Tecnologia e Ciência de Dados',
-  categoria_status: '🌌 Na Jornada',
+  itinerario: 'Ciência de Dados',
+  categoria_status: STATUS_INICIAL,
   liga: 'Prata',
   vidas: 4,
   proxima_vida_em: null,
@@ -86,7 +70,6 @@ const estado = {
   candidaturas: new Set(),
   quizzesEnviados: 0,
   treinouHoje: false,
-  respostaEntrevistaIndex: 0,
 };
 
 let quizAtivo = null;
@@ -122,18 +105,18 @@ const TURMAS = [
 
 // [nome, cpf, turma, itinerário, xp, ofensiva, habilidades, % acerto no quiz]
 const ALUNOS = [
-  ['Rafael Sozza', '52998224725', 2, 'Tecnologia e Ciência de Dados', 270, 6, ['Python', 'SQL', 'React', 'Análise de Dados', 'Lógica de Programação'], 80],
-  ['Bianca Ferreira', '22257222261', 2, 'Tecnologia e Ciência de Dados', 640, 18, ['Python', 'SQL', 'Análise de Dados', 'Comunicação'], 90],
-  ['Lucas Andrade', '33368333372', 3, 'Tecnologia e Ciência de Dados', 210, 3, ['JavaScript', 'React', 'CSS'], 60],
-  ['Júlia Martins', '44479444483', 2, 'Robótica e Automação', 480, 12, ['Arduino', 'Lógica de Programação', 'Trabalho em Equipe'], 80],
-  ['Gabriel Souza', '55810555560', 1, 'Robótica e Automação', 150, 1, ['Arduino', 'Matemática'], 50],
-  ['Ana Clara Lima', '66911666635', 2, 'Ciências Jurídicas / Serviços Jurídicos', 560, 21, ['Comunicação', 'Organização', 'Redação', 'LGPD'], 90],
-  ['Matheus Rocha', '71012777723', 3, 'Ciências Jurídicas / Serviços Jurídicos', 320, 6, ['Redação', 'Atendimento'], 70],
-  ['Beatriz Nunes', '81113888881', 3, 'Recursos Humanos e Gestão de Pessoas', 590, 15, ['Comunicação', 'Organização', 'Pacote Office', 'Atendimento'], 80],
-  ['Isabela Duarte', '91214999930', 1, 'Recursos Humanos e Gestão de Pessoas', 260, 4, ['Comunicação', 'Trabalho em Equipe'], 70],
-  ['Guilherme Pires', '51010101030', 1, 'Ciências da Natureza e Matemática', 410, 9, ['Biologia', 'Química', 'Matemática'], 80],
-  ['Mariana Costa', '61111111162', 3, 'Ciências da Natureza e Matemática', 180, 2, ['Biologia', 'Organização'], 60],
-  ['Rafael Silva', '12345678909', 1, 'Tecnologia e Ciência de Dados', 300, 5, ['Python', 'Excel'], 70],
+  ['Rafael Sozza', '52998224725', 2, 'Ciência de Dados', 270, 6, ['Python', 'SQL', 'React', 'Análise de Dados', 'Lógica de Programação'], 80],
+  ['Bianca Ferreira', '22257222261', 2, 'Ciência de Dados', 640, 18, ['Python', 'SQL', 'Análise de Dados', 'Comunicação'], 90],
+  ['Lucas Andrade', '33368333372', 3, 'Ciência de Dados', 210, 3, ['JavaScript', 'React', 'CSS'], 60],
+  ['Júlia Martins', '44479444483', 2, 'Mecatrônica', 480, 12, ['Arduino', 'Lógica de Programação', 'Trabalho em Equipe'], 80],
+  ['Gabriel Souza', '55810555560', 1, 'Mecatrônica', 150, 1, ['Arduino', 'Matemática'], 50],
+  ['Ana Clara Lima', '66911666635', 2, 'Serviços Jurídicos', 560, 21, ['Comunicação', 'Organização', 'Redação', 'LGPD'], 90],
+  ['Matheus Rocha', '71012777723', 3, 'Serviços Jurídicos', 320, 6, ['Redação', 'Atendimento'], 70],
+  ['Beatriz Nunes', '81113888881', 3, 'Recursos Humanos', 590, 15, ['Comunicação', 'Organização', 'Pacote Office', 'Atendimento'], 80],
+  ['Isabela Duarte', '91214999930', 1, 'Recursos Humanos', 260, 4, ['Comunicação', 'Trabalho em Equipe'], 70],
+  ['Guilherme Pires', '51010101030', 1, 'Administração', 410, 9, ['Pacote Office', 'Organização', 'Matemática'], 80],
+  ['Mariana Costa', '61111111162', 3, 'Inteligência Artificial', 180, 2, ['Python', 'Organização'], 60],
+  ['Rafael Silva', '12345678909', 1, 'Ciência de Dados', 300, 5, ['Python', 'Excel'], 70],
 ].reduce((lista, [nome, cpf, turma_id, itinerario, xp_total, ofensiva_dias, habilidades, taxa], idx) => {
   const ocupados = new Set(lista.map((a) => a.nome_exibicao.toLowerCase()));
   lista.push({
@@ -166,6 +149,41 @@ ALUNOS.forEach((a) => Object.assign(a, {
   responsavel_telefone: `${DDD}9${String(88000000 + a.id * 211).slice(0, 8)}`,
 }, EXTRAS_ALUNOS[a.id] || {}));
 
+// Ficha do PAP de exemplo (dados fictícios, só pra demonstração)
+const SEXO_DEMO = { 1: 'Masculino', 2: 'Feminino', 3: 'Masculino', 4: 'Feminino', 5: 'Masculino', 6: 'Feminino', 7: 'Masculino', 8: 'Feminino', 9: 'Feminino', 10: 'Masculino', 11: 'Feminino', 12: 'Masculino' };
+ALUNOS.forEach((a) => Object.assign(a, {
+  numero_cadastro_sed: String(4100230 + a.id * 17),
+  sexo: SEXO_DEMO[a.id] || null,
+  perfil_desenvolvimento: a.id === 5 ? 'Atípico' : 'Típico',
+  ano_escolar_inicial: '1º Ano',
+  ano_escolar_atual: a.turma_id === 1 ? '2º Ano' : '3º Ano',
+  turno_escolar: a.turma_id === 3 ? 'Vespertino' : 'Matutino',
+  formacao_mundo_trabalho_em: a.id % 3 === 0 ? null : '2026-02-20',
+  status_estudante: a.id === 12 ? 'Não habilitado' : 'Habilitado',
+  endereco: `Rua Exemplo, ${100 + a.id * 10} - Centro, Três Lagoas/MS`,
+  documentos: a.id % 4 === 0 ? 'Falta comprovante de residência' : 'Completos',
+  cadastro_atualizado_em: null,
+}));
+ALUNOS.find((a) => a.id === 9).status_contratacao = 'desistencia';
+Object.assign(ALUNOS.find((a) => a.id === 11), { status_contratacao: 'expirado' });
+
+const CONTRATOS = [];
+let proximoContratoId = 1;
+const novoContratoDemo = (dados) => {
+  const contrato = { id: proximoContratoId++, cnpj: null, local_atuacao: null, turno_trabalho: null, tipo_contratacao: null, data_final: null, aditivo: null, aditivo_inicio: null, aditivo_fim: null, horas_teoria: null, horas_pratica: null, motivo: null, efetivado: null, observacao: null, ...dados };
+  CONTRATOS.push(contrato);
+  return contrato;
+};
+ALUNOS.filter((a) => a.status_contratacao === 'contratado').forEach((a) => novoContratoDemo({
+  estudante_id: a.id, empresa: a.empresa_contratante, local_atuacao: a.empresa_contratante, turno_trabalho: 'Vespertino', tipo_contratacao: 'Direta',
+  data_inicial: a.contratado_em, data_final: null, aditivo: 'Não', horas_teoria: 4, horas_pratica: 16, status: 'Ativo',
+}));
+novoContratoDemo({
+  estudante_id: 11, empresa: 'Comércio Parceiro (fictício)', local_atuacao: 'Loja Centro', turno_trabalho: 'Matutino', tipo_contratacao: 'Alternativa',
+  data_inicial: '2025-03-10', data_final: '2026-03-09', aditivo: 'Não', horas_teoria: 4, horas_pratica: 16, status: 'Finalizado', motivo: 'Fim da vigência', efetivado: 'Não efetivado',
+});
+const contratosDoAluno = (id) => CONTRATOS.filter((c) => c.estudante_id === id).sort((x, y) => (y.data_inicial || '').localeCompare(x.data_inicial || '') || y.id - x.id);
+
 const agoraIso = () => new Date().toISOString().slice(0, 19);
 const diasAtras = (dias, hora = 10) => {
   const d = new Date();
@@ -174,13 +192,21 @@ const diasAtras = (dias, hora = 10) => {
   return d.toISOString().slice(0, 19);
 };
 
-const fotos = new Map();                  // alunoId -> { dataUrl, em }
-const onboardingConcluido = new Set(ALUNOS.map((a) => a.id).filter((id) => id !== 1)); // o aluno da demo passa pelo primeiro acesso
+const fotos = new Map();                  // alunoId -> { dataUrl, em } (identificação, pra escola)
+const fotosCurriculo = new Map();         // alunoId -> { dataUrl, em } (outra, opcional, só no currículo)
+// O aluno da demo passa pelo primeiro acesso uma vez; concluído, fica guardado
+// no navegador pra não perguntar de novo a cada recarga da página
+const CHAVE_ONBOARDING_DEMO = 'play2work_demo_onboarding_concluido';
+const onboardingConcluido = new Set(ALUNOS.map((a) => a.id).filter((id) => id !== 1));
+try {
+  if (localStorage.getItem(CHAVE_ONBOARDING_DEMO) === '1') onboardingConcluido.add(1);
+} catch {
+  // sem localStorage (aba anônima, prévia): só nesta sessão
+}
 const curriculos = new Map([[2, [{
   id: 1, gerado_em: diasAtras(3), texto_original: 'Gosto de dados, fiz curso de Excel e Python na escola e ajudava na lan house do meu tio.',
   curriculo: {
-    nome_candidato: 'Bianca Ferreira',
-    objetivo_profissional: 'Estudante do Ensino Médio em busca da primeira oportunidade como Jovem Aprendiz em Tecnologia e Ciência de Dados.',
+    objetivo_profissional: 'Estudante do Ensino Médio em busca da primeira oportunidade como Jovem Aprendiz em Ciência de Dados.',
     experiencias: ['Atendimento e manutenção de computadores na lan house da família', 'Curso de Python e Excel oferecido pela escola'],
     hard_skills: ['Python', 'SQL', 'Excel', 'Análise de Dados'],
     soft_skills: ['Comunicação', 'Organização', 'Proatividade'],
@@ -310,8 +336,11 @@ const alunoParaApi = (a) => ({
   idade: idadeDe(a.data_nascimento),
   tem_foto: fotos.has(a.id),
   foto_atualizada_em: fotos.get(a.id)?.em ?? null,
+  tem_foto_curriculo: fotosCurriculo.has(a.id),
+  foto_curriculo_atualizada_em: fotosCurriculo.get(a.id)?.em ?? null,
   curriculo_atualizado_em: ultimoCurriculo(a.id)?.gerado_em ?? null,
-  total_certificados: trilha.totalCertificados(a.id),
+  contrato_atual: contratosDoAluno(a.id)[0] ?? null,
+  ...trilha.resumoCertificados(a.id),
 });
 
 // Mesma validação de fotos.py (tipo pelos primeiros bytes, até 1 MB)
@@ -326,8 +355,8 @@ const validarFoto = (texto) => {
   return ehJpeg || ehPng || ehWebp ? null : 'Formato não suportado: envie uma foto JPG, PNG ou WebP.';
 };
 
-const respostaFoto = (id) => {
-  const foto = fotos.get(id);
+const respostaFoto = (id, mapa = fotos) => {
+  const foto = mapa.get(id);
   if (!foto) return erroFake('Aluno sem foto.', 404);
   return Promise.resolve({ ok: true, status: 200, blob: async () => (await fetch(foto.dataUrl)).blob(), json: async () => ({}) });
 };
@@ -338,6 +367,16 @@ const salvarFotoDemo = (id, corpo) => {
   const em = agoraIso();
   fotos.set(id, { dataUrl: corpo.imagem_base64, em });
   return respostaFake({ sucesso: true, foto_atualizada_em: em });
+};
+
+// Foto do currículo: enviar já marca "com foto"; remover volta pra "sem foto" (como em routes.py)
+const salvarFotoCurriculoDemo = (aluno, corpo) => {
+  const erro = validarFoto(corpo.imagem_base64);
+  if (erro) return erroFake(erro, 400);
+  const em = agoraIso();
+  fotosCurriculo.set(aluno.id, { dataUrl: corpo.imagem_base64, em });
+  aluno.foto_no_curriculo = true;
+  return respostaFake({ sucesso: true, foto_no_curriculo: true, foto_curriculo_atualizada_em: em });
 };
 
 // Candidaturas de um aluno = indicações da escola + as que ele mesmo fez
@@ -424,7 +463,7 @@ const regenerarVidas = () => {
   const intervalo = MINUTOS_PARA_REGENERAR_VIDA * 60_000;
   const regeneradas = 1 + Math.floor((agora - marca) / intervalo);
   estado.vidas = Math.min(VIDAS_MAXIMAS, estado.vidas + regeneradas);
-  estado.proxima_vida_em = estado.vidas >= VIDAS_MAXIMAS ? null : new Date(agora + intervalo).toISOString();
+  estado.proxima_vida_em = estado.vidas >= VIDAS_MAXIMAS ? null : new Date(marca + regeneradas * intervalo).toISOString();
 };
 
 const perderVida = () => {
@@ -468,10 +507,7 @@ const alunoDoToken = (token) => {
 const clone = (valor) => JSON.parse(JSON.stringify(valor));
 
 const atualizarCategoriaStatus = () => {
-  if (estado.xp_total < 150) estado.categoria_status = '🌌 Na Jornada';
-  else if (estado.xp_total < 400) estado.categoria_status = '⚔️ Sobrevivente do RH';
-  else if (estado.xp_total < 800) estado.categoria_status = '👔 Pronto para a Dinâmica';
-  else estado.categoria_status = '🚀 CONTRATADO!';
+  estado.categoria_status = categoriaAtualDemo();
 };
 atualizarCategoriaStatus();
 
@@ -498,6 +534,8 @@ const registrarTreinoDoDia = () => {
   if (!estado.treinouHoje) {
     estado.treinouHoje = true;
     estado.ofensiva_dias += 1;
+    // Como no backend: a cada 7 dias seguidos, +2 congelamentos (teto de 4)
+    if (estado.ofensiva_dias % 7 === 0) estado.congelamentos_disponiveis = Math.min(4, estado.congelamentos_disponiveis + 2);
   }
 };
 
@@ -539,13 +577,12 @@ const construirRanking = () => {
     'Valentina Dias', 'Heitor Correia', 'Manuela Pinto', 'Bernardo Freitas', 'Alice Cardoso',
     'Lorenzo Batista', 'Cecília Ramos', 'Samuel Vieira', 'Larissa Alves',
   ];
-  const categoriaPorXp = (xp) => (xp >= 400 ? '👔 Pronto para a Dinâmica' : xp >= 150 ? '⚔️ Sobrevivente do RH' : '🌌 Na Jornada');
   const pares = [
     ...colegas.map((nome, i) => {
       const xp = Math.max(31 - i, 300 - i * 12 - (i > 9 ? 25 : 0));
-      return { nome, xp_semanal: xp, categoria: categoriaPorXp(xp) };
+      return { nome, xp_semanal: xp, categoria: statusPorXp(xp) };
     }),
-    { nome: estado.nome_exibicao || estado.nome, xp_semanal: estado.xp_semanal, categoria: estado.categoria_status, voce: true },
+    { nome: estado.nome_exibicao || estado.nome, xp_semanal: estado.xp_semanal, categoria: categoriaAtualDemo(), voce: true },
   ].sort((a, b) => b.xp_semanal - a.xp_semanal);
 
   // Mesma regra de vagas_das_zonas() no backend.
@@ -563,34 +600,26 @@ const construirRanking = () => {
   return { liga, liga_emoji: '🏆', ranking };
 };
 
-// Currículo do modo demo: sem IA, então extrai do texto digitado as frases
-// que descrevem algo que o estudante fez (curso, projeto, grêmio...) e
-// reconhece algumas habilidades comuns -- o suficiente pra demo ser coerente.
-const VERBOS_EXPERIENCIA = /(fiz|faço|participei|participo|ajudo|ajudei|organizo|organizei|trabalho|trabalhei|criei|crio|desenvolvi|monitor|voluntári|curso|projeto|grêmio|olimpíada|feira)/i;
-const HABILIDADES_CONHECIDAS = ['Python', 'SQL', 'Excel', 'Power BI', 'JavaScript', 'React', 'HTML', 'CSS', 'Arduino', 'Robótica', 'Matemática', 'Inglês', 'Espanhol', 'Redação', 'Pacote Office', 'Canva', 'Atendimento'];
-const SOFT_POR_PALAVRA = [
-  [/equipe|grupo|grêmio|time/i, 'Trabalho em Equipe'],
-  [/organiz/i, 'Organização'],
-  [/apresent|comunic|falar/i, 'Comunicação'],
-  [/lider|coorden/i, 'Liderança'],
-  [/ajud|volunt/i, 'Colaboração'],
-  [/aprend|curios|estudo|estudar/i, 'Vontade de Aprender'],
-];
+// Cabeçalho do currículo: o cadastro da escola (dados_do_sistema em curriculo.py)
+const dadosPessoaisDemo = (aluno) => ({
+  nome: aluno.nome,
+  idade: idadeDe(aluno.data_nascimento),
+  data_nascimento: aluno.data_nascimento || null,
+  email: aluno.email,
+  telefone: aluno.telefone || null,
+  linkedin: aluno.id === estado.alunoId ? estado.linkedin || null : null,
+  turma: nomeTurma(aluno.turma_id),
+  itinerario: aluno.itinerario,
+});
 
-const montarCurriculoDemo = (texto) => {
-  const frases = texto.split(/[.;,\n]|\s+e\s+(?=(?:fiz|faço|participo|participei|ajudo|ajudei|organizo|trabalho|criei|desenvolvi))/i)
-    .map((f) => f.trim())
-    .filter((f) => f.length > 8 && VERBOS_EXPERIENCIA.test(f))
-    .map((f) => f.charAt(0).toUpperCase() + f.slice(1));
-  const textoMinusculo = texto.toLowerCase();
-  const hardDoTexto = HABILIDADES_CONHECIDAS.filter((h) => textoMinusculo.includes(h.toLowerCase()));
-  const soft = SOFT_POR_PALAVRA.filter(([re]) => re.test(texto)).map(([, nome]) => nome);
-  return {
-    experiencias: frases.slice(0, 5),
-    hard_skills: [...new Set([...hardDoTexto, ...estado.habilidades])].slice(0, 8),
-    soft_skills: soft.length ? soft : ['Trabalho em Equipe', 'Comunicação', 'Adaptabilidade'],
-  };
-};
+// Status de carreira do aluno logado (calcular_categoria_status no backend):
+// "Contratado" só quando a escola marcou no painel; senão, o nível do XP.
+// Declaração 'function' (içada): atualizarCategoriaStatus roda na carga do módulo, antes desta linha.
+function categoriaAtualDemo() {
+  return ALUNOS.find((a) => a.id === estado.alunoId)?.status_contratacao === 'contratado'
+    ? STATUS_CONTRATADO
+    : statusPorXp(estado.xp_total);
+}
 
 const respostaFake = (dados, status = 200) => Promise.resolve({
   ok: status >= 200 && status < 300,
@@ -698,28 +727,60 @@ const atenderAdmin = async (metodo, caminho, query, corpo, token) => {
     ['data_nascimento', 'email', 'turma_id', 'itinerario', 'habilidades', 'telefone', 'responsavel_nome', 'responsavel_telefone', 'ja_trabalhou', 'experiencia_previa'].forEach((campo) => {
       if (campo in corpo) aluno[campo] = corpo[campo];
     });
+    if (corpo.ficha) {
+      const [limpos, erro] = validarFicha('aluno', corpo.ficha, true);
+      if (erro) return erroFake(erro, 400);
+      Object.assign(aluno, limpos);
+    }
+    aluno.cadastro_atualizado_em = hojeLocalIso();
     if (aluno.id === estado.alunoId) {
       Object.assign(estado, { nome: aluno.nome, nome_exibicao: aluno.nome_exibicao, itinerario: aluno.itinerario, habilidades: aluno.habilidades, email: aluno.email });
     }
     return respostaFake(alunoParaApi(aluno));
   }
 
-  const matchFicha = caminho.match(/^\/api\/admin\/estudantes\/(\d+)\/(status|foto|curriculo|historico|observacoes|competencias)$/);
+  // Contratos de aprendizagem (como em admin_routes.py)
+  const matchContratos = caminho.match(/^\/api\/admin\/estudantes\/(\d+)\/contratos$/);
+  const matchContrato = caminho.match(/^\/api\/admin\/contratos\/(\d+)$/);
+  if (matchContratos || matchContrato) {
+    const existente = matchContrato && CONTRATOS.find((c) => c.id === Number(matchContrato[1]));
+    if (matchContrato && !existente) return erroFake('Contrato não encontrado', 404);
+    const aluno = ALUNOS.find((a) => a.id === (existente ? existente.estudante_id : Number(matchContratos[1])));
+    if (!aluno) return erroFake('Aluno não encontrado', 404);
+    if (metodo === 'GET' && matchContratos) return respostaFake(contratosDoAluno(aluno.id));
+    if (metodo === 'DELETE' && existente) { CONTRATOS.splice(CONTRATOS.indexOf(existente), 1); return respostaFake({ sucesso: true }); }
+    if (metodo === 'POST' || metodo === 'PUT') {
+      const [limpos, erro] = validarFicha('contrato', corpo);
+      if (erro) return erroFake(erro, 400);
+      const problema = conferirContrato(limpos);
+      if (problema) return erroFake(problema, 400);
+      const contrato = existente ? Object.assign(existente, limpos) : novoContratoDemo({ estudante_id: aluno.id, ...limpos });
+      if (contrato.status === 'Ativo') {
+        Object.assign(aluno, { status_contratacao: 'contratado', empresa_contratante: contrato.empresa, contratado_em: contrato.data_inicial });
+        mudancasStatus.set(aluno.id, [{ status: 'contratado', empresa: contrato.empresa, registrada_em: agoraIso() }, ...(mudancasStatus.get(aluno.id) || [])]);
+      }
+      aluno.cadastro_atualizado_em = hojeLocalIso();
+      return respostaFake(contrato, existente ? 200 : 201);
+    }
+  }
+
+  const matchFicha = caminho.match(/^\/api\/admin\/estudantes\/(\d+)\/(status|foto|foto-curriculo|curriculo|historico|observacoes|competencias)$/);
   if (matchFicha) {
     const aluno = ALUNOS.find((a) => a.id === Number(matchFicha[1]));
     if (!aluno) return erroFake('Aluno não encontrado', 404);
     const recurso = matchFicha[2];
 
     if (recurso === 'status' && metodo === 'PUT') {
-      if (!['disponivel', 'contratado'].includes(corpo.status)) return erroFake('Status inválido', 400);
+      if (!(corpo.status in STATUS_APRENDIZ)) return erroFake('Status inválido', 400);
       const empresa = (corpo.empresa || '').trim() || null;
       if (corpo.status === 'contratado' && !empresa) return erroFake('Informe a empresa que contratou o aluno', 400);
       Object.assign(aluno, corpo.status === 'contratado'
         ? { status_contratacao: 'contratado', empresa_contratante: empresa, contratado_em: corpo.contratado_em || hojeLocalIso() }
-        : { status_contratacao: 'disponivel', empresa_contratante: null, contratado_em: null });
+        : { status_contratacao: corpo.status, empresa_contratante: null, contratado_em: null });
       mudancasStatus.set(aluno.id, [{ status: corpo.status, empresa, registrada_em: agoraIso() }, ...(mudancasStatus.get(aluno.id) || [])]);
       return respostaFake({ status_contratacao: aluno.status_contratacao, empresa_contratante: aluno.empresa_contratante, contratado_em: aluno.contratado_em });
     }
+    if (recurso === 'foto-curriculo' && metodo === 'GET') return respostaFoto(aluno.id, fotosCurriculo);
     if (recurso === 'foto') {
       if (metodo === 'GET') return respostaFoto(aluno.id);
       if (metodo === 'PUT') return salvarFotoDemo(aluno.id, corpo);
@@ -885,7 +946,7 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
       nome_exibicao: estado.nome_exibicao,
       xp_total: estado.xp_total,
       nivel_gamificacao: estado.nivel_gamificacao,
-      categoria_status: estado.categoria_status,
+      categoria_status: categoriaAtualDemo(),
       liga: estado.liga,
     });
   }
@@ -963,12 +1024,19 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
       : { pulou: false, correta: corpo.opcao_selecionada === gabaritoPergunta.resposta_correta_index };
     quizAtivo.respostas.push(registro);
     const combo = comboFinal(quizAtivo.respostas);
+    // Como no backend: a vida cai na hora do erro e o combo devolve na hora
+    regenerarVidas();
+    let ganhouVidaCombo = false;
+    if (!registro.pulou && !registro.correta) perderVida();
+    else if (combo > 0 && combo % ACERTOS_SEGUIDOS_PARA_VIDA === 0) ganhouVidaCombo = ganharVidas(1) > 0;
     return respostaFake({
       correta: registro.pulou ? null : registro.correta,
       resposta_correta_index: gabaritoPergunta.resposta_correta_index,
       explicacao: gabaritoPergunta.explicacao,
       combo,
-      ganhou_vida_combo: combo > 0 && combo % ACERTOS_SEGUIDOS_PARA_VIDA === 0,
+      ganhou_vida_combo: ganhouVidaCombo,
+      vidas: estado.vidas,
+      proxima_vida_em: estado.proxima_vida_em,
     });
   }
 
@@ -987,14 +1055,15 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
   if (metodo === 'POST' && caminho === '/api/quiz/submit') {
     if (!quizAtivo || quizAtivo.quiz_id !== corpo.quiz_id) return erroFake('Quiz não encontrado.', 404);
     const total = quizAtivo.gabarito.length;
+    // Como no backend: quiz pela metade não vale XP nem ofensiva
+    if (quizAtivo.respostas.length !== total) return erroFake('Ainda faltam perguntas para responder.', 400);
     const acertos = quizAtivo.respostas.filter((r) => r.correta).length;
     const pulos = quizAtivo.respostas.filter((r) => r.pulou).length;
-    const errados = Math.max(0, total - acertos - pulos);
     const xpConcedido = acertos * 8;
 
-    for (let i = 0; i < errados; i += 1) perderVida();
+    // Vidas já mudaram em /quiz/responder; aqui só XP e ofensiva (quiz concluído)
     if (total - pulos > 0) registrarEvidencias(estado.alunoId, { conhecimento: (acertos / (total - pulos)) * 100 }, 'quiz');
-    const vidasRecuperadasCombo = ganharVidas(vidasGanhasPorCombo(quizAtivo.respostas));
+    const vidasRecuperadasCombo = vidasGanhasPorCombo(quizAtivo.respostas);
     let vidaBonusGanha = false;
     if (total > 0 && acertos === total) {
       estado.quizzes_perfeitos_seguidos += 1;
@@ -1022,7 +1091,7 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
       novos_pontos_totais: estado.xp_total,
       nivel_atual: estado.nivel_gamificacao,
       ofensiva_dias: estado.ofensiva_dias,
-      categoria_status: estado.categoria_status,
+      categoria_status: categoriaAtualDemo(),
       missoes_diarias: 1,
       vidas: estado.vidas,
       congelamentos_disponiveis: estado.congelamentos_disponiveis,
@@ -1088,7 +1157,7 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
       novos_pontos_totais: estado.xp_total,
       nivel_atual: estado.nivel_gamificacao,
       ofensiva_dias: estado.ofensiva_dias,
-      categoria_status: estado.categoria_status,
+      categoria_status: categoriaAtualDemo(),
       liga: estado.liga,
       mudanca_liga: avaliarPromocaoDemo(),
     });
@@ -1106,6 +1175,15 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
       onboarding_concluido: onboardingConcluido.has(estado.alunoId),
     });
   }
+  if (caminho === '/api/estudante/me/foto-curriculo') {
+    if (metodo === 'GET') return respostaFoto(estado.alunoId, fotosCurriculo);
+    if (metodo === 'PUT') return salvarFotoCurriculoDemo(alunoAtual, corpo);
+    if (metodo === 'DELETE') {
+      fotosCurriculo.delete(estado.alunoId);
+      alunoAtual.foto_no_curriculo = false;
+      return respostaFake({ sucesso: true, foto_no_curriculo: false });
+    }
+  }
   if (caminho === '/api/estudante/me/foto') {
     if (metodo === 'GET') return respostaFoto(estado.alunoId);
     if (metodo === 'PUT') return salvarFotoDemo(estado.alunoId, corpo);
@@ -1118,12 +1196,20 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
   }
   if (metodo === 'POST' && caminho === '/api/estudante/me/onboarding/concluir') {
     onboardingConcluido.add(estado.alunoId);
+    try {
+      if (estado.alunoId === 1) localStorage.setItem(CHAVE_ONBOARDING_DEMO, '1');
+    } catch {
+      // sem localStorage: só nesta sessão
+    }
     return respostaFake({ onboarding_concluido: true });
   }
   if (metodo === 'GET' && caminho === '/api/resume/atual') {
     const curriculo = ultimoCurriculo(estado.alunoId);
     return respostaFake({
       foto_no_curriculo: Boolean(alunoAtual?.foto_no_curriculo),
+      tem_foto_curriculo: fotosCurriculo.has(estado.alunoId),
+      foto_curriculo_atualizada_em: fotosCurriculo.get(estado.alunoId)?.em ?? null,
+      dados_pessoais: dadosPessoaisDemo(alunoAtual),
       ...(curriculo ? { curriculo: curriculo.curriculo, texto_original: curriculo.texto_original, gerado_em: curriculo.gerado_em } : { curriculo: null }),
     });
   }
@@ -1134,23 +1220,21 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
 
   // POST /resume/generate -- cada geração vira uma versão nova, que o painel da escola lê
   if (metodo === 'POST' && caminho === '/api/resume/generate') {
-    const extraido = montarCurriculoDemo(corpo.habilidades_texto || '');
-    const area = estado.itinerario || 'Tecnologia';
-    const versao = {
-      id: proximoCurriculoId++,
-      gerado_em: agoraIso(),
-      texto_original: corpo.habilidades_texto || '',
-      curriculo: {
-        nome_candidato: estado.nome,
-        objetivo_profissional: `Estudante do Ensino Médio em busca da primeira oportunidade como Jovem Aprendiz na área de ${area}, com vontade de aplicar na prática o que venho aprendendo e de crescer junto com a equipe.`,
-        ...extraido,
-        sugestao_areas_atuacao: estado.itinerario
-          ? [`Jovem Aprendiz em ${estado.itinerario}`, 'Suporte Operacional', 'Assistente Administrativo']
-          : ['Jovem Aprendiz', 'Atendimento ao Cliente', 'Suporte Operacional'],
-      },
-    };
+    // Mesmas regras de curriculo.py: texto que não fala do aluno não gera currículo
+    const texto = corpo.habilidades_texto || '';
+    const gerado = gerarCurriculoDemo(texto, alunoAtual);
+    if (gerado.erro) return erroFake(gerado.erro, 422);
+    const versao = { id: proximoCurriculoId++, gerado_em: agoraIso(), texto_original: texto, curriculo: gerado.curriculo };
+    // Como no backend: conta pra ofensiva; XP (10) só no primeiro currículo do dia
+    const jaGerouHoje = (curriculos.get(estado.alunoId) || []).some((v) => v.gerado_em.slice(0, 10) === agoraIso().slice(0, 10));
+    const xpCurriculo = jaGerouHoje ? 0 : 10;
+    concederXpDemo(xpCurriculo);
     curriculos.set(estado.alunoId, [versao, ...(curriculos.get(estado.alunoId) || [])]);
-    return respostaFake({ sucesso: true, curriculo: versao.curriculo, gerado_em: versao.gerado_em }, 201);
+    return respostaFake({
+      sucesso: true, curriculo: versao.curriculo, dados_pessoais: dadosPessoaisDemo(alunoAtual), gerado_em: versao.gerado_em,
+      xp_concedido: xpCurriculo, novos_pontos_totais: estado.xp_total, nivel_atual: estado.nivel_gamificacao,
+      ofensiva_dias: estado.ofensiva_dias, categoria_status: categoriaAtualDemo(), liga: estado.liga, mudanca_liga: null,
+    }, 201);
   }
 
   // POST /resume/export-linkedin
@@ -1166,35 +1250,48 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
   // POST /chat/message
   if (metodo === 'POST' && caminho === '/api/chat/message') {
     const mensagem = (corpo.mensagem_usuario || '').trim();
-    const respostaFraca = mensagem.length < 5;
-    const xpConcedido = respostaFraca ? 0 : 15 + Math.floor(Math.random() * 26);
-    const proximaPergunta = PERGUNTAS_ENTREVISTA[estado.respostaEntrevistaIndex % PERGUNTAS_ENTREVISTA.length];
-    estado.respostaEntrevistaIndex += 1;
-    const feedback = respostaFraca
-      ? 'Atenção! Respostas muito curtas reduzem suas chances com o recrutador. Tente elaborar mais.'
-      : 'Boa resposta! Você demonstra clareza sobre suas competências.';
+    if (!mensagem || mensagem.length > 1500) return erroFake('A resposta precisa ter entre 1 e 1500 caracteres.', 422);
+    if (corpo.abertura && !['inicial', 'recomeco'].includes(corpo.abertura)) return erroFake('Abertura inválida.', 422);
+    // Mesma lógica de routes.chat_interview: a pergunta vem do histórico, não do aluno
+    const historico = entrevistas.get(estado.alunoId) || [];
+    const inicio = Boolean(corpo.abertura) || !historico.some((m) => m.remetente === 'ai');
+    const perguntaAtual = inicio
+      ? (corpo.abertura === 'recomeco' ? PERGUNTA_RECOMECO : PERGUNTA_INICIAL)
+      : historico.filter((m) => m.remetente === 'ai').at(-1).mensagem;
+    const rodada = conduzirDemo(
+      mensagem, perguntaAtual,
+      historico.filter((m) => m.remetente === 'user').slice(-10).map((m) => m.mensagem),
+      historico.filter((m) => m.remetente === 'ai').length,
+    );
+    const xpConcedido = rodada.xp_concedido;
     entrevistas.set(estado.alunoId, [
-      ...(entrevistas.get(estado.alunoId) || []),
-      { remetente: 'user', mensagem, feedback, xp: xpConcedido, em: agoraIso() },
-      { remetente: 'ai', mensagem: proximaPergunta, em: agoraIso() },
+      ...historico,
+      ...(inicio ? [{ remetente: 'ai', mensagem: perguntaAtual, em: agoraIso() }] : []),
+      { remetente: 'user', mensagem, feedback: rodada.analise_feedback, xp: xpConcedido, em: agoraIso() },
+      { remetente: 'ai', mensagem: rodada.fala, em: agoraIso() },
     ]);
 
-    estado.xp_total += xpConcedido;
-    estado.xp_semanal += xpConcedido;
-    if (estado.xp_total >= 300 * estado.nivel_gamificacao) estado.nivel_gamificacao += 1;
-    atualizarCategoriaStatus();
-    if (!respostaFraca) registrarTreinoDoDia();
-    registrarEvidencias(estado.alunoId, { comunicacao: xpConcedido * 2, trabalho_projeto_vida: xpConcedido * 2, autoconhecimento: xpConcedido * 2 }, 'entrevista');
-    const mudancaLiga = avaliarPromocaoDemo();
+    let mudancaLiga = null;
+    if (rodada.categoria === 'resposta') {
+      estado.xp_total += xpConcedido;
+      estado.xp_semanal += xpConcedido;
+      if (estado.xp_total >= 300 * estado.nivel_gamificacao) estado.nivel_gamificacao += 1;
+      atualizarCategoriaStatus();
+      registrarTreinoDoDia();
+      registrarEvidencias(estado.alunoId, { comunicacao: xpConcedido * 2, trabalho_projeto_vida: xpConcedido * 2, autoconhecimento: xpConcedido * 2 }, 'entrevista');
+      mudancaLiga = avaliarPromocaoDemo();
+    }
 
     return respostaFake({
-      feedback_ia: feedback,
-      resposta_ia: proximaPergunta,
+      feedback_ia: rodada.analise_feedback,
+      resposta_ia: rodada.fala,
       xp_concedido: xpConcedido,
+      categoria: rodada.categoria,
+      notas: rodada.notas,
       novos_pontos_totais: estado.xp_total,
       nivel_atual: estado.nivel_gamificacao,
       ofensiva_dias: estado.ofensiva_dias,
-      categoria_status: estado.categoria_status,
+      categoria_status: categoriaAtualDemo(),
       missoes_diarias: 1,
       liga: estado.liga,
       mudanca_liga: mudancaLiga,

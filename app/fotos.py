@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from models import Estudante, FotoEstudante
+from models import Estudante, FotoEstudante, FotoCurriculo
 from fuso import agora_utc
 
 # Foto do perfil do aluno: o navegador já recorta e reduz a imagem (canvas ->
@@ -85,5 +85,37 @@ def resposta_da_foto(estudante: Estudante) -> Response:
         content=estudante.foto.conteudo,
         media_type=estudante.foto.tipo_mime,
         # Foto de aluno (menor de idade, na maioria): nada de cache compartilhado/CDN
+        headers={"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+# Foto do currículo: outra foto, opcional, que só o aluno envia (a de cima é a
+# de identificação, pra escola). Mesmas validações; só aparece no currículo
+# quando o aluno marca "com foto".
+def salvar_foto_curriculo(db: Session, estudante: Estudante, texto_base64: str) -> None:
+    """Grava (ou troca) a foto do currículo. Quem chama faz o commit."""
+    conteudo, tipo = decodificar_foto(texto_base64)
+    agora = agora_utc()
+    valores = {"conteudo": conteudo, "tipo_mime": tipo, "atualizada_em": agora}
+    db.execute(
+        pg_insert(FotoCurriculo)
+        .values(estudante_id=estudante.id, **valores)
+        .on_conflict_do_update(index_elements=[FotoCurriculo.estudante_id], set_=valores)
+    )
+    db.expire(estudante, ["foto_curriculo"])
+    estudante.foto_curriculo_atualizada_em = agora
+
+
+def remover_foto_curriculo(estudante: Estudante) -> None:
+    estudante.foto_curriculo = None
+    estudante.foto_curriculo_atualizada_em = None
+
+
+def resposta_da_foto_curriculo(estudante: Estudante) -> Response:
+    if estudante.foto_curriculo is None:
+        raise HTTPException(status_code=404, detail="Sem foto do currículo.")
+    return Response(
+        content=estudante.foto_curriculo.conteudo,
+        media_type=estudante.foto_curriculo.tipo_mime,
         headers={"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"},
     )

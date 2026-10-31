@@ -156,8 +156,10 @@ const BuscaAlunos = ({ valor, aoMudar, alunos, aoEscolher }) => {
 // Filtros rápidos por status de contratação (com a contagem já respeitando os outros filtros)
 const FILTROS_STATUS = [
   { valor: '', rotulo: 'Todos' },
-  { valor: 'disponivel', rotulo: 'Disponíveis (em espera)' },
+  { valor: 'disponivel', rotulo: 'No aguardo' },
   { valor: 'contratado', rotulo: 'Contratados' },
+  { valor: 'desistencia', rotulo: 'Desistência' },
+  { valor: 'expirado', rotulo: 'Expirados' },
 ];
 
 const RelatorioAlunos = ({ alunos, descricaoFiltros }) => {
@@ -217,8 +219,8 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
       if (itinerario && (itinerario === '__nenhum' ? a.itinerario : a.itinerario !== itinerario)) return false;
       if (soSemFoto && a.tem_foto) return false;
       if (empresa && a.empresa_contratante !== empresa) return false;
-      if (certificado === 'com' && !a.total_certificados) return false;
-      if (certificado === 'sem' && a.total_certificados) return false;
+      if (certificado === 'a_retirar' && !a.certificados_a_retirar) return false;
+      if (certificado === 'retirado' && !a.certificados_retirados) return false;
       if (!termo) return true;
       return normalizarBusca(a.nome).includes(termo)
         || normalizarBusca(a.nome_exibicao).includes(termo)
@@ -278,7 +280,7 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
     (idadeMin !== '' || idadeMax !== '') && `idade ${idadeMin || '…'} a ${idadeMax || '…'}`,
     soSemFoto && 'sem foto',
     empresa && `empresa ${empresa}`,
-    certificado && (certificado === 'com' ? 'com certificado' : 'sem certificado'),
+    certificado && (certificado === 'a_retirar' ? 'com certificado a retirar' : 'com certificado retirado'),
     busca && `busca "${busca}"`,
   ].filter(Boolean).join(' · ');
 
@@ -309,8 +311,8 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
         </select>
         <select className="adm-input" value={certificado} onChange={(e) => setCertificado(e.target.value)} style={{ flex: '1 1 160px' }} aria-label="Filtrar por certificado">
           <option value="">Certificado: todos</option>
-          <option value="com">Com certificado</option>
-          <option value="sem">Sem certificado</option>
+          <option value="a_retirar">Certificado a retirar</option>
+          <option value="retirado">Já retirou certificado</option>
         </select>
         <div className="adm-idade" role="group" aria-label="Filtrar por idade">
           <span>Idade</span>
@@ -941,6 +943,7 @@ const ESTILOS = `
   .adm-chip.pequeno { font-size: 10px; padding: 1px 6px; }
   .adm-chip.verde { color: #047857; background: rgba(52,211,153,0.1); border-color: rgba(52,211,153,0.35); }
   .adm-chip.azul { color: #1d4ed8; background: rgba(59,130,246,0.08); border-color: rgba(59,130,246,0.3); }
+  .adm-chip.amarelo { color: #92400e; background: rgba(251,191,36,0.12); border-color: rgba(251,191,36,0.4); }
   .adm-btn.pequeno { padding: 7px 12px; font-size: 12px; border-radius: 10px; }
   .adm-a { color: var(--accent-soft); font-weight: 600; text-decoration: none; }
   .adm-a:hover { text-decoration: underline; }

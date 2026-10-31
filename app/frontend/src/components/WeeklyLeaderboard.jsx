@@ -4,10 +4,11 @@ import { IconWarning } from './icons';
 import { apiFetch } from '../api';
 import { SkeletonStyles, RowSkeleton } from './Skeleton';
 import Trofeu from './Trofeu';
-import { LIGAS } from '../ligas';
+import { LIGAS, buscarLiga, varsDaLiga } from '../ligas';
 
 
-const CORES_POSICAO = { 1: '#fcd34d', 2: '#e5e9f0', 3: '#e09a5b' };
+// Pódio nas cores de Ouro, Prata e Bronze (com o tom certo pra cada tema, via .cor-liga)
+const CORES_POSICAO = { 1: varsDaLiga(buscarLiga('Ouro')), 2: varsDaLiga(buscarLiga('Prata')), 3: varsDaLiga(buscarLiga('Bronze')) };
 
 const listVariants = {
   hidden: {},
@@ -100,7 +101,7 @@ const WeeklyLeaderboard = () => {
     <div style={{ maxWidth: '840px', margin: '0 auto', padding: '20px 0', width: '100%' }}>
       <style>{`
         .lb-card {
-          background: rgba(255,255,255,0.045);
+          background: rgb(var(--tinta-rgb) / 0.045);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
           border: 1px solid rgb(var(--accent-rgb) / 0.15);
@@ -129,26 +130,26 @@ const WeeklyLeaderboard = () => {
           font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 1px; color: #000;
           background: var(--accent); padding: 2px 6px; border-radius: 4px;
         }
-        .lb-info { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 18px; font-size: 13px; color: #94a3b8; }
-        .lb-relogio { font-family: var(--mono); font-size: 12px; color: #e2e8f0; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 6px 10px; border-radius: 8px; }
+        .lb-info { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 18px; font-size: 13px; color: var(--txt-3); }
+        .lb-relogio { font-family: var(--mono); font-size: 12px; color: var(--txt-1b); background: rgb(var(--tinta-rgb) / 0.05); border: 1px solid rgb(var(--tinta-rgb) / 0.1); padding: 6px 10px; border-radius: 8px; }
         .lb-falta { margin-bottom: 18px; padding: 12px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; background: rgb(var(--accent-rgb) / 0.1); border: 1px solid rgb(var(--accent-rgb) / 0.3); color: var(--accent-soft); }
-        .lb-falta.subindo { background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.3); color: #6ee7b7; }
+        .lb-falta.subindo { background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.3); color: var(--ok-suave); }
 
         .lb-linha {
           display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 14px;
           border: 1px solid transparent; transition: background 0.2s ease;
         }
-        .lb-linha:hover { background: rgba(255,255,255,0.035); }
+        .lb-linha:hover { background: rgb(var(--tinta-rgb) / 0.035); }
         .lb-linha.voce { background: rgb(var(--accent-rgb) / 0.12); border-color: rgb(var(--accent-rgb) / 0.45); }
-        .lb-pos { width: 28px; text-align: center; font-family: var(--heading); font-size: 18px; font-weight: 800; color: #64748b; flex-shrink: 0; }
+        .lb-pos { width: 28px; text-align: center; font-family: var(--heading); font-size: 18px; font-weight: 800; color: var(--txt-4); flex-shrink: 0; }
         .lb-avatar {
           width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
           display: flex; align-items: center; justify-content: center;
           color: #fff; font-weight: 800; font-size: 15px;
         }
-        .lb-nome { color: #e2e8f0; font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .lb-cat { font-size: 12px; color: #64748b; margin-top: 2px; }
-        .lb-xp { margin-left: auto; font-family: var(--mono); font-weight: 700; color: #e2e8f0; white-space: nowrap; font-size: 14px; }
+        .lb-nome { color: var(--txt-1b); font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .lb-cat { font-size: 12px; color: var(--txt-4); margin-top: 2px; }
+        .lb-xp { margin-left: auto; font-family: var(--mono); font-weight: 700; color: var(--txt-1b); white-space: nowrap; font-size: 14px; }
         .lb-seta { font-size: 11px; margin-left: 6px; }
 
         .lb-faixa { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
@@ -166,7 +167,7 @@ const WeeklyLeaderboard = () => {
       <div className="lb-card">
         <header style={{ marginBottom: '6px' }}>
           <div className="tech-label" style={{ color: 'var(--accent-2)', marginBottom: '8px' }}>// Ranking semanal</div>
-          <h2 style={{ fontSize: '28px', color: '#f1f5f9', fontWeight: '800', letterSpacing: '-0.4px', margin: 0 }}>
+          <h2 style={{ fontSize: '28px', color: 'var(--txt-1)', fontWeight: '800', letterSpacing: '-0.4px', margin: 0 }}>
             Liga <span className="gradient-text-live">{liga || '...'}</span>
           </h2>
         </header>
@@ -185,7 +186,7 @@ const WeeklyLeaderboard = () => {
                 title={estado === 'bloqueada' ? `Liga ${l.nome}: ainda bloqueada` : `Liga ${l.nome}`}
               >
                 <Trofeu liga={l} bloqueada={estado === 'bloqueada'} tamanho={estado === 'atual' ? 58 : 44} />
-                <span className="lb-trofeu-nome" style={{ color: estado === 'bloqueada' ? '#475569' : l.cor }}>{l.nome}</span>
+                <span className={`lb-trofeu-nome ${estado === 'bloqueada' ? '' : 'cor-liga'}`} style={estado === 'bloqueada' ? { color: 'var(--txt-5)' } : varsDaLiga(l)}>{l.nome}</span>
                 <span className="lb-voce-tag" style={{ visibility: estado === 'atual' ? 'visible' : 'hidden' }}>VOCÊ</span>
               </motion.div>
             );
@@ -194,8 +195,8 @@ const WeeklyLeaderboard = () => {
 
         <div className="lb-info">
           <span>
-            {ligaAcima ? <>Os <strong style={{ color: '#6ee7b7' }}>{qtdSobem} primeiros</strong> sobem pra Liga {ligaAcima}</> : <>Você está na liga mais alta!</>}
-            {ligaAbaixo && qtdCaem > 0 && <>, os <strong style={{ color: '#fca5a5' }}>{qtdCaem} últimos</strong> caem pra Liga {ligaAbaixo}</>}.
+            {ligaAcima ? <>Os <strong style={{ color: 'var(--ok-suave)' }}>{qtdSobem} primeiros</strong> sobem pra Liga {ligaAcima}</> : <>Você está na liga mais alta!</>}
+            {ligaAbaixo && qtdCaem > 0 && <>, os <strong style={{ color: 'var(--erro-suave)' }}>{qtdCaem} últimos</strong> caem pra Liga {ligaAbaixo}</>}.
           </span>
           <span className="lb-relogio">⏱ Termina em {dias} {dias === 1 ? 'dia' : 'dias'}</span>
         </div>
@@ -218,7 +219,7 @@ const WeeklyLeaderboard = () => {
         )}
 
         {erro && (
-          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '16px', padding: '20px 24px', textAlign: 'center', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '16px', padding: '20px 24px', textAlign: 'center', color: 'var(--erro)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
             <IconWarning /> {erro}
           </div>
         )}
@@ -226,7 +227,7 @@ const WeeklyLeaderboard = () => {
         {!carregando && !erro && (
           <motion.div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }} variants={listVariants} initial="hidden" animate="visible">
             {ranking.length === 0 ? (
-              <p style={{ color: '#475569', textAlign: 'center', padding: '40px 0' }}>Ninguém pontuou essa semana ainda.</p>
+              <p style={{ color: 'var(--txt-5)', textAlign: 'center', padding: '40px 0' }}>Ninguém pontuou essa semana ainda.</p>
             ) : (
               ranking.map((user, idx) => {
                 const anterior = ranking[idx - 1];
@@ -237,7 +238,7 @@ const WeeklyLeaderboard = () => {
                     {fimDaPromocao && <FaixaDeZona tipo="promocao" ligaDestino={ligaAcima} />}
                     {inicioDoRebaixamento && <FaixaDeZona tipo="rebaixamento" ligaDestino={ligaAbaixo} />}
                     <motion.div className={`lb-linha ${user.voce ? 'voce' : ''}`} variants={rowVariants}>
-                      <span className="lb-pos" style={{ color: CORES_POSICAO[user.posicao] || undefined }}>{user.posicao}</span>
+                      <span className={`lb-pos ${CORES_POSICAO[user.posicao] ? 'cor-liga' : ''}`} style={CORES_POSICAO[user.posicao]}>{user.posicao}</span>
                       <span className="lb-avatar" style={{ background: corDoAvatar(user.nome) }}>
                         {user.nome.charAt(0).toUpperCase()}
                       </span>
@@ -250,8 +251,8 @@ const WeeklyLeaderboard = () => {
                       </div>
                       <span className="lb-xp">
                         {user.xp_semanal} XP
-                        {user.zona === 'promocao' && <span className="lb-seta" style={{ color: '#34d399' }}>▲</span>}
-                        {user.zona === 'rebaixamento' && <span className="lb-seta" style={{ color: '#f87171' }}>▼</span>}
+                        {user.zona === 'promocao' && <span className="lb-seta" style={{ color: 'var(--ok)' }}>▲</span>}
+                        {user.zona === 'rebaixamento' && <span className="lb-seta" style={{ color: 'var(--erro)' }}>▼</span>}
                       </span>
                     </motion.div>
                   </React.Fragment>

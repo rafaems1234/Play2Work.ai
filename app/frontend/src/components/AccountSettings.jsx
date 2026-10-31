@@ -62,11 +62,11 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
       <style>{`
         .account-input {
           width: 100%;
-          background: rgba(255,255,255,0.04);
+          background: rgb(var(--tinta-rgb) / 0.04);
           border: 1px solid rgb(var(--accent-rgb) / 0.2);
           border-radius: 12px;
           padding: 12px 16px;
-          color: #e2e8f0;
+          color: var(--txt-1b);
           font-size: 14px;
           outline: none;
           transition: border-color 0.2s;
@@ -74,7 +74,7 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
           box-sizing: border-box;
         }
         .account-input:focus { border-color: rgb(var(--accent-rgb) / 0.5); }
-        .account-input::placeholder { color: #475569; }
+        .account-input::placeholder { color: var(--txt-5); }
 
         .account-save-btn {
           padding: 11px 18px;
@@ -114,19 +114,19 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
             <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent-2)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
               {forcado ? 'Última etapa' : 'Sobre a conta'}
             </div>
-            <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#f1f5f9' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '800', color: 'var(--txt-1)' }}>
               {forcado ? 'Defina sua nova senha' : 'Minha conta'}
             </h2>
           </div>
           {!forcado && (
-            <button onClick={() => aoFechar(false)} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <button onClick={() => aoFechar(false)} style={{ background: 'rgb(var(--tinta-rgb) / 0.06)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', color: 'var(--txt-3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <IconClose />
             </button>
           )}
         </div>
 
         {forcado && (
-          <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '20px', lineHeight: 1.6 }}>
+          <p style={{ color: 'var(--txt-4)', fontSize: '13px', marginBottom: '20px', lineHeight: 1.6 }}>
             Você entrou com a senha temporária. Defina uma senha definitiva pra continuar.
           </p>
         )}
@@ -134,7 +134,7 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
         {!forcado && (
           <>
             <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Foto do perfil</div>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--txt-4)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Foto do perfil</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <Avatar caminho="/api/estudante/me/foto" versao={fotoVersao} nome={estudante?.nome} tamanho={64} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
@@ -146,33 +146,33 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
                     aoErro={setErroFoto}
                   />
                   {fotoVersao && (
-                    <button type="button" onClick={removerFoto} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '12px', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
+                    <button type="button" onClick={removerFoto} style={{ background: 'none', border: 'none', color: 'var(--txt-4)', fontSize: '12px', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
                       Remover foto
                     </button>
                   )}
                 </div>
               </div>
-              <p style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.5, margin: '10px 0 0' }}>
+              <p style={{ fontSize: '12px', color: 'var(--txt-4)', lineHeight: 1.5, margin: '10px 0 0' }}>
                 Só a coordenação da escola vê sua foto. Ela não aparece no ranking.
               </p>
-              {erroFoto && <div style={{ color: '#f87171', fontSize: '12px', marginTop: '8px' }}>{erroFoto}</div>}
+              {erroFoto && <div style={{ color: 'var(--erro)', fontSize: '12px', marginTop: '8px' }}>{erroFoto}</div>}
             </div>
 
             <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
-              <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Nome</div>
-              <div style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: '600', marginBottom: '10px' }}>{estudante?.nome}</div>
-              <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>E-mail</div>
-              <div style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: '600', marginBottom: '10px' }}>{estudante?.email}</div>
+              <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '4px' }}>Nome</div>
+              <div style={{ fontSize: '15px', color: 'var(--txt-1b)', fontWeight: '600', marginBottom: '10px' }}>{estudante?.nome}</div>
+              <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '4px' }}>E-mail</div>
+              <div style={{ fontSize: '15px', color: 'var(--txt-1b)', fontWeight: '600', marginBottom: '10px' }}>{estudante?.email}</div>
               {/* Definido pela escola no painel -- o aluno só vê */}
-              <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Itinerário formativo</div>
-              <div style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: '600' }}>{itinerario || 'Ainda não definido pela escola'}</div>
+              <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '4px' }}>Itinerário formativo</div>
+              <div style={{ fontSize: '15px', color: 'var(--txt-1b)', fontWeight: '600' }}>{itinerario || 'Ainda não definido pela escola'}</div>
             </div>
 
             <form onSubmit={salvarPerfil} style={{ marginBottom: '28px' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LinkedIn</div>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--txt-4)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LinkedIn</div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <div style={{ position: 'relative', flex: 1 }}>
-                  <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#475569' }}>
+                  <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-5)' }}>
                     <IconLinkedIn />
                   </span>
                   <input
@@ -188,18 +188,18 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
                   {salvandoPerfil ? '...' : sucessoPerfil ? <IconCheck /> : 'Salvar'}
                 </button>
               </div>
-              {erroPerfil && <div style={{ color: '#f87171', fontSize: '12px', marginTop: '8px' }}>{erroPerfil}</div>}
+              {erroPerfil && <div style={{ color: 'var(--erro)', fontSize: '12px', marginTop: '8px' }}>{erroPerfil}</div>}
             </form>
           </>
         )}
 
-        <p style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.6, marginBottom: '14px' }}>
+        <p style={{ fontSize: '12px', color: 'var(--txt-4)', lineHeight: 1.6, marginBottom: '14px' }}>
           Sua senha é o seu CPF. Nome, e-mail, turma e itinerário são cadastrados pela escola — se algo estiver errado, fale com a coordenação.
         </p>
         <button
           type="button"
           onClick={aoSair}
-          style={{ width: '100%', padding: '11px', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: '#fca5a5', fontWeight: '700', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}
+          style={{ width: '100%', padding: '11px', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: 'var(--erro-suave)', fontWeight: '700', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}
         >
           Sair da conta
         </button>

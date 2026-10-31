@@ -11,11 +11,11 @@ import { tocarSomFimQuiz } from '../utils/sound';
 // "pega fogo" maior quanto mais dias seguidos.
 
 const FAIXAS = [
-  { min: 100, cor: '#34d399', rgb: '52 211 153', titulo: 'Perfeito!', frase: 'Gabaritou. Isso é nível de contratado.', Icone: IconTrophy },
-  { min: 80, cor: '#34d399', rgb: '52 211 153', titulo: 'Mandou muito bem!', frase: 'Quase tudo certo — continua assim.', Icone: IconStar },
-  { min: 60, cor: '#60a5fa', rgb: '96 165 250', titulo: 'Bom treino!', frase: 'Tá no caminho. Revise as que errou.', Icone: IconBarbell },
-  { min: 40, cor: '#fbbf24', rgb: '251 191 36', titulo: 'Dá pra melhorar', frase: 'Leia as explicações e tente de novo amanhã.', Icone: IconBook },
-  { min: 0, cor: '#f87171', rgb: '248 113 113', titulo: 'Bora revisar!', frase: 'Todo mundo começa assim. Amanhã tem mais.', Icone: IconRetry },
+  { min: 100, cor: 'var(--ok)', rgb: '52 211 153', titulo: 'Perfeito!', frase: 'Gabaritou. Isso é nível de contratado.', Icone: IconTrophy },
+  { min: 80, cor: 'var(--ok)', rgb: '52 211 153', titulo: 'Mandou muito bem!', frase: 'Quase tudo certo — continua assim.', Icone: IconStar },
+  { min: 60, cor: 'var(--info)', rgb: '96 165 250', titulo: 'Bom treino!', frase: 'Tá no caminho. Revise as que errou.', Icone: IconBarbell },
+  { min: 40, cor: 'var(--aviso)', rgb: '251 191 36', titulo: 'Dá pra melhorar', frase: 'Leia as explicações e tente de novo amanhã.', Icone: IconBook },
+  { min: 0, cor: 'var(--erro)', rgb: '248 113 113', titulo: 'Bora revisar!', frase: 'Todo mundo começa assim. Amanhã tem mais.', Icone: IconRetry },
 ];
 
 const faixaDaPrecisao = (precisao) => FAIXAS.find((f) => precisao >= f.min);
@@ -120,7 +120,7 @@ const QuizResultado = ({ resultado, tempoSegundos, maiorCombo, pulosUsados, aoRe
         .quiz-res-barra {
           height: 12px;
           border-radius: 99px;
-          background: rgba(255,255,255,0.08);
+          background: rgb(var(--tinta-rgb) / 0.08);
           overflow: hidden;
           margin: 0 auto;
           max-width: 420px;
@@ -147,7 +147,7 @@ const QuizResultado = ({ resultado, tempoSegundos, maiorCombo, pulosUsados, aoRe
       >
         {faixa.titulo}
       </motion.h3>
-      <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '18px' }}>{faixa.frase}</p>
+      <p style={{ color: 'var(--txt-3)', fontSize: '14px', marginBottom: '18px' }}>{faixa.frase}</p>
 
       <div className="quiz-res-barra" role="img" aria-label={`${precisao}% de acerto`}>
         <motion.div
@@ -178,11 +178,11 @@ const QuizResultado = ({ resultado, tempoSegundos, maiorCombo, pulosUsados, aoRe
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1.2 }}
-        style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px 18px', color: '#94a3b8', fontSize: '13px', marginBottom: '14px' }}
+        style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px 18px', color: 'var(--txt-3)', fontSize: '13px', marginBottom: '14px' }}
       >
-        <span className="quiz-res-info"><IconCheckCircle style={{ color: '#34d399' }} /> {resultado.acertos} de {resultado.total} certas</span>
+        <span className="quiz-res-info"><IconCheckCircle style={{ color: 'var(--ok)' }} /> {resultado.acertos} de {resultado.total} certas</span>
         <span className="quiz-res-info"><IconFire style={{ color: '#f97316' }} /> Maior combo: x{maiorCombo}</span>
-        <span className="quiz-res-info"><IconTimer style={{ color: '#60a5fa' }} /> ~{mediaPorPergunta}s por pergunta</span>
+        <span className="quiz-res-info"><IconTimer style={{ color: 'var(--info)' }} /> ~{mediaPorPergunta}s por pergunta</span>
         {pulosUsados > 0 && <span className="quiz-res-info"><IconSkip /> {pulosUsados} pulo{pulosUsados > 1 ? 's' : ''}</span>}
       </motion.div>
 
@@ -202,12 +202,12 @@ const QuizResultado = ({ resultado, tempoSegundos, maiorCombo, pulosUsados, aoRe
         </p>
       ) : (
         precisao === 100 && (
-          <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '8px' }}>
+          <p style={{ color: 'var(--txt-4)', fontSize: '12px', marginBottom: '8px' }}>
             {resultado.quizzes_perfeitos_seguidos}/5 quizzes perfeitos seguidos pra ganhar vida de bônus
           </p>
         )
       )}
-      <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '20px' }}>
+      <p style={{ color: 'var(--txt-4)', fontSize: '12px', marginBottom: '20px' }}>
         Nível {resultado.nivel_atual} · {resultado.categoria_status}
       </p>
 

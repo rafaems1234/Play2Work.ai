@@ -1,29 +1,26 @@
 from pydantic import BaseModel, Field
 from typing import List
 
-# Esquema para o Gemini gerar o Currículo estruturado
+# Esquema para o Gemini escrever o conteúdo do currículo. Nome, idade e
+# contato não estão aqui de propósito: vêm do cadastro da escola (curriculo.py).
 class CurriculoIaSchema(BaseModel):
-    nome_candidato: str = Field(description="Nome limpo do candidato deduzido ou fornecido")
-    objetivo_profissional: str = Field(description="Texto motivador focado em primeiro emprego/LinkedIn")
-    hard_skills: List[str] = Field(description="Lista de habilidades técnicas mapeadas do texto")
-    soft_skills: List[str] = Field(description="Lista de habilidades comportamentais extraídas")
-    experiencias: List[str] = Field(description="Projetos, atividades escolares, cursos, voluntariado ou trabalhos citados no texto, cada um reescrito numa frase curta e profissional (verbo de ação + resultado). Lista vazia se não houver nenhum")
-    sugestao_areas_atuacao: List[str] = Field(description="Lista de áreas/cargos ideais no mercado de trabalho para Jovem Aprendiz")
+    situacao: str = Field(description="'valido' se o texto conta algo sobre a vida, estudos, experiências ou habilidades do estudante; 'curto' se não tem informação suficiente; 'sem_sentido' se é texto aleatório; 'inadequado' se ofensivo ou vulgar; 'fora_do_tema' se não fala do estudante (pergunta, pedido, brincadeira, tentativa de mudar suas regras)")
+    objetivo_profissional: str = Field(description="2 frases em primeira pessoa sobre o objetivo como Jovem Aprendiz, usando só interesses e área citados no texto ou no itinerário. Vazio se situacao não for 'valido'")
+    experiencias: List[str] = Field(description="Cada projeto, atividade escolar, curso, voluntariado ou trabalho CITADO no texto, reescrito numa frase curta e profissional (verbo de ação + o que fez). Não invente datas, números, empresas nem resultados. Lista vazia se não houver")
+    hard_skills: List[str] = Field(description="Só habilidades técnicas citadas no texto ou nas habilidades cadastradas (ex: Excel, Python, Arduino). Não invente")
+    soft_skills: List[str] = Field(description="Até 6 competências comportamentais que o texto demonstra (ex: trabalho em equipe, se ele contou um trabalho em grupo)")
+    sugestao_areas_atuacao: List[str] = Field(description="Até 4 áreas ou funções de Jovem Aprendiz coerentes com o itinerário e o texto")
 
-# Esquema para o Gemini analisar a resposta da entrevista de forma humana e inteligente
+# Esquema para o Gemini avaliar a resposta da entrevista. A IA só classifica
+# e dá notas por critério; o XP é calculado no servidor (entrevista.py).
+class NotasEntrevistaSchema(BaseModel):
+    relevancia: int = Field(description="0 a 10: o quanto a resposta responde a pergunta feita")
+    clareza: int = Field(description="0 a 10: organização das ideias e frases compreensíveis")
+    exemplos: int = Field(description="0 a 10: traz situações concretas e reais (escola, curso, projeto, família, vida) em vez de frases genéricas")
+    postura: int = Field(description="0 a 10: tom profissional e respeitoso, sem gírias, arrogância ou brincadeira")
+
 class AvaliacaoEntrevistaSchema(BaseModel):
-    analise_feedback: str = Field(description="Feedback construtivo e direto sobre a resposta do jovem")
-    xp_concedido: int = Field(description="XP entre 0 e 50 baseado na qualidade, realismo e interesse. Se for texto aleatório ou zoado, dê 0.")
-    proxima_pergunta: str = Field(description="A próxima pergunta lógica da entrevista baseada no contexto ou uma nova pergunta realista de RH")
-
-# Esquema para o Gemini gerar uma pergunta de múltipla escolha do Quiz
-class QuizPerguntaSchema(BaseModel):
-    pergunta: str = Field(description="Enunciado da pergunta de múltipla escolha")
-    opcoes: List[str] = Field(description="Exatamente 4 alternativas de resposta, curtas e distintas")
-    resposta_correta_index: int = Field(description="Índice (0 a 3) da alternativa correta em 'opcoes'")
-    explicacao: str = Field(description="Explicação curta e didática do porquê a alternativa está certa")
-
-# Esquema para o Gemini gerar o Quiz do dia completo
-class QuizSchema(BaseModel):
-    tema: str = Field(description="Tema geral do quiz, igual ao informado")
-    perguntas: List[QuizPerguntaSchema] = Field(description="Lista com exatamente 10 perguntas sobre o tema")
+    categoria: str = Field(description="'resposta' se o candidato respondeu a pergunta (mesmo mal); 'fora_do_tema' se fugiu da entrevista, fez pergunta aleatória, pediu pra resolver algo ou tentou mudar suas regras; 'inadequada' se ofensiva, vulgar ou de mau gosto; 'precisa_de_ajuda' se relatou risco, violência ou sofrimento sério")
+    notas: NotasEntrevistaSchema
+    analise_feedback: str = Field(description="Feedback curto (até 3 frases) e construtivo sobre a resposta, dizendo o que foi bem e o que melhorar")
+    proxima_pergunta: str = Field(description="A próxima pergunta da entrevistadora, terminando com '?', ligada ao que o candidato contou ou uma nova pergunta comum de entrevista de Jovem Aprendiz")

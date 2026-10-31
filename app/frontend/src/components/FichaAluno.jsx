@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { IconWarning, IconCheck, IconPencil, IconLock, IconFire, IconPdf, IconTrash, IconHandshake, IconDocument, IconHistory, IconNote, IconUser, IconTarget, IconStar } from './icons';
-import { apiFetch, lerErro, baixarArquivo, urlDeArquivo } from '../api';
+import { apiFetch, lerErro, urlDeArquivo } from '../api';
 import { Avatar, SeletorFoto } from './FotoPerfil';
 import { FolhaCurriculo, ESTILOS_FOLHA, Imprimir } from './FolhaCurriculo';
 import MapaCompetencias from './MapaCompetencias';
+import AbaPap from './FichaPap';
+import FICHA from '../data/ficha_pap.json';
+import RetiradaCertificado, { ChipCertificado } from './RetiradaCertificado';
 import {
   mascararCpf, mascararData, mascararTelefone, dataBrParaIso, dataIsoParaBr, dataHoraIsoParaBr,
   cpfValido, telefoneValido, somenteDigitos, linkWhatsapp, hojeLocalIso,
@@ -13,9 +16,12 @@ import {
 // currículo sincronizado, histórico (entrevistas, indicações, retorno das
 // empresas) e observações internas da coordenação/PAP.
 
+// Status do aprendiz como na planilha do PAP (rótulos de data/ficha_pap.json)
 export const STATUS_CONTRATACAO = {
-  disponivel: { rotulo: 'Disponível', descricao: 'Na fila de espera por uma vaga', cor: 'azul' },
-  contratado: { rotulo: 'Contratado', descricao: 'Já está trabalhando', cor: 'verde' },
+  disponivel: { rotulo: FICHA.status_aprendiz.disponivel, descricao: 'Na fila de espera por uma vaga', cor: 'azul' },
+  contratado: { rotulo: FICHA.status_aprendiz.contratado, descricao: 'Já está trabalhando', cor: 'verde' },
+  desistencia: { rotulo: FICHA.status_aprendiz.desistencia, descricao: 'Desistiu do programa', cor: '' },
+  expirado: { rotulo: FICHA.status_aprendiz.expirado, descricao: 'Prazo do programa expirado', cor: '' },
 };
 
 const STATUS_CANDIDATURA = { enviada: 'Enviada', em_analise: 'Em análise', aprovada: 'Aprovada', recusada: 'Recusada' };
@@ -225,20 +231,28 @@ const BlocoStatus = ({ aluno, empresas = [], aoAtualizar }) => {
   };
 
   const contratado = aluno.status_contratacao === 'contratado';
+  const atual = STATUS_CONTRATACAO[aluno.status_contratacao] || STATUS_CONTRATACAO.disponivel;
+  const outros = Object.entries(STATUS_CONTRATACAO).filter(([chave]) => chave !== 'contratado' && chave !== aluno.status_contratacao);
   return (
     <div className={`adm-status-bloco ${contratado ? 'contratado' : ''}`}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontWeight: 800, color: 'var(--adm-forte)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <IconHandshake /> {contratado ? `Contratado por ${aluno.empresa_contratante || '—'}` : 'Disponível'}
+            <IconHandshake /> {contratado ? `Contratado por ${aluno.empresa_contratante || '—'}` : atual.rotulo}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>
-            {contratado ? `Desde ${dataIsoParaBr(aluno.contratado_em) || '—'}` : 'Na fila de espera por uma vaga'}
+            {contratado ? `Desde ${dataIsoParaBr(aluno.contratado_em) || '—'}` : atual.descricao}
           </div>
         </div>
-        {!marcando && (contratado
-          ? <button className="adm-btn secundario pequeno" onClick={() => mudar({ status: 'disponivel' })}>Voltar para a fila</button>
-          : <button className="adm-btn pequeno" onClick={() => setMarcando(true)}>Marcar como contratado</button>)}
+        {!marcando && (
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {!contratado && <button className="adm-btn pequeno" onClick={() => setMarcando(true)}>Marcar como contratado</button>}
+            <select className="adm-input" style={{ width: 'auto', padding: '6px 10px', fontSize: '12px' }} value="" onChange={(e) => e.target.value && mudar({ status: e.target.value })} aria-label="Mudar status do aprendiz">
+              <option value="">{contratado ? 'Encerrar como…' : 'Mudar para…'}</option>
+              {outros.map(([chave, info]) => <option key={chave} value={chave}>{info.rotulo}</option>)}
+            </select>
+          </div>
+        )}
       </div>
       {marcando && (
         <form onSubmit={confirmarContratacao} className="adm-form-grade" style={{ marginTop: '12px' }}>
@@ -364,15 +378,15 @@ const AbaCurriculo = ({ aluno }) => {
     return () => window.removeEventListener('focus', aoFocar);
   }, [carregar, versaoId]);
 
-  // Foto só entra se o aluno escolheu pôr no currículo (e tem foto)
+  // Foto do currículo (outra, que o aluno envia): só entra se ele marcou "com foto"
   const [fotoUrl, setFotoUrl] = useState(null);
   useEffect(() => {
-    if (!aluno.foto_no_curriculo || !aluno.tem_foto) { setFotoUrl(null); return undefined; }
+    if (!aluno.foto_no_curriculo || !aluno.tem_foto_curriculo) { setFotoUrl(null); return undefined; }
     let ativo = true;
     let criada = null;
-    urlDeArquivo(fotoDoAluno(aluno.id)).then((u) => { if (ativo) { criada = u; setFotoUrl(u); } });
+    urlDeArquivo(`/api/admin/estudantes/${aluno.id}/foto-curriculo`).then((u) => { if (ativo) { criada = u; setFotoUrl(u); } });
     return () => { ativo = false; if (criada) URL.revokeObjectURL(criada); };
-  }, [aluno.id, aluno.foto_no_curriculo, aluno.tem_foto, aluno.foto_atualizada_em]);
+  }, [aluno.id, aluno.foto_no_curriculo, aluno.tem_foto_curriculo, aluno.foto_curriculo_atualizada_em]);
 
   if (!dados) return <p className="adm-vazio">Carregando…</p>;
   if (!dados.atual) {
@@ -384,7 +398,8 @@ const AbaCurriculo = ({ aluno }) => {
     );
   }
 
-  const perfil = { nome: aluno.nome, email: aluno.email, itinerario: aluno.itinerario };
+  // Mesmo cabeçalho que o aluno vê: o cadastro da escola
+  const perfil = { nome: aluno.nome, idade: aluno.idade, data_nascimento: aluno.data_nascimento, email: aluno.email, telefone: aluno.telefone, linkedin: aluno.linkedin, turma: aluno.turma, itinerario: aluno.itinerario };
   const nomeArquivo = `Curriculo - ${aluno.nome}`;
   return (
     <div>
@@ -461,94 +476,37 @@ const EVENTOS_FREQUENCIA = { inicio: 'Começou a aula', progresso: 'Assistiu', f
 const AbaCertificados = ({ aluno, aoAtualizar }) => {
   const [certificados, setCertificados] = useState(null);
   const [log, setLog] = useState([]);
-  const [modulos, setModulos] = useState([]);
-  const [form, setForm] = useState({ titulo: '', emitido_em: '', modulo_id: '' });
-  const [arquivo, setArquivo] = useState(null);
-  const [erro, setErro] = useState(null);
-  const [enviando, setEnviando] = useState(false);
-  const [apagandoId, setApagandoId] = useState(null);
 
   const carregar = useCallback(async () => {
-    const [rc, rl, rt] = await Promise.all([
+    const [rc, rl] = await Promise.all([
       apiFetch(`/api/admin/estudantes/${aluno.id}/certificados`),
       apiFetch(`/api/admin/estudantes/${aluno.id}/frequencia`),
-      apiFetch('/api/admin/trilha'),
     ]);
     if (rc.ok) setCertificados(await rc.json());
     if (rl.ok) setLog(await rl.json());
-    if (rt.ok) setModulos(await rt.json());
   }, [aluno.id]);
   useEffect(() => { carregar(); }, [carregar]);
 
-  const enviar = async (e) => {
-    e.preventDefault();
-    setErro(null);
-    if (!arquivo) { setErro('Escolha o PDF do certificado.'); return; }
-    const iso = form.emitido_em ? dataBrParaIso(form.emitido_em) : null;
-    if (form.emitido_em && !iso) { setErro('Data inválida (use dd/mm/aaaa).'); return; }
-    const corpo = new FormData();
-    corpo.append('arquivo', arquivo);
-    corpo.append('titulo', form.titulo.trim());
-    if (iso) corpo.append('emitido_em', iso);
-    if (form.modulo_id) corpo.append('modulo_id', form.modulo_id);
-    setEnviando(true);
-    const r = await apiFetch(`/api/admin/estudantes/${aluno.id}/certificados`, { method: 'POST', body: corpo });
-    setEnviando(false);
-    if (!r.ok) { setErro(await lerErro(r, 'Não foi possível enviar o certificado.')); return; }
-    setForm({ titulo: '', emitido_em: '', modulo_id: '' });
-    setArquivo(null);
-    e.target.reset();
-    await carregar();
-    aoAtualizar();
-  };
-
-  const apagar = async (id) => {
-    const r = await apiFetch(`/api/admin/certificados/${id}`, { method: 'DELETE' });
-    setApagandoId(null);
-    if (r.ok) { await carregar(); aoAtualizar(); }
-  };
-
-  const tituloModulo = (id) => modulos.find((m) => m.id === id)?.titulo;
   return (
     <div>
-      <h3 className="adm-subtitulo" style={{ marginTop: 0 }}>Certificados do PAP</h3>
-      {certificados === null ? <p className="adm-vazio">Carregando…</p> : certificados.length === 0 ? <p className="adm-vazio">Nenhum certificado enviado ainda.</p> : certificados.map((c) => (
-        <div key={c.id} className="adm-hist-item">
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      <h3 className="adm-subtitulo" style={{ marginTop: 0 }}>Certificados de conclusão</h3>
+      <p style={{ fontSize: '12px', color: 'var(--adm-suave)', margin: '0 0 10px' }}>
+        O certificado é entregue na escola. Quando o aluno conclui todas as aulas de um módulo, o app avisa pra ele procurar a coordenação; marque aqui quando ele (ou o responsável) retirar.
+      </p>
+      {certificados === null ? <p className="adm-vazio">Carregando…</p> : certificados.length === 0 ? <p className="adm-vazio">{aluno.nome} ainda não concluiu nenhum módulo da trilha EAD.</p> : certificados.map((c) => (
+        <div key={c.modulo_id} className="adm-hist-item">
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: '8px' }}>
             <div>
-              <div style={{ fontWeight: 700, color: 'var(--adm-texto-forte)', fontSize: '13px' }}>{c.titulo}</div>
+              <div style={{ fontWeight: 700, color: 'var(--adm-texto-forte)', fontSize: '13px' }}>{c.modulo}</div>
               <div style={{ fontSize: '11px', color: 'var(--adm-suave)' }}>
-                {c.modulo_id ? `Ligado a: ${tituloModulo(c.modulo_id) || 'módulo'}` : 'Sem módulo'}{c.emitido_em ? ` · emitido em ${dataIsoParaBr(c.emitido_em)}` : ''} · enviado em {dataHoraIsoParaBr(c.enviado_em)}
+                {c.concluido_em ? `Concluiu em ${dataIsoParaBr(c.concluido_em)}` : 'O módulo ganhou aulas novas depois da retirada'}{c.observacao ? ` · ${c.observacao}` : ''}
               </div>
             </div>
-            <span className={`adm-chip ${c.liberado ? 'verde' : ''}`}>{c.liberado ? 'Liberado pro aluno' : `Aguardando conclusão (${c.aulas_concluidas} de ${c.aulas_total})`}</span>
+            <ChipCertificado retiradoEm={c.retirado_em} />
           </div>
-          <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '12px' }}>
-            <button type="button" className="adm-link" onClick={() => baixarArquivo(`/api/admin/certificados/${c.id}`, c.nome_arquivo)}>Baixar PDF</button>
-            {apagandoId === c.id ? (
-              <span style={{ display: 'flex', gap: '8px' }}>Remover? <button className="adm-link perigo" onClick={() => apagar(c.id)}>Sim</button><button className="adm-link" onClick={() => setApagandoId(null)}>Não</button></span>
-            ) : <button type="button" className="adm-link perigo" onClick={() => setApagandoId(c.id)}>Remover</button>}
-          </div>
+          <RetiradaCertificado estudanteId={aluno.id} certificado={c} aoMudar={() => { carregar(); aoAtualizar(); }} />
         </div>
       ))}
-
-      <form onSubmit={enviar} className="adm-hist-item">
-        <div className="adm-form-grade">
-          <div style={{ gridColumn: '1 / -1' }}><label className="adm-rotulo" htmlFor="ce-t">Título</label><input id="ce-t" className="adm-input" placeholder="Integração — Programa de Aprendizagem 2026" value={form.titulo} onChange={(e) => setForm((f) => ({ ...f, titulo: e.target.value }))} required minLength={2} maxLength={150} /></div>
-          <div><label className="adm-rotulo" htmlFor="ce-d">Data de emissão</label><input id="ce-d" className="adm-input" placeholder="dd/mm/aaaa" inputMode="numeric" value={form.emitido_em} onChange={(e) => setForm((f) => ({ ...f, emitido_em: mascararData(e.target.value) }))} /></div>
-          <div>
-            <label className="adm-rotulo" htmlFor="ce-m">Libera quando concluir</label>
-            <select id="ce-m" className="adm-input" value={form.modulo_id} onChange={(e) => setForm((f) => ({ ...f, modulo_id: e.target.value }))}>
-              <option value="">Libera na hora</option>
-              {modulos.map((m) => <option key={m.id} value={m.id}>{m.titulo}</option>)}
-            </select>
-          </div>
-          <div style={{ gridColumn: '1 / -1' }}><label className="adm-rotulo" htmlFor="ce-a">Arquivo (PDF, até 10 MB)</label><input id="ce-a" type="file" accept="application/pdf,.pdf" className="adm-input" onChange={(e) => setArquivo(e.target.files?.[0] || null)} required /></div>
-        </div>
-        {erro && <div className="adm-erro"><IconWarning /> {erro}</div>}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}><button type="submit" className="adm-btn pequeno" disabled={enviando}>{enviando ? 'Enviando...' : 'Guardar certificado'}</button></div>
-        <p style={{ fontSize: '11px', color: 'var(--adm-suave)', margin: '8px 0 0' }}>Ligado a um módulo, o certificado fica guardado e só libera pro aluno baixar quando ele concluir todas as aulas publicadas daquele módulo.</p>
-      </form>
 
       <h3 className="adm-subtitulo">Registro de frequência na trilha EAD</h3>
       {log.length === 0 ? <p className="adm-vazio">{aluno.nome} ainda não abriu nenhuma aula.</p> : (
@@ -762,6 +720,7 @@ const ABAS_FICHA = [
   { id: 'historico', rotulo: 'Histórico', Icon: IconHistory },
   { id: 'observacoes', rotulo: 'Observações', Icon: IconNote },
   { id: 'certificados', rotulo: 'Certificados', Icon: IconStar },
+  { id: 'pap', rotulo: 'PAP', Icon: IconHandshake },
 ];
 
 const FichaAluno = ({ aluno, turmas, itinerarios, empresas, aoSalvar, aoAtualizar }) => {
@@ -792,6 +751,7 @@ const FichaAluno = ({ aluno, turmas, itinerarios, empresas, aoSalvar, aoAtualiza
       {aba === 'historico' && <AbaHistorico aluno={aluno} historico={historico} recarregar={carregarHistorico} />}
       {aba === 'observacoes' && <AbaObservacoes aluno={aluno} historico={historico} recarregar={carregarHistorico} />}
       {aba === 'certificados' && <AbaCertificados aluno={aluno} aoAtualizar={aoAtualizar} />}
+      {aba === 'pap' && <AbaPap aluno={aluno} aoAtualizar={aoAtualizar} />}
     </div>
   );
 };

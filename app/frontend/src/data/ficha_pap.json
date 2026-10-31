@@ -1,0 +1,39 @@
+{
+  "_sobre": "Campos da planilha de controle do PAP (aba Jovens PAP). Fonte única: o backend valida por aqui (ficha_pap.py) e o painel monta o formulário e a exportação. As opções são as mesmas das listas da planilha.",
+  "status_aprendiz": {
+    "disponivel": "No aguardo",
+    "contratado": "Contratado",
+    "desistencia": "Desistência",
+    "expirado": "Expirado"
+  },
+  "aluno": [
+    { "campo": "numero_cadastro_sed", "rotulo": "Nº de cadastro (Planilha SED)", "tipo": "texto", "max": 30 },
+    { "campo": "sexo", "rotulo": "Sexo", "tipo": "opcao", "opcoes": ["Feminino", "Masculino"] },
+    { "campo": "perfil_desenvolvimento", "rotulo": "Perfil de desenvolvimento", "tipo": "opcao", "opcoes": ["Típico", "Atípico"], "sensivel": true },
+    { "campo": "ano_escolar_inicial", "rotulo": "Ano escolar inicial", "tipo": "opcao", "opcoes": ["1º Ano", "2º Ano", "3º Ano"] },
+    { "campo": "ano_escolar_atual", "rotulo": "Ano escolar atual", "tipo": "opcao", "opcoes": ["1º Ano", "2º Ano", "3º Ano", "Concluído"] },
+    { "campo": "turno_escolar", "rotulo": "Turno escolar", "tipo": "opcao", "opcoes": ["Matutino", "Vespertino", "Integral", "Noturno"] },
+    { "campo": "formacao_mundo_trabalho_em", "rotulo": "Formação para o mundo do trabalho", "tipo": "data" },
+    { "campo": "status_estudante", "rotulo": "Status do estudante", "tipo": "opcao", "opcoes": ["Habilitado", "Não habilitado"] },
+    { "campo": "endereco", "rotulo": "Endereço", "tipo": "texto", "max": 255 },
+    { "campo": "documentos", "rotulo": "Documentos", "tipo": "texto", "max": 255 }
+  ],
+  "contrato": [
+    { "campo": "empresa", "rotulo": "Empresa contratante", "tipo": "texto", "max": 100, "obrigatorio": true },
+    { "campo": "cnpj", "rotulo": "CNPJ", "tipo": "cnpj" },
+    { "campo": "local_atuacao", "rotulo": "Local de atuação (empresa/instituição)", "tipo": "texto", "max": 150 },
+    { "campo": "turno_trabalho", "rotulo": "Turno de trabalho", "tipo": "opcao", "opcoes": ["Matutino", "Vespertino", "Integral", "Noturno"] },
+    { "campo": "tipo_contratacao", "rotulo": "Contratação", "tipo": "opcao", "opcoes": ["Direta", "Alternativa"] },
+    { "campo": "data_inicial", "rotulo": "Data inicial", "tipo": "data", "obrigatorio": true },
+    { "campo": "data_final", "rotulo": "Data final", "tipo": "data" },
+    { "campo": "aditivo", "rotulo": "Aditivo", "tipo": "opcao", "opcoes": ["Sim", "Não"] },
+    { "campo": "aditivo_inicio", "rotulo": "Data inicial do aditivo", "tipo": "data" },
+    { "campo": "aditivo_fim", "rotulo": "Data final do aditivo", "tipo": "data" },
+    { "campo": "horas_teoria", "rotulo": "Carga semanal: teoria (h)", "tipo": "inteiro", "max": 44 },
+    { "campo": "horas_pratica", "rotulo": "Carga semanal: prática (h)", "tipo": "inteiro", "max": 44 },
+    { "campo": "status", "rotulo": "Status do contrato", "tipo": "opcao", "opcoes": ["Ativo", "Finalizado"], "obrigatorio": true },
+    { "campo": "motivo", "rotulo": "Motivo do encerramento", "tipo": "opcao", "opcoes": ["Fim da vigência", "A pedido do aprendiz", "Antecipado pela empresa", "Mercado de trabalho", "Não contratado", "A pedido da entidade qualificadora"] },
+    { "campo": "efetivado", "rotulo": "Efetivado pela empresa", "tipo": "opcao", "opcoes": ["Efetivado", "Não efetivado"] },
+    { "campo": "observacao", "rotulo": "Observação", "tipo": "texto", "max": 1000 }
+  ]
+}

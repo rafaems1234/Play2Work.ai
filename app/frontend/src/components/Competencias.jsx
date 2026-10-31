@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { IconTarget, IconStar, IconCheckCircle, IconLightbulb, IconBriefcase, IconWarning } from './icons';
 import { apiFetch, lerErro } from '../api';
 import MapaCompetencias from './MapaCompetencias';
+import { useTema } from '../hooks/useTema';
 import { dataIsoParaBr } from '../utils/formatos';
 
 // Aba inicial do aluno: o mapa de competências (o que ele já demonstrou),
@@ -58,11 +59,11 @@ const OQueVoceFaria = ({ nomesEixos, aoConcluir }) => {
     aoConcluir(corpo);
   };
 
-  if (!dados) return <p style={{ color: '#64748b', fontSize: '14px' }}>{erro || 'Carregando…'}</p>;
+  if (!dados) return <p style={{ color: 'var(--txt-4)', fontSize: '14px' }}>{erro || 'Carregando…'}</p>;
   if (!dados.situacao) {
     return (
-      <div style={{ textAlign: 'center', padding: '18px 8px', color: '#94a3b8', fontSize: '14px' }}>
-        <IconCheckCircle style={{ fontSize: '26px', color: '#34d399', marginBottom: '6px' }} />
+      <div style={{ textAlign: 'center', padding: '18px 8px', color: 'var(--txt-3)', fontSize: '14px' }}>
+        <IconCheckCircle style={{ fontSize: '26px', color: 'var(--ok)', marginBottom: '6px' }} />
         <div>Você já fez as {dados.limite_diario} situações de hoje. Volte amanhã pra novas!</div>
       </div>
     );
@@ -71,8 +72,8 @@ const OQueVoceFaria = ({ nomesEixos, aoConcluir }) => {
   const { situacao } = dados;
   return (
     <div>
-      <div style={{ fontSize: '17px', fontWeight: 800, color: '#f1f5f9', marginBottom: '8px' }}>{situacao.titulo}</div>
-      <p style={{ color: '#cbd5e1', fontSize: '14px', lineHeight: 1.65, margin: '0 0 16px' }}>{situacao.cenario}</p>
+      <div style={{ fontSize: '17px', fontWeight: 800, color: 'var(--txt-1)', marginBottom: '8px' }}>{situacao.titulo}</div>
+      <p style={{ color: 'var(--txt-2)', fontSize: '14px', lineHeight: 1.65, margin: '0 0 16px' }}>{situacao.cenario}</p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {situacao.opcoes.map((texto, i) => {
@@ -95,7 +96,7 @@ const OQueVoceFaria = ({ nomesEixos, aoConcluir }) => {
             </div>
             {resultado.melhor_opcao && (
               <div className="comp-consequencia boa" style={{ marginTop: '8px' }}>
-                <IconLightbulb style={{ verticalAlign: '-2px', color: '#fbbf24' }} /> <strong>O caminho que mais desenvolve você:</strong> "{resultado.melhor_opcao.texto}". {resultado.melhor_opcao.consequencia}
+                <IconLightbulb style={{ verticalAlign: '-2px', color: 'var(--aviso)' }} /> <strong>O caminho que mais desenvolve você:</strong> "{resultado.melhor_opcao.texto}". {resultado.melhor_opcao.consequencia}
               </div>
             )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', margin: '12px 0' }}>
@@ -105,7 +106,7 @@ const OQueVoceFaria = ({ nomesEixos, aoConcluir }) => {
               <span className="comp-chip xp">+{resultado.xp_concedido} XP</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '12px', color: '#64748b' }}>{dados.restantes_hoje} situaç{dados.restantes_hoje === 1 ? 'ão' : 'ões'} restante{dados.restantes_hoje === 1 ? '' : 's'} hoje</span>
+              <span style={{ fontSize: '12px', color: 'var(--txt-4)' }}>{dados.restantes_hoje} situaç{dados.restantes_hoje === 1 ? 'ão' : 'ões'} restante{dados.restantes_hoje === 1 ? '' : 's'} hoje</span>
               <button type="button" className="comp-btn" onClick={carregar}>{dados.restantes_hoje > 0 ? 'Próxima situação →' : 'Ver resumo'}</button>
             </div>
           </motion.div>
@@ -116,6 +117,7 @@ const OQueVoceFaria = ({ nomesEixos, aoConcluir }) => {
 };
 
 const Competencias = ({ aoGanharXp }) => {
+  const [tema] = useTema();
   const [mapa, setMapa] = useState(null);
   const [indicacoes, setIndicacoes] = useState([]);
 
@@ -135,23 +137,23 @@ const Competencias = ({ aoGanharXp }) => {
   return (
     <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', display: 'grid', gap: '18px' }}>
       <style>{`
-        .comp-cartao { background: rgba(255,255,255,0.045); border: 1px solid rgb(var(--accent-rgb) / 0.15); border-radius: 22px; padding: 26px; }
+        .comp-cartao { background: rgb(var(--tinta-rgb) / 0.045); border: 1px solid rgb(var(--accent-rgb) / 0.15); border-radius: 22px; padding: 26px; }
         .comp-rotulo { font-size: 12px; font-weight: 700; color: var(--accent-2); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-        .comp-titulo { font-size: 22px; font-weight: 800; color: #f1f5f9; margin: 0 0 6px; letter-spacing: -0.3px; }
-        .comp-texto { color: #64748b; font-size: 14px; line-height: 1.6; margin: 0 0 18px; }
+        .comp-titulo { font-size: 22px; font-weight: 800; color: var(--txt-1); margin: 0 0 6px; letter-spacing: -0.3px; }
+        .comp-texto { color: var(--txt-4); font-size: 14px; line-height: 1.6; margin: 0 0 18px; }
         .comp-opcao { text-align: left; padding: 13px 16px; border-radius: 14px; font-size: 14px; line-height: 1.5; font-family: inherit; cursor: pointer;
-          background: rgba(255,255,255,0.04); border: 1px solid rgb(var(--accent-rgb) / 0.2); color: #e2e8f0; transition: border-color 0.2s, background 0.2s; }
+          background: rgb(var(--tinta-rgb) / 0.04); border: 1px solid rgb(var(--accent-rgb) / 0.2); color: var(--txt-1b); transition: border-color 0.2s, background 0.2s; }
         .comp-opcao:hover:not(:disabled) { border-color: rgb(var(--accent-rgb) / 0.55); background: rgb(var(--accent-rgb) / 0.08); }
         .comp-opcao:disabled { cursor: default; }
         .comp-opcao.escolhida { border-color: var(--accent); background: rgb(var(--accent-rgb) / 0.14); }
         .comp-opcao.melhor { border-color: rgba(52,211,153,0.6); background: rgba(52,211,153,0.08); }
         .comp-opcao.apagada { opacity: 0.45; }
-        .comp-consequencia { padding: 12px 14px; border-radius: 12px; font-size: 13.5px; line-height: 1.6; color: #cbd5e1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }
+        .comp-consequencia { padding: 12px 14px; border-radius: 12px; font-size: 13.5px; line-height: 1.6; color: var(--txt-2); background: rgb(var(--tinta-rgb) / 0.04); border: 1px solid rgb(var(--tinta-rgb) / 0.08); }
         .comp-consequencia.boa { background: rgba(52,211,153,0.07); border-color: rgba(52,211,153,0.25); }
         .comp-chip { font-size: 12px; font-weight: 700; color: var(--accent-soft); background: rgb(var(--accent-rgb) / 0.1); padding: 4px 10px; border-radius: 99px; }
-        .comp-chip.xp { color: #fcd34d; background: rgba(251,191,36,0.1); }
+        .comp-chip.xp { color: var(--aviso-suave); background: rgba(251,191,36,0.1); }
         .comp-btn { padding: 10px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, var(--accent-strong), var(--accent-2-strong)); color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; }
-        .comp-erro { margin-top: 10px; color: #f87171; font-size: 13px; display: flex; gap: 6px; align-items: center; }
+        .comp-erro { margin-top: 10px; color: var(--erro); font-size: 13px; display: flex; gap: 6px; align-items: center; }
         @media (max-width: 600px) { .comp-cartao { padding: 20px 16px; } }
       `}</style>
 
@@ -163,7 +165,7 @@ const Competencias = ({ aoGanharXp }) => {
             ? 'Cada atividade (quiz, simulador de entrevista e situações de trabalho) mostra uma parte do que você sabe fazer. A escola usa esse mapa na hora de te indicar pras vagas.'
             : 'Seu mapa começa vazio. Cada atividade que você faz (quiz, simulador de entrevista e as situações abaixo) preenche uma parte dele. A escola usa esse mapa na hora de te indicar pras vagas.'}
         </p>
-        {mapa ? <MapaCompetencias eixos={mapa.eixos} referenciaMedia={mapa.referencia_media} /> : <p className="comp-texto">Carregando…</p>}
+        {mapa ? <MapaCompetencias eixos={mapa.eixos} tema={tema} referenciaMedia={mapa.referencia_media} /> : <p className="comp-texto">Carregando…</p>}
       </Cartao>
 
       <Cartao>
@@ -191,16 +193,16 @@ const Competencias = ({ aoGanharXp }) => {
         <h2 className="comp-titulo">Suas indicações</h2>
         <p className="comp-texto">Quem indica os alunos pras vagas de Jovem Aprendiz é a coordenação da escola, de acordo com as cotas de cada empresa parceira.</p>
         {indicacoes.length === 0 ? (
-          <p style={{ color: '#94a3b8', fontSize: '14px', margin: 0 }}>Você ainda não foi indicado pra nenhuma vaga. Continue treinando: seu mapa de competências conta na indicação.</p>
+          <p style={{ color: 'var(--txt-3)', fontSize: '14px', margin: 0 }}>Você ainda não foi indicado pra nenhuma vaga. Continue treinando: seu mapa de competências conta na indicação.</p>
         ) : (
           <div style={{ display: 'grid', gap: '10px' }}>
             {indicacoes.map((c) => (
-              <div key={c.id} style={{ padding: '14px 16px', borderRadius: '14px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div key={c.id} style={{ padding: '14px 16px', borderRadius: '14px', background: 'rgb(var(--tinta-rgb) / 0.04)', border: '1px solid rgb(var(--tinta-rgb) / 0.08)', display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '14px' }}>{c.titulo_vaga}</div>
-                  <div style={{ fontSize: '12px', color: '#64748b' }}>{c.empresa}{c.criada_em ? ` · desde ${dataIsoParaBr(c.criada_em)}` : ''}</div>
+                  <div style={{ fontWeight: 700, color: 'var(--txt-1)', fontSize: '14px' }}>{c.titulo_vaga}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--txt-4)' }}>{c.empresa}{c.criada_em ? ` · desde ${dataIsoParaBr(c.criada_em)}` : ''}</div>
                 </div>
-                <span className="comp-chip" style={c.status === 'aprovada' ? { color: '#6ee7b7', background: 'rgba(52,211,153,0.1)' } : undefined}>
+                <span className="comp-chip" style={c.status === 'aprovada' ? { color: 'var(--ok-suave)', background: 'rgba(52,211,153,0.1)' } : undefined}>
                   {c.indicada_pela_escola && <IconStar style={{ verticalAlign: '-2px', marginRight: '4px' }} />}
                   {STATUS_INDICACAO[c.status] || c.status}
                 </span>

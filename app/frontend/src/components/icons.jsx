@@ -53,6 +53,8 @@ import {
   UsersThree,
   Megaphone,
   BellSimple,
+  Sun,
+  Moon,
 } from '@phosphor-icons/react';
 
 const wrap = (PhosphorIcon) => (props) => (
@@ -112,3 +114,5 @@ export const IconEnviar = wrap(PaperPlaneRight);
 export const IconGrupo = wrap(UsersThree);
 export const IconMegafone = wrap(Megaphone);
 export const IconSino = wrap(BellSimple);
+export const IconSol = wrap(Sun);
+export const IconLua = wrap(Moon);

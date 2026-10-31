@@ -1,11 +1,20 @@
 import { mascararCpf, mascararTelefone, dataIsoParaBr, dataHoraIsoParaBr } from './formatos';
+import FICHA from '../data/ficha_pap.json';
 
 // Exportação da lista de alunos do painel da escola. Roda no navegador, a
 // partir da mesma lista filtrada que está na tela -- então o arquivo é
 // exatamente o que a coordenação está vendo (e funciona no modo demonstração).
 
 const simNao = (valor) => (valor == null ? '' : valor ? 'Sim' : 'Não');
-const ROTULO_STATUS = { disponivel: 'Disponível', contratado: 'Contratado' };
+const ROTULO_STATUS = FICHA.status_aprendiz; // os 4 status da planilha do PAP
+
+// Campos da planilha do PAP (aluno e contrato atual) -- só no CSV, que vira a planilha da escola
+const comoTexto = (campo, valor) => (valor == null ? '' : campo.tipo === 'data' ? dataIsoParaBr(valor) : valor);
+const COLUNAS_PAP = [
+  ['Data atualização', (a) => dataIsoParaBr(a.cadastro_atualizado_em), false],
+  ...FICHA.aluno.map((c) => [c.rotulo, (a) => comoTexto(c, a[c.campo]), false]),
+  ...FICHA.contrato.map((c) => [`Contrato: ${c.rotulo}`, (a) => comoTexto(c, a.contrato_atual?.[c.campo]), false]),
+];
 
 // [título, valor, entra no PDF?] -- o PDF (A4 deitado) leva só as colunas que cabem
 export const COLUNAS_ALUNOS = [
@@ -20,7 +29,7 @@ export const COLUNAS_ALUNOS = [
   ['Celular do responsável', (a) => mascararTelefone(a.responsavel_telefone || ''), true],
   ['Turma', (a) => a.turma || '', true],
   ['Itinerário', (a) => a.itinerario || '', true],
-  ['Status', (a) => ROTULO_STATUS[a.status_contratacao] || '', true],
+  ['Status do aprendiz', (a) => ROTULO_STATUS[a.status_contratacao] || '', true],
   ['Empresa contratante', (a) => a.empresa_contratante || '', true],
   ['Contratado em', (a) => dataIsoParaBr(a.contratado_em), false],
   ['Já trabalhou', (a) => simNao(a.ja_trabalhou), false],
@@ -31,8 +40,10 @@ export const COLUNAS_ALUNOS = [
   ['Candidaturas', (a) => a.total_candidaturas, false],
   ['Indicações', (a) => a.total_indicacoes, false],
   ['Tem foto', (a) => simNao(a.tem_foto), false],
-  ['Certificados', (a) => a.total_certificados ?? 0, false],
+  ['Certificados a retirar', (a) => a.certificados_a_retirar ?? 0, false],
+  ['Certificados retirados', (a) => a.certificados_retirados ?? 0, false],
   ['Currículo atualizado em', (a) => dataHoraIsoParaBr(a.curriculo_atualizado_em), false],
+  ...COLUNAS_PAP,
 ];
 
 // Célula de CSV: aspas quando precisa e, como o arquivo abre no Excel, um

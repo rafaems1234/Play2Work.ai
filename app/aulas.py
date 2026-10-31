@@ -6,7 +6,7 @@ from urllib.parse import urlparse, parse_qs
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from models import Estudante, Aula, ProgressoAula, LogFrequencia
+from models import Estudante, ModuloTrilha, Aula, ProgressoAula, LogFrequencia, RetiradaCertificado
 from competencias import registrar_evidencias
 from fuso import agora_utc
 
@@ -28,7 +28,12 @@ BLOCO_SEGUNDOS = 10
 VELOCIDADE_MAXIMA = 1.0       # integração: sem acelerar o vídeo
 FOLGA_SEGUNDOS = 15           # atraso de rede entre um registro e outro
 MARCO_LOG_PERCENTUAL = 10     # grava no log de frequência a cada 10% novos
-XP_POR_AULA = 25
+# XP só quando a aula é CONCLUÍDA (frequência mínima + fixação): assistir
+# vale 20 e a fixação 25, pagos juntos -- quem assiste um pedaço e sai não ganha.
+XP_ASSISTIR_AULA = 20
+XP_FIXACAO_AULA = 25
+XP_POR_AULA = XP_ASSISTIR_AULA + XP_FIXACAO_AULA
+XP_MODULO_CONCLUIDO = 50      # bônus ao concluir todas as aulas do módulo
 
 PADROES_YOUTUBE_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
@@ -221,3 +226,46 @@ def corrigir_fixacao(db: Session, estudante: Estudante, aula: Aula, progresso: P
         ],
         **estado_do_progresso(aula, progresso),
     }
+
+
+def certificados_dos_alunos(db: Session, alunos: list[Estudante], com_observacao: bool = True) -> dict[int, list[dict]]:
+    """
+    Certificado de conclusão de cada aluno: um por módulo publicado (do
+    itinerário dele ou comum a todos) em que ele concluiu todas as aulas
+    publicadas. O documento é entregue em mãos na escola -- 'retirado_em'
+    nulo = concluiu e ainda não buscou. Quem já retirou continua na lista
+    mesmo se depois a escola publicar uma aula nova no módulo.
+    """
+    resultado: dict[int, list[dict]] = {a.id: [] for a in alunos}
+    if not alunos:
+        return resultado
+    ids = [a.id for a in alunos]
+    modulos = db.query(ModuloTrilha).filter(ModuloTrilha.publicado.is_(True)).order_by(ModuloTrilha.ordem, ModuloTrilha.id).all()
+    aulas_por_modulo = {m.id: [a.id for a in m.aulas if a.publicada] for m in modulos}
+    todas_as_aulas = [aula_id for aula_ids in aulas_por_modulo.values() for aula_id in aula_ids]
+    conclusoes = {
+        (estudante_id, aula_id): concluida_em
+        for estudante_id, aula_id, concluida_em in db.query(ProgressoAula.estudante_id, ProgressoAula.aula_id, ProgressoAula.concluida_em).filter(
+            ProgressoAula.estudante_id.in_(ids), ProgressoAula.aula_id.in_(todas_as_aulas or [0]), ProgressoAula.concluida_em.isnot(None),
+        ).all()
+    }
+    retiradas = {(r.estudante_id, r.modulo_id): r for r in db.query(RetiradaCertificado).filter(RetiradaCertificado.estudante_id.in_(ids)).all()}
+
+    for aluno in alunos:
+        for modulo in modulos:
+            aula_ids = aulas_por_modulo[modulo.id]
+            datas = [conclusoes.get((aluno.id, aula_id)) for aula_id in aula_ids]
+            concluiu = bool(aula_ids) and modulo.itinerario in (None, aluno.itinerario) and all(datas)
+            retirada = retiradas.get((aluno.id, modulo.id))
+            if not concluiu and not retirada:
+                continue
+            item = {
+                "modulo_id": modulo.id,
+                "modulo": modulo.titulo,
+                "concluido_em": max(datas).isoformat() if concluiu else None,
+                "retirado_em": retirada.retirado_em.isoformat() if retirada else None,
+            }
+            if com_observacao:
+                item["observacao"] = retirada.observacao if retirada else None
+            resultado[aluno.id].append(item)
+    return resultado

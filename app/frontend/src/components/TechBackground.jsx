@@ -18,8 +18,8 @@ const TechBackground = () => (
         position: absolute;
         inset: -2px;
         background-image:
-          linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+          linear-gradient(rgb(var(--tinta-rgb) / 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgb(var(--tinta-rgb) / 0.045) 1px, transparent 1px);
         background-size: 56px 56px;
         mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 30%, transparent 100%);
         -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 30%, transparent 100%);
@@ -57,7 +57,7 @@ const TechBackground = () => (
       .tech-bg-noise {
         position: absolute;
         inset: 0;
-        background: repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0 1px, transparent 1px 3px);
+        background: repeating-linear-gradient(0deg, rgb(var(--tinta-rgb) / 0.012) 0 1px, transparent 1px 3px);
       }
 
       @keyframes techGlow1 {

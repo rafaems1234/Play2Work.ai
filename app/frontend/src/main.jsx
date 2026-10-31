@@ -2,6 +2,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import { aplicarTema, temaSalvo } from './hooks/useTema'
+
+// Tema antes do primeiro desenho da tela -- sem piscar escuro pra quem escolheu o claro
+aplicarTema(temaSalvo())
 
 // Proteção contra cópia (par do user-select: none em index.css): bloqueia
 // copiar/recortar, o menu do botão direito e arrastar conteúdo, exceto em

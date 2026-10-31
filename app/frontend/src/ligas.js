@@ -14,3 +14,6 @@ export const LIGAS = [
 ];
 
 export const buscarLiga = (nome) => LIGAS.find((l) => l.nome === nome) || LIGAS[0];
+
+// Pra usar com a classe .cor-liga (index.css): a cor certa da liga em cada tema
+export const varsDaLiga = (liga) => ({ '--liga-cor': liga.cor, '--liga-cor-escura': liga.corEscura });

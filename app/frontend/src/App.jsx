@@ -17,9 +17,11 @@ import AdminPanel from './components/AdminPanel';
 import PrimeiroAcesso from './components/PrimeiroAcesso';
 import Logo from './components/Logo';
 import Trofeu from './components/Trofeu';
-import { buscarLiga } from './ligas';
-import { IconChat, IconCamera, IconBook, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconSpeakerHigh, IconSpeakerX, IconTarget, IconMask, IconConfetti, IconTrendDown } from './components/icons';
+import { buscarLiga, varsDaLiga } from './ligas';
+import { IconChat, IconBook, IconRobot, IconSparkle, IconFire, IconTrophy, IconQuiz, IconCalendar, IconSpeakerHigh, IconSpeakerX, IconSol, IconLua, IconTarget, IconMask, IconConfetti, IconTrendDown } from './components/icons';
 import { useCountUp } from './hooks/useCountUp';
+import { useTema } from './hooks/useTema';
+import { STATUS_INICIAL, STATUS_CONTRATADO, proximoStatus } from './statusCarreira';
 import { apiFetch, DEMO_MODE, obterToken, limparToken, aoExpirarSessao } from './api';
 import { hojeLocalIso } from './utils/formatos';
 import { somEstaAtivado, definirSomAtivado, tocarSomLevelUp, tocarSomLiga } from './utils/sound';
@@ -36,7 +38,6 @@ const TABS = [
 
 
 const CHAVE_BANNER_OFENSIVA = 'play2work_banner_ofensiva_dispensado_em';
-const CHAVE_BANNER_PERFIL = 'play2work_banner_perfil_dispensado_em';
 const PERFIL_VAZIO = { carregado: false, foto_atualizada_em: null, tem_curriculo: false, onboarding_concluido: true };
 const hojeISO = () => hojeLocalIso();
 
@@ -48,23 +49,9 @@ const dispararConfeteLevelUp = () => {
 function App() {
   const [contaInfo, setContaInfo] = useState({ nome: '', email: '', linkedin: '' });
   const [contaAberta, setContaAberta] = useState(false);
-  // Foto/currículo/primeiro acesso -- decide se mostra o onboarding e o aviso de perfil incompleto
+  // Foto/currículo/primeiro acesso -- o primeiro acesso aparece uma vez só;
+  // depois disso o app não volta a cobrar foto, experiência nem currículo
   const [perfilAluno, setPerfilAluno] = useState(PERFIL_VAZIO);
-  const [bannerPerfilDispensado, setBannerPerfilDispensado] = useState(() => {
-    try {
-      return localStorage.getItem(CHAVE_BANNER_PERFIL) === hojeISO();
-    } catch {
-      return false;
-    }
-  });
-  const dispensarBannerPerfil = () => {
-    try {
-      localStorage.setItem(CHAVE_BANNER_PERFIL, hojeISO());
-    } catch {
-      // sem localStorage -- o aviso só some nesta sessão
-    }
-    setBannerPerfilDispensado(true);
-  };
 
   // intro → login (se ainda não entrou) → app. '#admin' na URL abre direto o painel da escola.
   const [tela, setTela] = useState(() => (window.location.hash === '#admin' ? 'admin' : 'intro'));
@@ -76,7 +63,7 @@ function App() {
     nivel_gamificacao: 1,
     ofensiva_dias: 0,
     ofensiva_em_risco: false,
-    categoria_status: '🌌 Na Jornada',
+    categoria_status: STATUS_INICIAL,
     liga: 'Bronze',
   });
 
@@ -91,6 +78,7 @@ function App() {
   const [calendarioDias, setCalendarioDias] = useState([]);
   const hoje = new Date();
 
+  const [tema, alternarTema] = useTema();
   const [somAtivado, setSomAtivado] = useState(somEstaAtivado);
   const alternarSom = () => {
     setSomAtivado((prev) => {
@@ -276,7 +264,7 @@ function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-    <div className="app-escala" style={{ minHeight: '100vh', background: 'var(--bg)', color: '#94a3b8', fontFamily: 'var(--sans)' }}>
+    <div className="app-escala" style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--txt-3)', fontFamily: 'var(--sans)' }}>
       <style>{`
         /* Telas grandes (notebook, monitor, projetor): o app inteiro cresce
            ~15% -- letras, botões, cards e espaçamentos juntos. */
@@ -298,7 +286,7 @@ function App() {
         }
         .app-pill:hover {
           border-color: rgb(var(--accent-rgb) / 0.3) !important;
-          background: rgba(255, 255, 255, 0.05) !important;
+          background: rgb(var(--tinta-rgb) / 0.05) !important;
         }
 
         .app-desktop-only {
@@ -318,7 +306,7 @@ function App() {
           padding: 8px 4px 10px;
           background: transparent;
           border: none;
-          color: #64748b;
+          color: var(--txt-4);
           font-size: 10px;
           font-weight: 600;
           cursor: pointer;
@@ -358,11 +346,11 @@ function App() {
             style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
           >
             <Logo size={32} />
-            <span style={{ fontSize: '20px', fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: '800', color: '#f1f5f9' }}>Play2Work<span className="gradient-text-live">.ai</span></span>
+            <span style={{ fontSize: '20px', fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: '800', color: 'var(--txt-1)' }}>Play2Work<span className="gradient-text-live">.ai</span></span>
             {DEMO_MODE && (
               <span
                 title="Todos os dados nesta tela são fictícios, gerados no navegador -- não há backend/banco de dados rodando."
-                style={{ fontSize: '10px', fontWeight: '800', color: '#fbbf24', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)', padding: '3px 9px', borderRadius: '99px', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                style={{ fontSize: '10px', fontWeight: '800', color: 'var(--aviso)', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)', padding: '3px 9px', borderRadius: '99px', textTransform: 'uppercase', letterSpacing: '0.5px' }}
               >
                 <IconMask style={{ verticalAlign: '-2px' }} /> Demonstração
               </span>
@@ -382,7 +370,15 @@ function App() {
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{estudanteStatus.itinerario}</span>
               </button>
             )}
-            <div className="app-pill" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap' }}>
+            <div
+              className="app-pill"
+              title={estudanteStatus.categoria_status === STATUS_CONTRATADO
+                ? 'Marcado como contratado pela escola'
+                : proximoStatus(estudanteStatus.xp_total)
+                  ? `Próximo: ${proximoStatus(estudanteStatus.xp_total).nome} (faltam ${proximoStatus(estudanteStatus.xp_total).faltam} XP)`
+                  : 'Último nível alcançado'}
+              style={{ background: 'rgb(var(--tinta-rgb) / 0.03)', border: '1px solid rgb(var(--tinta-rgb) / 0.08)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap' }}
+            >
               <span>Status:</span>
               <span style={{ color: 'var(--accent)', fontWeight: '700' }}>{estudanteStatus.categoria_status}</span>
             </div>
@@ -390,12 +386,12 @@ function App() {
               onClick={() => setAbaAtiva('ranking')}
               className="app-pill"
               title={`Liga ${estudanteStatus.liga} — veja o ranking semanal`}
-              style={{ background: 'rgba(255, 255, 255, 0.03)', border: `1px solid ${buscarLiga(estudanteStatus.liga).cor}55`, padding: '6px 12px', alignItems: 'center', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit' }}
+              style={{ background: 'rgb(var(--tinta-rgb) / 0.03)', border: `1px solid ${buscarLiga(estudanteStatus.liga).cor}55`, padding: '6px 12px', alignItems: 'center', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit' }}
             >
               <Trofeu liga={buscarLiga(estudanteStatus.liga)} tamanho={18} />
-              <span style={{ color: buscarLiga(estudanteStatus.liga).cor, fontWeight: '700' }}>Liga {estudanteStatus.liga}</span>
+              <span className="cor-liga" style={{ ...varsDaLiga(buscarLiga(estudanteStatus.liga)), fontWeight: '700' }}>Liga {estudanteStatus.liga}</span>
             </button>
-            <div className="app-pill" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '20px', fontSize: '12px', display: 'flex', alignItems: 'center', padding: '4px 4px 4px 12px', gap: '6px', whiteSpace: 'nowrap' }}>
+            <div className="app-pill" style={{ background: 'rgb(var(--tinta-rgb) / 0.03)', border: '1px solid rgb(var(--tinta-rgb) / 0.08)', borderRadius: '20px', fontSize: '12px', display: 'flex', alignItems: 'center', padding: '4px 4px 4px 12px', gap: '6px', whiteSpace: 'nowrap' }}>
               <IconFire style={{ color: '#f97316' }} />
               <span style={{ color: 'var(--accent)', fontWeight: '700' }}>{estudanteStatus.ofensiva_dias} dias</span>
               <button
@@ -412,7 +408,7 @@ function App() {
                 <IconCalendar />
               </button>
             </div>
-            <div className="app-pill" style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap' }}>
+            <div className="app-pill" style={{ background: 'rgb(var(--tinta-rgb) / 0.03)', border: '1px solid rgb(var(--tinta-rgb) / 0.08)', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', whiteSpace: 'nowrap' }}>
               <span>Nível {estudanteStatus.nivel_gamificacao}</span>
               <span style={{ color: 'var(--accent-2)', fontWeight: '600' }}>{xpExibido} XP</span>
             </div>
@@ -426,12 +422,27 @@ function App() {
               className="app-pill"
               style={{
                 width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
-                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
-                color: somAtivado ? 'var(--accent-soft)' : '#64748b', cursor: 'pointer', fontSize: '14px',
+                background: 'rgb(var(--tinta-rgb) / 0.03)', border: '1px solid rgb(var(--tinta-rgb) / 0.08)',
+                color: somAtivado ? 'var(--accent-soft)' : 'var(--txt-4)', cursor: 'pointer', fontSize: '14px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
               {somAtivado ? <IconSpeakerHigh /> : <IconSpeakerX />}
+            </button>
+
+            <button
+              onClick={alternarTema}
+              title={tema === 'claro' ? 'Usar tema escuro' : 'Usar tema claro'}
+              aria-label={tema === 'claro' ? 'Usar tema escuro' : 'Usar tema claro'}
+              className="app-pill"
+              style={{
+                width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
+                background: 'rgb(var(--tinta-rgb) / 0.03)', border: '1px solid rgb(var(--tinta-rgb) / 0.08)',
+                color: 'var(--accent-soft)', cursor: 'pointer', fontSize: '14px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {tema === 'claro' ? <IconLua /> : <IconSol />}
             </button>
 
             <button
@@ -464,7 +475,7 @@ function App() {
                     border: '1px solid rgb(var(--accent-rgb) / 0.2)',
                     borderRadius: '18px',
                     padding: '20px',
-                    boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                    boxShadow: '0 20px 50px rgb(var(--campo-rgb) / 0.5)',
                     zIndex: 60,
                   }}
                 >
@@ -489,7 +500,7 @@ function App() {
                   fontWeight: '600',
                   cursor: 'pointer',
                   background: 'transparent',
-                  color: abaAtiva === id ? 'var(--accent-soft)' : '#94a3b8',
+                  color: abaAtiva === id ? 'var(--accent-soft)' : 'var(--txt-3)',
                   border: '1px solid transparent',
                 }}
               >
@@ -512,12 +523,25 @@ function App() {
           <div className="app-mobile-only" style={{ alignItems: 'center', gap: '8px', position: 'relative' }}>
             <SinoNotificacoes total={naoLidas} aoAbrirCanal={abrirChat} />
             <button
+              onClick={alternarTema}
+              aria-label={tema === 'claro' ? 'Usar tema escuro' : 'Usar tema claro'}
+              className="app-pill"
+              style={{
+                width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
+                background: 'rgb(var(--tinta-rgb) / 0.03)', border: '1px solid rgb(var(--tinta-rgb) / 0.08)',
+                color: 'var(--accent-soft)', cursor: 'pointer', fontSize: '14px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {tema === 'claro' ? <IconLua /> : <IconSol />}
+            </button>
+            <button
               onClick={alternarCalendario}
               className="app-pill"
-              style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', padding: '6px 10px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', alignItems: 'center', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit' }}
+              style={{ background: 'rgb(var(--tinta-rgb) / 0.03)', border: '1px solid rgb(var(--tinta-rgb) / 0.08)', padding: '6px 10px', borderRadius: '20px', fontSize: '12px', display: 'flex', gap: '6px', alignItems: 'center', cursor: 'pointer', fontFamily: 'inherit', color: 'inherit' }}
             >
               <IconFire style={{ color: '#f97316' }} />
-              <span style={{ color: '#e2e8f0', fontWeight: '700' }}>{estudanteStatus.ofensiva_dias}</span>
+              <span style={{ color: 'var(--txt-1b)', fontWeight: '700' }}>{estudanteStatus.ofensiva_dias}</span>
               <span style={{ opacity: 0.3 }}>·</span>
               <span style={{ color: 'var(--accent-2)', fontWeight: '700' }}>{xpExibido} XP</span>
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: 'rgb(var(--accent-rgb) / 0.18)', color: 'var(--accent-soft)', marginLeft: '2px' }}>
@@ -543,7 +567,7 @@ function App() {
                     border: '1px solid rgb(var(--accent-rgb) / 0.2)',
                     borderRadius: '18px',
                     padding: '18px',
-                    boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                    boxShadow: '0 20px 50px rgb(var(--campo-rgb) / 0.5)',
                     zIndex: 60,
                   }}
                 >
@@ -592,43 +616,6 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* Perfil incompleto: até ter foto e currículo, lembra o aluno (dispensável por um dia) */}
-      <AnimatePresence>
-        {perfilAluno.carregado && perfilAluno.onboarding_concluido && (!perfilAluno.foto_atualizada_em || !perfilAluno.tem_curriculo) && !bannerPerfilDispensado && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.25 }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div style={{
-              maxWidth: '1320px', margin: '0 auto', padding: '12px 24px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap',
-              background: 'rgb(var(--accent-rgb) / 0.07)', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.2)',
-            }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-soft)', fontSize: '13px', fontWeight: '600' }}>
-                <IconSparkle style={{ fontSize: '15px' }} />
-                Complete seu perfil: {[!perfilAluno.foto_atualizada_em && 'falta a foto', !perfilAluno.tem_curriculo && 'falta o currículo'].filter(Boolean).join(' e ')}.
-              </span>
-              {!perfilAluno.foto_atualizada_em && (
-                <button onClick={() => setContaAberta(true)} style={{ background: 'var(--accent)', border: 'none', color: '#00121f', fontWeight: '700', fontSize: '12px', padding: '6px 12px', borderRadius: '10px', cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                  <IconCamera /> Adicionar foto
-                </button>
-              )}
-              {!perfilAluno.tem_curriculo && abaAtiva !== 'curriculo' && (
-                <button onClick={() => setAbaAtiva('curriculo')} style={{ background: 'none', border: '1px solid rgb(var(--accent-rgb) / 0.4)', color: 'var(--accent-soft)', fontWeight: '700', fontSize: '12px', padding: '6px 12px', borderRadius: '10px', cursor: 'pointer', fontFamily: 'inherit' }}>
-                  Montar currículo
-                </button>
-              )}
-              <button onClick={dispensarBannerPerfil} aria-label="Dispensar aviso" style={{ background: 'none', border: 'none', color: 'var(--accent-soft)', cursor: 'pointer', fontSize: '16px', lineHeight: 1, padding: '0 4px' }}>
-                ×
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 100, display: 'flex', flexDirection: 'column', gap: '10px', pointerEvents: 'none' }}>
         <AnimatePresence>
           {toasts.map((toast) => (
@@ -641,8 +628,8 @@ function App() {
               style={{
                 background: 'rgb(var(--surface-rgb) / 0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
                 border: '1px solid rgb(var(--accent-rgb) / 0.3)', borderRadius: '14px', padding: '12px 18px',
-                display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
-                color: '#e2e8f0', fontSize: '13px', fontWeight: '700', maxWidth: '300px',
+                display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 12px 32px rgb(var(--campo-rgb) / 0.4)',
+                color: 'var(--txt-1b)', fontSize: '13px', fontWeight: '700', maxWidth: '300px',
               }}
             >
               <toast.Icone style={{ fontSize: '18px', color: toast.cor, flexShrink: 0 }} />
@@ -703,7 +690,7 @@ function App() {
                 aoVoltarInicio={() => setAbaAtiva('competencias')}
               />
             )}
-            {abaAtiva === 'curriculo' && <ResumeBuilder aoGerar={() => setPerfilAluno((p) => ({ ...p, tem_curriculo: true }))} />}
+            {abaAtiva === 'curriculo' && <ResumeBuilder aoGerar={() => setPerfilAluno((p) => ({ ...p, tem_curriculo: true }))} aoGanharXp={atualizarDadosUsuario} />}
             {abaAtiva === 'ranking' && <WeeklyLeaderboard />}
           </motion.div>
         </AnimatePresence>

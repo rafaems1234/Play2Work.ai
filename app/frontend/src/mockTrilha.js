@@ -1,10 +1,12 @@
 // Modo demonstração da trilha EAD: simula no navegador as rotas de
 // aulas_routes.py com as mesmas regras de aulas.py (blocos de 10 s, só conta
 // o trecho reproduzido em 1x dentro do tempo real, fixação com nota de corte,
-// certificado que só libera depois de concluir o módulo).
+// certificado de conclusão retirado na escola e registrado pela coordenação).
 //
 // Os vídeos aqui são simulados (player "demo"), curtos, pra apresentação
 // funcionar sem internet e sem depender de vídeos que a escola ainda não gravou.
+
+import { hojeLocalIso } from './utils/formatos';
 
 const BLOCO = 10;
 const FOLGA = 15;
@@ -50,15 +52,6 @@ const gerarAudio = (segundos = 12) => {
   return new Blob([buffer], { type: 'audio/wav' });
 };
 
-const certificadoDemo = (nome, curso, horas) => gerarPdf([
-  ['CERTIFICADO DE CONCLUSÃO', 30, 470],
-  [`Certificamos que ${nome}`, 18, 400],
-  [`concluiu o curso "${curso}",`, 18, 370],
-  [`com carga horária de ${horas}, na modalidade a distância.`, 18, 340],
-  ['DOCUMENTO DE DEMONSTRAÇÃO - SEM VALIDADE', 14, 200],
-  ['O certificado real é emitido pelo Programa de Aprendizagem e enviado pela escola.', 11, 175],
-]);
-
 // ---------------------------------------------------------------- conteúdo de exemplo
 const pergunta = (id, enunciado, opcoes, correta, explicacao) => ({ id, enunciado, opcoes, resposta_correta_index: correta, explicacao });
 
@@ -77,7 +70,7 @@ export const criarMockTrilha = (ctx) => {
 
   const MODULOS = [
     { id: 1, titulo: 'Integração ao Programa de Aprendizagem', descricao: 'A semana de integração, agora a distância: como funciona a aprendizagem, seus direitos e deveres e a postura no trabalho.', itinerario: null, ordem: 0, publicado: true },
-    { id: 2, titulo: 'Primeiros passos em Dados', descricao: 'Planilhas e organização de informação no dia a dia da empresa.', itinerario: 'Tecnologia e Ciência de Dados', ordem: 1, publicado: true },
+    { id: 2, titulo: 'Primeiros passos em Dados', descricao: 'Planilhas e organização de informação no dia a dia da empresa.', itinerario: 'Ciência de Dados', ordem: 1, publicado: true },
     { id: 3, titulo: 'Segurança do trabalho', descricao: 'Em produção pelos professores.', itinerario: null, ordem: 2, publicado: false },
   ];
   let proximoModuloId = 4;
@@ -129,8 +122,7 @@ export const criarMockTrilha = (ctx) => {
 
   const progressos = new Map(); // `${alunoId}-${aulaId}` -> progresso
   const logs = new Map();       // alunoId -> [{...}]
-  const CERTIFICADOS = [];
-  let proximoCertificadoId = 1;
+  const RETIRADAS = new Map();  // `${alunoId}-${moduloId}` -> { retirado_em, observacao }
 
   const modulo = (id) => MODULOS.find((m) => m.id === id);
   const aulasDoModulo = (m) => AULAS.filter((a) => a.modulo_id === m.id).sort((x, y) => x.ordem - y.ordem);
@@ -141,8 +133,8 @@ export const criarMockTrilha = (ctx) => {
     logs.set(alunoId, [{ aula_id: aula.id, aula: aula.titulo, evento, percentual_assistido: percentual, nota, nota_de_corte: nota != null ? aula.nota_minima : null, registrado_em: quando }, ...(logs.get(alunoId) || [])]);
   };
 
-  // Histórico de exemplo: Bianca concluiu a integração (e tem certificado),
-  // Ana concluiu e ainda está sem certificado, outros pela metade
+  // Histórico de exemplo: Bianca concluiu a integração (e já retirou o
+  // certificado na escola), Ana concluiu e ainda não buscou, outros pela metade
   const concluirDemo = (alunoId, aula, dias) => {
     progressos.set(chave(alunoId, aula.id), { blocos: '1'.repeat(totalBlocos(aula)), percentual: 100, ultimo: 0, melhor: 100, tentativas: 1, concluida_em: diasAtras(dias) });
     registrarLog(alunoId, aula, 'inicio', 0, null, diasAtras(dias, 9));
@@ -152,27 +144,29 @@ export const criarMockTrilha = (ctx) => {
   [4, 8].forEach((alunoId) => concluirDemo(alunoId, AULAS[0], 5));
   progressos.set(chave(8, 2), { blocos: '1'.repeat(5) + '0'.repeat(4), percentual: 56, ultimo: 0, melhor: null, tentativas: 0, concluida_em: null });
 
-  const adicionarCertificado = (alunoId, moduloId, titulo, emitidoEm) => {
-    const aluno = ALUNOS.find((a) => a.id === alunoId);
-    const m = modulo(moduloId);
-    const blob = certificadoDemo(aluno.nome, m.titulo, `${Math.round(aulasDoModulo(m).reduce((t, a) => t + a.carga_horaria_minutos, 0) / 60)} horas`);
-    CERTIFICADOS.push({ id: proximoCertificadoId++, estudante_id: alunoId, modulo_id: moduloId, titulo, emitido_em: emitidoEm, nome_arquivo: `Certificado - ${aluno.nome}.pdf`, tamanho_bytes: blob.size, blob, enviado_em: diasAtras(15) });
-  };
-  adicionarCertificado(2, 1, 'Integração - Programa de Aprendizagem 2026', diasAtras(10).slice(0, 10));
-  adicionarCertificado(1, 1, 'Integração - Programa de Aprendizagem 2026', null); // o aluno da demo: guardado, libera ao concluir
+  RETIRADAS.set(chave(2, 1), { retirado_em: diasAtras(8).slice(0, 10), observacao: null });
 
   // ---------------------------------------------------------------- regras (espelho de aulas.py)
   const situacao = (alunoId, m) => {
-    if (!m) return { aulas_total: 0, aulas_concluidas: 0, concluido: true };
     const publicadas = aulasDoModulo(m).filter((a) => a.publicada);
     const concluidas = publicadas.filter((a) => progressos.get(chave(alunoId, a.id))?.concluida_em).length;
     return { aulas_total: publicadas.length, aulas_concluidas: concluidas, concluido: publicadas.length > 0 && concluidas >= publicadas.length };
   };
 
-  const certificadoParaApi = (c) => {
-    const { blob, ...resto } = c; // eslint-disable-line no-unused-vars
-    const s = situacao(c.estudante_id, c.modulo_id ? modulo(c.modulo_id) : null);
-    return { ...resto, liberado: s.concluido, aulas_total: s.aulas_total, aulas_concluidas: s.aulas_concluidas };
+  // Um certificado por módulo publicado concluído (certificados_dos_alunos em aulas.py)
+  const certificadosDoAluno = (alunoId, comObservacao = true) => {
+    const aluno = ALUNOS.find((a) => a.id === alunoId);
+    return [...MODULOS].filter((m) => m.publicado).sort((a, b) => a.ordem - b.ordem).flatMap((m) => {
+      const publicadas = aulasDoModulo(m).filter((a) => a.publicada);
+      const datas = publicadas.map((a) => progressos.get(chave(alunoId, a.id))?.concluida_em);
+      const concluiu = publicadas.length > 0 && [null, aluno?.itinerario].includes(m.itinerario) && datas.every(Boolean);
+      const retirada = RETIRADAS.get(chave(alunoId, m.id));
+      if (!concluiu && !retirada) return [];
+      return [{
+        modulo_id: m.id, modulo: m.titulo, concluido_em: concluiu ? datas.sort().at(-1) : null, retirado_em: retirada?.retirado_em ?? null,
+        ...(comObservacao ? { observacao: retirada?.observacao ?? null } : {}),
+      }];
+    });
   };
 
   const pontoSemPular = (aula, p) => {
@@ -198,7 +192,7 @@ export const criarMockTrilha = (ctx) => {
     nota_minima: a.nota_minima, publicada: a.publicada, total_perguntas: a.perguntas.length, total_materiais: a.materiais.length,
   });
   const materialParaApi = ({ id, tipo, nome_arquivo, tipo_mime, tamanho_bytes }) => ({ id, tipo, nome_arquivo, tipo_mime, tamanho_bytes });
-  const moduloParaApi = (m, aulas) => ({ ...m, emite_certificado: false, aulas, carga_horaria_minutos: aulas.reduce((t, a) => t + a.carga_horaria_minutos, 0) });
+  const moduloParaApi = (m, aulas) => ({ ...m, aulas, carga_horaria_minutos: aulas.reduce((t, a) => t + a.carga_horaria_minutos, 0) });
 
   const arquivo = (blob) => Promise.resolve({ ok: true, status: 200, blob: async () => blob, json: async () => ({}) });
   const blobDoMaterial = (m) => {
@@ -320,13 +314,13 @@ export const criarMockTrilha = (ctx) => {
           const concluidas = detalhes.filter((d) => d.concluida_em);
           const modulosConcluidos = [...new Set(aplicaveis.map((a) => a.modulo_id))].map(modulo)
             .filter((m) => detalhes.filter((d) => d.modulo === m.titulo).every((d) => d.concluida_em))
-            .map((m) => ({ modulo_id: m.id, modulo: m.titulo, tem_certificado: CERTIFICADOS.some((c) => c.estudante_id === aluno.id && c.modulo_id === m.id) }));
+            .map((m) => ({ modulo_id: m.id, modulo: m.titulo, retirado_em: RETIRADAS.get(chave(aluno.id, m.id))?.retirado_em ?? null }));
           return {
             estudante_id: aluno.id, nome: aluno.nome, cpf: aluno.cpf, turma: nomeTurma(aluno.turma_id), itinerario: aluno.itinerario,
             aulas_previstas: detalhes.length, aulas_concluidas: concluidas.length,
             carga_prevista_minutos: detalhes.reduce((t, d) => t + d.carga_horaria_minutos, 0),
             carga_concluida_minutos: concluidas.reduce((t, d) => t + d.carga_horaria_minutos, 0),
-            modulos_concluidos: modulosConcluidos, total_certificados: CERTIFICADOS.filter((c) => c.estudante_id === aluno.id).length, aulas: detalhes,
+            modulos_concluidos: modulosConcluidos, aulas: detalhes,
           };
         }),
       });
@@ -337,23 +331,35 @@ export const criarMockTrilha = (ctx) => {
       const aluno = ALUNOS.find((a) => a.id === alunoId);
       if (!aluno) return erroFake('Aluno não encontrado', 404);
       if (r[2] === 'frequencia' && metodo === 'GET') return respostaFake(logs.get(alunoId) || []);
-      if (r[2] === 'certificados' && metodo === 'GET') return respostaFake(CERTIFICADOS.filter((c) => c.estudante_id === alunoId).map(certificadoParaApi));
-      if (r[2] === 'certificados' && metodo === 'POST') {
-        const [lido, erro] = await lerArquivoEnviado(corpo);
-        if (erro) return erro;
-        if (tipoDoMaterial(lido.inicio)?.[0] !== 'documento') return erroFake('Envie o certificado em PDF.', 400);
-        const moduloId = corpo.get('modulo_id') ? Number(corpo.get('modulo_id')) : null;
-        const c = { id: proximoCertificadoId++, estudante_id: alunoId, modulo_id: moduloId, titulo: corpo.get('titulo'), emitido_em: corpo.get('emitido_em') || null, nome_arquivo: lido.arquivo.name, tamanho_bytes: lido.arquivo.size, blob: lido.arquivo, enviado_em: agoraIso() };
-        CERTIFICADOS.push(c);
-        return respostaFake(certificadoParaApi(c), 201);
-      }
+      if (r[2] === 'certificados' && metodo === 'GET') return respostaFake(certificadosDoAluno(alunoId));
     }
-    r = caminho.match(/^\/api\/admin\/certificados\/(\d+)$/);
+    if (metodo === 'GET' && caminho === '/api/admin/certificados') {
+      const turmaId = query.get('turma_id');
+      const situacaoFiltro = query.get('situacao');
+      const linhas = ALUNOS.filter((a) => !turmaId || String(a.turma_id) === turmaId).flatMap((a) => certificadosDoAluno(a.id)
+        .filter((c) => !(situacaoFiltro === 'a_retirar' && c.retirado_em) && !(situacaoFiltro === 'retirado' && !c.retirado_em))
+        .map((c) => ({
+          estudante_id: a.id, nome: a.nome, cpf: a.cpf, turma: nomeTurma(a.turma_id), telefone: a.telefone,
+          responsavel_nome: a.responsavel_nome, responsavel_telefone: a.responsavel_telefone, ...c,
+        })));
+      linhas.sort((x, y) => Number(Boolean(x.retirado_em)) - Number(Boolean(y.retirado_em)) || x.nome.localeCompare(y.nome, 'pt-BR'));
+      return respostaFake(linhas);
+    }
+    r = caminho.match(/^\/api\/admin\/estudantes\/(\d+)\/certificados\/(\d+)$/);
     if (r) {
-      const c = CERTIFICADOS.find((x) => x.id === Number(r[1]));
-      if (!c) return erroFake('Certificado não encontrado', 404);
-      if (metodo === 'GET') return arquivo(c.blob);
-      if (metodo === 'DELETE') { CERTIFICADOS.splice(CERTIFICADOS.indexOf(c), 1); return respostaFake({ sucesso: true }); }
+      const aluno = ALUNOS.find((a) => a.id === Number(r[1]));
+      const m = modulo(Number(r[2]));
+      if (!aluno) return erroFake('Aluno não encontrado', 404);
+      if (!m) return erroFake('Módulo não encontrado', 404);
+      if (metodo === 'PUT') {
+        if (!certificadosDoAluno(aluno.id).some((c) => c.modulo_id === m.id)) return erroFake(`${aluno.nome} ainda não concluiu todas as aulas de "${m.titulo}".`, 409);
+        const retiradoEm = corpo.retirado_em || hojeLocalIso();
+        if (retiradoEm > hojeLocalIso()) return erroFake('A data da retirada não pode ser no futuro.', 400);
+        const retirada = { retirado_em: retiradoEm, observacao: (corpo.observacao || '').trim() || null };
+        RETIRADAS.set(chave(aluno.id, m.id), retirada);
+        return respostaFake({ modulo_id: m.id, ...retirada });
+      }
+      if (metodo === 'DELETE') { RETIRADAS.delete(chave(aluno.id, m.id)); return respostaFake({ sucesso: true }); }
     }
     return null;
   };
@@ -377,19 +383,8 @@ export const criarMockTrilha = (ctx) => {
           return { ...resumo, tem_video: Boolean(a.video_provedor), percentual_assistido: p?.percentual ?? 0, concluida_em: p?.concluida_em ?? null };
         }))));
     }
-    if (metodo === 'GET' && caminho === '/api/certificados') {
-      return respostaFake(CERTIFICADOS.filter((c) => c.estudante_id === alunoId).map(certificadoParaApi));
-    }
-    let r = metodo === 'GET' && caminho.match(/^\/api\/certificados\/(\d+)$/);
-    if (r) {
-      const c = CERTIFICADOS.find((x) => x.id === Number(r[1]) && x.estudante_id === alunoId);
-      if (!c) return erroFake('Certificado não encontrado', 404);
-      const m = c.modulo_id ? modulo(c.modulo_id) : null;
-      const s = situacao(alunoId, m);
-      if (!s.concluido) return erroFake(`Seu certificado libera quando você concluir todas as aulas de "${m.titulo}" (${s.aulas_concluidas} de ${s.aulas_total}).`, 403);
-      return arquivo(c.blob);
-    }
-    r = caminho.match(/^\/api\/aulas\/(\d+)(\/progresso|\/fixacao|\/materiais\/(\d+))?$/);
+    if (metodo === 'GET' && caminho === '/api/certificados') return respostaFake(certificadosDoAluno(alunoId, false));
+    const r = caminho.match(/^\/api\/aulas\/(\d+)(\/progresso|\/fixacao|\/materiais\/(\d+))?$/);
     if (!r) return null;
     const aula = aulaDoAluno(Number(r[1]));
     if (!aula) return erroFake('Aula não encontrada', 404);
@@ -425,7 +420,7 @@ export const criarMockTrilha = (ctx) => {
       p.percentual = Math.round((blocos.filter((b) => b === '1').length / blocos.length) * 100);
       p.ultimo = Date.now();
       if (Math.floor(p.percentual / 10) > Math.floor(antes / 10)) registrarLog(alunoId, aula, 'progresso', p.percentual);
-      return respostaFake(estadoDoProgresso(aula, p));
+      return respostaFake(estadoDoProgresso(aula, p)); // XP e ofensiva só ao concluir a aula
     }
     const p = progressos.get(k);
     if (r[2] === '/fixacao' && metodo === 'GET') {
@@ -457,11 +452,13 @@ export const criarMockTrilha = (ctx) => {
       registrarLog(alunoId, aula, 'fixacao', p.percentual, nota);
       const concluiuAgora = aprovado && !p.concluida_em;
       let xp = 0;
+      let moduloConcluido = false;
       if (concluiuAgora) {
         p.concluida_em = agoraIso();
         registrarLog(alunoId, aula, 'conclusao', p.percentual, nota);
         registrarEvidencias(alunoId, { conhecimento: nota }, 'aula');
-        xp = 25;
+        moduloConcluido = situacao(alunoId, modulo(aula.modulo_id)).concluido;
+        xp = 20 + 25 + (moduloConcluido ? 50 : 0); // assistir + fixação, + bônus por terminar o módulo
         concederXp(xp);
       }
       return respostaFake({
@@ -472,11 +469,15 @@ export const criarMockTrilha = (ctx) => {
         }),
         ...estadoDoProgresso(aula, p),
         novos_pontos_totais: estado.xp_total, nivel_atual: estado.nivel_gamificacao, mudanca_liga: null,
+        modulo_concluido_agora: moduloConcluido, modulo: modulo(aula.modulo_id).titulo, xp_bonus_modulo: moduloConcluido ? 50 : 0,
       });
     }
     return null;
   };
 
-  const totalCertificados = (alunoId) => CERTIFICADOS.filter((c) => c.estudante_id === alunoId).length;
-  return { admin, aluno, totalCertificados };
+  const resumoCertificados = (alunoId) => {
+    const lista = certificadosDoAluno(alunoId);
+    return { certificados_a_retirar: lista.filter((c) => !c.retirado_em).length, certificados_retirados: lista.filter((c) => c.retirado_em).length };
+  };
+  return { admin, aluno, resumoCertificados };
 };

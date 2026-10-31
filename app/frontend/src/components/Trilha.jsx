@@ -7,7 +7,10 @@ import { dataIsoParaBr } from '../utils/formatos';
 
 // Aba Aulas do aluno: a trilha EAD (ex: a integração do Programa de
 // Aprendizagem, gravada pelos professores), com frequência registrada, a
-// atividade de fixação que libera a conclusão e os certificados do PAP.
+// atividade de fixação que libera a conclusão e o aviso pra retirar o
+// certificado de conclusão na escola (o documento é entregue em mãos).
+
+export const AVISO_CERTIFICADO = 'Entre em contato com a coordenação da escola para retirar o seu certificado de conclusão.';
 
 const horas = (minutos) => {
   const h = Math.floor(minutos / 60);
@@ -55,8 +58,8 @@ const ModalFixacao = ({ aula, aoFechar, aoConcluir }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '14px' }}>
           <div>
             <div className="trilha-rotulo">Atividade de fixação</div>
-            <h3 style={{ margin: 0, color: '#f1f5f9', fontSize: '18px' }}>{aula.titulo}</h3>
-            {dados && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>Nota mínima pra concluir: {dados.nota_minima}</div>}
+            <h3 style={{ margin: 0, color: 'var(--txt-1)', fontSize: '18px' }}>{aula.titulo}</h3>
+            {dados && <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginTop: '4px' }}>Nota mínima pra concluir: {dados.nota_minima}</div>}
           </div>
           <button type="button" className="trilha-fechar" onClick={aoFechar} aria-label="Fechar"><IconClose /></button>
         </div>
@@ -66,7 +69,7 @@ const ModalFixacao = ({ aula, aoFechar, aoConcluir }) => {
           const c = correcao[p.id];
           return (
             <div key={p.id} className={`trilha-pergunta ${c ? (c.acertou ? 'certa' : 'errada') : ''}`}>
-              <div style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: '8px', fontSize: '14px' }}>{i + 1}. {p.enunciado}</div>
+              <div style={{ fontWeight: 700, color: 'var(--txt-1b)', marginBottom: '8px', fontSize: '14px' }}>{i + 1}. {p.enunciado}</div>
               {p.opcoes.map((opcao, j) => (
                 <label key={j} className={`trilha-opcao ${respostas[i] === j ? 'marcada' : ''} ${c?.resposta_correta_index === j ? 'gabarito' : ''}`}>
                   <input type="radio" name={`p-${p.id}`} checked={respostas[i] === j} disabled={Boolean(resultado)} onChange={() => setRespostas((r) => r.map((v, k) => (k === i ? j : v)))} />
@@ -91,6 +94,11 @@ const ModalFixacao = ({ aula, aoFechar, aoConcluir }) => {
               {!resultado.aprovado && <button type="button" className="trilha-btn secundario" onClick={tentarDeNovo}>Tentar de novo</button>}
               <button type="button" className="trilha-btn" onClick={aoFechar}>{resultado.aprovado ? 'Voltar pra aula' : 'Rever a aula'}</button>
             </div>
+            {resultado.modulo_concluido_agora && (
+              <div className="trilha-certificado" style={{ flexBasis: '100%' }}>
+                <IconStar /> <span><strong>Parabéns, você concluiu "{resultado.modulo}"!</strong>{resultado.xp_bonus_modulo ? ` +${resultado.xp_bonus_modulo} XP de bônus pelo módulo.` : ''} {AVISO_CERTIFICADO}</span>
+              </div>
+            )}
           </div>
         ) : dados && (
           <button type="button" className="trilha-btn" style={{ width: '100%', marginTop: '6px' }} disabled={enviando || respostas.some((r) => r === null)} onClick={enviar}>
@@ -127,7 +135,7 @@ const AulaAberta = ({ aulaId, aoVoltar, aoGanharXp }) => {
   }, [aulaId]);
 
   if (erro) return <div className="trilha-cartao"><button type="button" className="trilha-link" onClick={aoVoltar}>← Voltar</button><div className="trilha-erro"><IconWarning /> {erro}</div></div>;
-  if (!aula) return <div className="trilha-cartao"><p style={{ color: '#64748b' }}>Carregando aula…</p></div>;
+  if (!aula) return <div className="trilha-cartao"><p style={{ color: 'var(--txt-4)' }}>Carregando aula…</p></div>;
 
   const limite = estado?.pode_avancar_ate_segundo || 0;
   const concluida = Boolean(estado?.concluida_em);
@@ -140,18 +148,19 @@ const AulaAberta = ({ aulaId, aoVoltar, aoGanharXp }) => {
   return (
     <div className="trilha-cartao">
       <button type="button" className="trilha-link" onClick={aoVoltar}>← Voltar pra trilha</button>
-      <h2 style={{ margin: '10px 0 4px', color: '#f1f5f9', fontSize: '22px', fontWeight: 800 }}>{aula.titulo}</h2>
-      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>
+      <h2 style={{ margin: '10px 0 4px', color: 'var(--txt-1)', fontSize: '22px', fontWeight: 800 }}>{aula.titulo}</h2>
+      <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '16px' }}>
         <IconTimer style={{ verticalAlign: '-2px' }} /> {formatarTempo(aula.duracao_segundos)} · vale {horas(aula.carga_horaria_minutos)} de carga horária
       </div>
-      {aula.descricao && <p style={{ color: '#94a3b8', fontSize: '14px', lineHeight: 1.6, marginTop: 0 }}>{aula.descricao}</p>}
+      {aula.descricao && <p style={{ color: 'var(--txt-3)', fontSize: '14px', lineHeight: 1.6, marginTop: 0 }}>{aula.descricao}</p>}
 
       {player}
 
       <div className="trilha-status">
         <div>
-          <div style={{ fontSize: '12px', color: '#64748b' }}>Frequência nesta aula</div>
-          <div style={{ fontSize: '20px', fontWeight: 800, color: '#f1f5f9' }}>{estado?.percentual_assistido ?? 0}% <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>de {estado?.percentual_minimo}% exigidos</span></div>
+          <div style={{ fontSize: '12px', color: 'var(--txt-4)' }}>Frequência nesta aula</div>
+          <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--txt-1)' }}>{estado?.percentual_assistido ?? 0}% <span style={{ fontSize: '12px', color: 'var(--txt-4)', fontWeight: 600 }}>de {estado?.percentual_minimo}% exigidos</span></div>
+          <div style={{ fontSize: '11.5px', color: 'var(--txt-4)', marginTop: '2px' }}>Concluindo (assistir + atividade de fixação) você ganha 45 XP e mantém a ofensiva</div>
         </div>
         {concluida ? (
           <span className="trilha-chip ok"><IconCheckCircle /> Concluída em {dataIsoParaBr(estado.concluida_em)}</span>
@@ -203,7 +212,6 @@ const Trilha = ({ aoGanharXp }) => {
   const [modulos, setModulos] = useState(null);
   const [certificados, setCertificados] = useState([]);
   const [aulaAberta, setAulaAberta] = useState(null);
-  const [erroDownload, setErroDownload] = useState(null);
 
   const carregar = useCallback(async () => {
     const [rTrilha, rCert] = await Promise.all([apiFetch('/api/trilha'), apiFetch('/api/certificados')]);
@@ -213,48 +221,44 @@ const Trilha = ({ aoGanharXp }) => {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  const baixarCertificado = async (c) => {
-    setErroDownload(null);
-    const erro = await baixarArquivo(`/api/certificados/${c.id}`, c.nome_arquivo);
-    if (erro) setErroDownload(erro);
-  };
-
   return (
     <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', display: 'grid', gap: '18px' }}>
       <style>{`
         ${ESTILOS_PLAYER}
-        .trilha-cartao { background: rgba(255,255,255,0.045); border: 1px solid rgb(var(--accent-rgb) / 0.15); border-radius: 22px; padding: 26px; }
+        .trilha-cartao { background: rgb(var(--tinta-rgb) / 0.045); border: 1px solid rgb(var(--accent-rgb) / 0.15); border-radius: 22px; padding: 26px; }
         .trilha-rotulo { font-size: 12px; font-weight: 700; color: var(--accent-2); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
         .trilha-btn { padding: 10px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, var(--accent-strong), var(--accent-2-strong)); color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-        .trilha-btn.secundario { background: rgba(255,255,255,0.08); color: #e2e8f0; }
+        .trilha-btn.secundario { background: rgb(var(--tinta-rgb) / 0.08); color: var(--txt-1b); }
         .trilha-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .trilha-link { background: none; border: none; color: #94a3b8; font-weight: 700; font-size: 13px; cursor: pointer; padding: 0; font-family: inherit; }
-        .trilha-aula { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); color: #e2e8f0; cursor: pointer; text-align: left; font-family: inherit; }
+        .trilha-link { background: none; border: none; color: var(--txt-3); font-weight: 700; font-size: 13px; cursor: pointer; padding: 0; font-family: inherit; }
+        .trilha-aula { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: rgb(var(--tinta-rgb) / 0.03); border: 1px solid rgb(var(--tinta-rgb) / 0.07); color: var(--txt-1b); cursor: pointer; text-align: left; font-family: inherit; }
         .trilha-aula:hover { border-color: rgb(var(--accent-rgb) / 0.45); }
-        .trilha-barra { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; }
+        .trilha-barra { height: 6px; border-radius: 3px; background: rgb(var(--tinta-rgb) / 0.08); overflow: hidden; }
         .trilha-barra > div { height: 100%; background: var(--accent); border-radius: 0 3px 3px 0; }
         .trilha-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: rgb(var(--accent-rgb) / 0.12); color: var(--accent-soft); white-space: nowrap; }
-        .trilha-chip.ok { background: rgba(52,211,153,0.1); color: #6ee7b7; }
-        .trilha-chip.bloq { background: rgba(255,255,255,0.06); color: #94a3b8; }
-        .trilha-status { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding: 14px 16px; border-radius: 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); }
-        .trilha-texto { white-space: pre-wrap; color: #cbd5e1; font-size: 14px; line-height: 1.75; background: rgba(255,255,255,0.02); border-radius: 14px; padding: 16px 18px; }
-        .trilha-material { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #e2e8f0; font-family: inherit; font-size: 13px; cursor: pointer; text-align: left; }
-        .trilha-material span { margin-left: auto; color: #64748b; font-size: 12px; }
-        .trilha-fundo { position: fixed; inset: 0; z-index: 120; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .trilha-chip.ok { background: rgba(52,211,153,0.1); color: var(--ok-suave); }
+        .trilha-chip.bloq { background: rgb(var(--tinta-rgb) / 0.06); color: var(--txt-3); }
+        .trilha-status { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding: 14px 16px; border-radius: 14px; background: rgb(var(--tinta-rgb) / 0.03); border: 1px solid rgb(var(--tinta-rgb) / 0.07); }
+        .trilha-texto { white-space: pre-wrap; color: var(--txt-2); font-size: 14px; line-height: 1.75; background: rgb(var(--tinta-rgb) / 0.02); border-radius: 14px; padding: 16px 18px; }
+        .trilha-material { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: rgb(var(--tinta-rgb) / 0.03); border: 1px solid rgb(var(--tinta-rgb) / 0.08); color: var(--txt-1b); font-family: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+        .trilha-material span { margin-left: auto; color: var(--txt-4); font-size: 12px; }
+        .trilha-fundo { position: fixed; inset: 0; z-index: 120; background: rgb(var(--campo-rgb) / 0.65); display: flex; align-items: center; justify-content: center; padding: 16px; }
         .trilha-modal { width: 100%; max-width: 620px; max-height: 90vh; overflow-y: auto; background: rgb(var(--surface-rgb)); border: 1px solid rgb(var(--accent-rgb) / 0.25); border-radius: 22px; padding: 22px; }
-        .trilha-fechar { background: rgba(255,255,255,0.06); border: none; border-radius: 50%; width: 32px; height: 32px; color: #94a3b8; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .trilha-pergunta { padding: 14px; border-radius: 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); margin-bottom: 10px; }
+        .trilha-fechar { background: rgb(var(--tinta-rgb) / 0.06); border: none; border-radius: 50%; width: 32px; height: 32px; color: var(--txt-3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .trilha-pergunta { padding: 14px; border-radius: 14px; background: rgb(var(--tinta-rgb) / 0.03); border: 1px solid rgb(var(--tinta-rgb) / 0.07); margin-bottom: 10px; }
         .trilha-pergunta.certa { border-color: rgba(52,211,153,0.4); }
         .trilha-pergunta.errada { border-color: rgba(248,113,113,0.45); }
-        .trilha-opcao { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; color: #cbd5e1; font-size: 13.5px; cursor: pointer; }
+        .trilha-opcao { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; color: var(--txt-2); font-size: 13.5px; cursor: pointer; }
         .trilha-opcao.marcada { background: rgb(var(--accent-rgb) / 0.12); }
-        .trilha-opcao.gabarito { background: rgba(52,211,153,0.12); color: #e2e8f0; }
+        .trilha-opcao.gabarito { background: rgba(52,211,153,0.12); color: var(--txt-1b); }
         .trilha-opcao input { margin-top: 3px; accent-color: var(--accent); }
-        .trilha-dica { margin-top: 6px; font-size: 12px; color: #fca5a5; }
-        .trilha-dica.ok { color: #6ee7b7; }
-        .trilha-resultado { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; border-radius: 14px; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); color: #fecaca; font-size: 14px; }
-        .trilha-resultado.aprovado { background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.3); color: #a7f3d0; }
-        .trilha-erro { margin-top: 10px; color: #f87171; font-size: 13px; display: flex; gap: 6px; align-items: center; }
+        .trilha-dica { margin-top: 6px; font-size: 12px; color: var(--erro-suave); }
+        .trilha-dica.ok { color: var(--ok-suave); }
+        .trilha-resultado { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; border-radius: 14px; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); color: var(--erro-claro); font-size: 14px; }
+        .trilha-resultado.aprovado { background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.3); color: var(--ok-claro); }
+        .trilha-certificado { display: flex; gap: 8px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: rgb(var(--accent-rgb) / 0.1); border: 1px solid rgb(var(--accent-rgb) / 0.3); color: var(--txt-1b); font-size: 13.5px; line-height: 1.5; }
+        .trilha-certificado svg { flex-shrink: 0; margin-top: 2px; color: var(--accent-soft); }
+        .trilha-erro { margin-top: 10px; color: var(--erro); font-size: 13px; display: flex; gap: 6px; align-items: center; }
         @media (max-width: 600px) { .trilha-cartao { padding: 20px 16px; } }
       `}</style>
 
@@ -264,55 +268,54 @@ const Trilha = ({ aoGanharXp }) => {
         <>
           <div className="trilha-cartao">
             <div className="trilha-rotulo"><IconBook /> Trilha EAD</div>
-            <h2 style={{ margin: '0 0 6px', color: '#f1f5f9', fontSize: '22px', fontWeight: 800 }}>Suas aulas</h2>
-            <p style={{ color: '#64748b', fontSize: '14px', lineHeight: 1.6, margin: 0 }}>
+            <h2 style={{ margin: '0 0 6px', color: 'var(--txt-1)', fontSize: '22px', fontWeight: 800 }}>Suas aulas</h2>
+            <p style={{ color: 'var(--txt-4)', fontSize: '14px', lineHeight: 1.6, margin: 0 }}>
               Aulas gravadas pelos professores da escola. Assista, faça a atividade de fixação e conclua: sua frequência fica registrada pra escola.
             </p>
           </div>
 
           {certificados.length > 0 && (
             <div className="trilha-cartao">
-              <div className="trilha-rotulo"><IconStar /> Certificados</div>
+              <div className="trilha-rotulo"><IconStar /> Certificados de conclusão</div>
               <div style={{ display: 'grid', gap: '10px' }}>
                 {certificados.map((c) => (
-                  <div key={c.id} className="trilha-status" style={{ marginTop: 0 }}>
-                    <div>
-                      <div style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '14px' }}>{c.titulo}</div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>
-                        {c.liberado ? `Liberado${c.emitido_em ? ` · emitido em ${dataIsoParaBr(c.emitido_em)}` : ''}` : `Conclua todas as aulas pra liberar (${c.aulas_concluidas} de ${c.aulas_total})`}
+                  <div key={c.modulo_id} className="trilha-status" style={{ marginTop: 0 }}>
+                    <div style={{ flex: '1 1 260px' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--txt-1)', fontSize: '14px' }}>{c.modulo}</div>
+                      <div style={{ fontSize: '12.5px', color: c.retirado_em ? 'var(--txt-4)' : 'var(--txt-2)', lineHeight: 1.5, marginTop: '2px' }}>
+                        {c.retirado_em ? `Você retirou o certificado em ${dataIsoParaBr(c.retirado_em)}.` : AVISO_CERTIFICADO}
                       </div>
                     </div>
-                    {c.liberado
-                      ? <button type="button" className="trilha-btn" onClick={() => baixarCertificado(c)}><IconDocument /> Baixar PDF</button>
-                      : <span className="trilha-chip bloq"><IconLock /> Bloqueado</span>}
+                    {c.retirado_em
+                      ? <span className="trilha-chip ok"><IconCheckCircle /> Retirado</span>
+                      : <span className="trilha-chip"><IconStar /> Pronto pra retirar</span>}
                   </div>
                 ))}
               </div>
-              {erroDownload && <div className="trilha-erro"><IconWarning /> {erroDownload}</div>}
             </div>
           )}
 
-          {modulos === null && <div className="trilha-cartao"><p style={{ color: '#64748b', margin: 0 }}>Carregando…</p></div>}
-          {modulos?.length === 0 && <div className="trilha-cartao"><p style={{ color: '#94a3b8', margin: 0 }}>A escola ainda não publicou aulas pro seu itinerário.</p></div>}
+          {modulos === null && <div className="trilha-cartao"><p style={{ color: 'var(--txt-4)', margin: 0 }}>Carregando…</p></div>}
+          {modulos?.length === 0 && <div className="trilha-cartao"><p style={{ color: 'var(--txt-3)', margin: 0 }}>A escola ainda não publicou aulas pro seu itinerário.</p></div>}
           {modulos?.map((m) => {
             const concluidas = m.aulas.filter((a) => a.concluida_em).length;
             return (
               <div key={m.id} className="trilha-cartao">
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', alignItems: 'baseline' }}>
-                  <h3 style={{ margin: 0, color: '#f1f5f9', fontSize: '18px', fontWeight: 800 }}>{m.titulo}</h3>
-                  <span style={{ fontSize: '12px', color: '#64748b' }}>{concluidas} de {m.aulas.length} aulas · {horas(m.carga_horaria_minutos)}</span>
+                  <h3 style={{ margin: 0, color: 'var(--txt-1)', fontSize: '18px', fontWeight: 800 }}>{m.titulo}</h3>
+                  <span style={{ fontSize: '12px', color: 'var(--txt-4)' }}>{concluidas} de {m.aulas.length} aulas · {horas(m.carga_horaria_minutos)}</span>
                 </div>
-                {m.descricao && <p style={{ color: '#94a3b8', fontSize: '13.5px', lineHeight: 1.6, margin: '6px 0 0' }}>{m.descricao}</p>}
+                {m.descricao && <p style={{ color: 'var(--txt-3)', fontSize: '13.5px', lineHeight: 1.6, margin: '6px 0 0' }}>{m.descricao}</p>}
                 <div className="trilha-barra" style={{ margin: '12px 0 14px' }}><div style={{ width: `${m.aulas.length ? (concluidas / m.aulas.length) * 100 : 0}%` }} /></div>
                 <div style={{ display: 'grid', gap: '8px' }}>
                   {m.aulas.map((a, i) => (
                     <button key={a.id} type="button" className="trilha-aula" onClick={() => setAulaAberta(a.id)}>
-                      <span style={{ width: '26px', height: '26px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800, flexShrink: 0, background: a.concluida_em ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.06)', color: a.concluida_em ? '#6ee7b7' : '#94a3b8' }}>
+                      <span style={{ width: '26px', height: '26px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800, flexShrink: 0, background: a.concluida_em ? 'rgba(52,211,153,0.15)' : 'rgb(var(--tinta-rgb) / 0.06)', color: a.concluida_em ? 'var(--ok-suave)' : 'var(--txt-3)' }}>
                         {a.concluida_em ? <IconCheckCircle /> : i + 1}
                       </span>
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ display: 'block', fontWeight: 700, fontSize: '14px' }}>{a.titulo}</span>
-                        <span style={{ display: 'block', fontSize: '12px', color: '#64748b' }}>
+                        <span style={{ display: 'block', fontSize: '12px', color: 'var(--txt-4)' }}>
                           {a.tem_video ? 'Vídeo' : 'Leitura'} · {formatarTempo(a.duracao_segundos)}{a.total_materiais ? ` · ${a.total_materiais} material${a.total_materiais > 1 ? 'is' : ''}` : ''}
                         </span>
                       </span>
