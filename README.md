@@ -1,7 +1,7 @@
 # First2Work.AI 🚀 
 > A plataforma do primeiro emprego · Treine. Evolua. Seja contratado.
 
-> **Marca:** o projeto se chamava *Play2Work.ai* e virou **First2Work.ai** em 01/11/2026 (logo F2W). O repositório e o endereço do site de demonstração continuam com o nome antigo, assim como as chaves internas do navegador e os nomes do banco/Docker, pra não quebrar logins salvos nem o deploy.
+> **Marca:** o projeto se chamava *Play2Work.ai* e virou **First2Work.ai** em 01/11/2026 (logo F2W). O repositório e o site de demonstração também foram renomeados (o endereço antigo `rafaems1234/Play2Work.ai` redireciona pro novo no GitHub, mas o site antigo no Pages sai do ar). As chaves internas do navegador e os nomes do banco/Docker também passaram pra `first2work` (quem já tinha entrado no demo precisa entrar de novo).
 
 O **First2Work.AI** é um ecossistema tecnológico completo projetado para democratizar o acesso à orientação profissional e impulsionar a empregabilidade de jovens estudantes em busca do primeiro emprego e vagas de Jovem Aprendiz.
 
@@ -51,7 +51,7 @@ Através de uma abordagem de **gamificação comportamental** (inspirada em mec�
     - **Nova escola:** `python criar_escola.py "Nome da escola" identificador "Nome do Administrador" usuario.admin` cria a escola com o primeiro Administrador (senha temporária mostrada uma vez, troca obrigatória). A partir daí a própria escola cria as contas da equipe e cadastra os alunos. A senha de instalação (`ADMIN_SENHA`) vale só pra primeira escola, enquanto ela não tem Administrador.
     - **Fim de contrato:** `escolas.ativa = false` barra todo mundo da escola (painel, app e login) e mantém os dados; apagar a escola apaga os dados dela em cascata.
     - **Ranking, vagas, trilha, chat e auditoria** são sempre só da escola. O nome da escola aparece no topo do painel.
-    - **Teste de isolamento real:** `test_multiescola.py` cria uma escola temporária num Postgres de **teste** e confere que ela não lê nem altera nada das outras (`PLAY2WORK_TEST_DB=... pytest test_multiescola.py`; sem a variável, é pulado).
+    - **Teste de isolamento real:** `test_multiescola.py` cria uma escola temporária num Postgres de **teste** e confere que ela não lê nem altera nada das outras (`FIRST2WORK_TEST_DB=... pytest test_multiescola.py`; sem a variável, é pulado).
     - Ficam sem `escola_id` só as tabelas acessadas sempre pelo registro "pai" já filtrado (fotos, mapa de competências, leituras do chat). Ainda não existe um painel da Sozza/plataforma pra listar e gerenciar as escolas: hoje é pelo script e pelo banco.
 9. **Quiz do Dia com banco de questões, mecânicas de jogo e resultado validado no servidor.** Quiz de 10 perguntas sobre o itinerário, sempre sorteadas do **banco de questões da escola** (sem IA, pra o conteúdo ser revisado pelos professores) (`frontend/src/data/banco_questoes.json`, 100 perguntas práticas por curso + 30 comportamentais e de mundo do trabalho, com nível Iniciante/Intermediário e explicação; o mesmo arquivo usado pelo modo demo) — 8 da área e 2 gerais, evitando as perguntas dos últimos 5 quizzes e embaralhando a ordem das alternativas a cada vez. A tela final mostra % de acerto, XP, tempo e ofensiva em cartões animados que mudam de cor com o desempenho (vermelho → amarelo → azul → verde) e com a chama crescendo conforme a ofensiva. Tem com botão de **dica** (elimina uma alternativa errada) e **pular** (avança sem gastar vida), cada um limitado a 2 usos por quiz, cronômetro ao vivo, contador de combo/streak de acertos e botão de voltar direto pro mural. O gabarito nunca é enviado ao cliente antecipadamente — cada resposta é conferida e registrada pelo backend em `/quiz/responder`, e o XP/vidas ganhos em `/quiz/submit` são contados a partir do que o servidor registrou, não do que o cliente afirma ter acertado.
 10. **Sistema de vidas e congelamento de ofensiva (sem anúncios, sem moedas, sem loja).** O estudante tem até 5 vidas e perde uma a cada erro no quiz, **na hora do erro** (fechar o quiz no meio não escapa da perda; dá pra terminar o quiz mesmo chegando a zero, só não começa outro). **XP e ofensiva só valem pra prática concluída**: quiz enviado com todas as perguntas, aula concluída, resposta avaliada no simulador, situação respondida ou currículo gerado (10 XP só no primeiro do dia). Começar e sair no meio não conta. Cada vida perdida volta sozinha **a cada 30 min**, uma por vez, até encher -- nada se compra (as moedas foram removidas pra não virar loja virtual pra menores de idade). **Combo de 5 acertos seguidos devolve 1 vida** (erro ou pulo zera o combo), e acertar o quiz perfeitamente 5 vezes seguidas dá uma vida bônus. A cada 7 dias de ofensiva contínua, o estudante ganha **2 congelamentos** (no dia em que chega lá, com **teto de 4** guardados). Cada dia sem prática gasta 1 automaticamente: com 4 guardados, dá pra ficar 4 dias sem treinar sem perder a sequência. O dia congelado só protege, não soma na ofensiva. Se faltar mais dias do que os congelamentos guardados, a ofensiva zera e recomeça (o XP nunca é tirado). Um calendário mensal (botão ao lado do ícone de ofensiva) mostra dias feitos, congelados e perdidos.
@@ -103,7 +103,7 @@ O projeto foi construído seguindo rigorosos padrões de mercado de governança 
 ## 📂 Estrutura Arquitetural do Sistema
 
 ```text
-Play2Work.ai/
+First2Work.ai/
 ├── requirements.txt          # Dependências do ecossistema Python (.venv)
 └── app/                      # CORE DO BACK-END (FastAPI)
     ├── alembic/               # Migrações de schema versionadas (Alembic)
@@ -282,7 +282,7 @@ O front-end sobe em `http://localhost:5173` e já aponta para o back-end em `htt
 >
 > **Neste modo não há IA:** a entrevista segue a lista fixa de perguntas e avalia a resposta pelas mesmas regras de reserva do backend (tamanho, exemplos concretos, gírias, desvio de assunto), e o currículo é montado só com as frases e habilidades do texto digitado, com as mesmas recusas. A IA de verdade (Gemini) só roda com o backend ligado e `GEMINI_API_KEY` no `app/.env`.
 >
-> **Versão publicada:** o workflow `.github/workflows/deploy-pages.yml` publica o front em modo demonstração a cada push na `main` que mexa em `app/frontend/` — https://rafaems1234.github.io/Play2Work.ai/ (painel em `#admin`).
+> **Versão publicada:** o workflow `.github/workflows/deploy-pages.yml` publica o front em modo demonstração a cada push na `main` que mexa em `app/frontend/` — https://rafaems1234.github.io/First2Work.ai/ (painel em `#admin`).
 
 ### Logins do modo demonstração
 
@@ -332,11 +332,11 @@ O "dia" do aluno (ofensiva, quiz do dia, liga semanal, data de contratação, ag
 
 ## 📋 Antes da homologação na escola
 
-Situação em 01/11/2026. Já resolvido nesta rodada: login do aluno por usuário + senha (primeiro acesso com código da escola), contas da gestão com perfis e auditoria de 2 anos, entrevista contínua com laudo, rodadas e simulado de certificação.
+Situação em 01/11/2026. Já resolvido nesta rodada: troca completa do nome pra First2Work (repositório, site, chaves e banco), login do aluno por usuário + senha (primeiro acesso com código da escola), contas da gestão com perfis e auditoria de 2 anos, entrevista contínua com laudo, rodadas e simulado de certificação.
 
 **Precisa de decisão ou de gente da escola (o código não resolve sozinho):**
 
-- **Marca First2Work:** pesquisar e registrar no INPI (classes 41 e 42) e reservar `first2work.com.br` / `first2work.ai` e o @ nas redes. Se o nome estiver ocupado, a troca no código é rápida (só texto e logo). Depois do domínio, dá pra renomear o repositório (o link antigo do demo deixa de funcionar).
+- **Marca First2Work:** pesquisar e registrar no INPI (classes 41 e 42) e reservar `first2work.com.br` / `first2work.ai` e o @ nas redes. O repositório, o site do demo, as chaves do navegador e os nomes do banco/Docker já foram trocados pra First2Work em 01/11/2026; se o nome estiver ocupado no INPI, vai ser preciso trocar tudo de novo.
 - **Proposta comercial:** levantamento pra diretora feito fora do repositório (implantação R$ 6.000; mensalidade de escola piloto R$ 2.000, tabela R$ 2.800, até 600 alunos; hospedagem na Azure, região Brasil). Falta virar proposta oficial e contrato com revisão jurídica.
 - **Conteúdo do banco de questões:** as 630 perguntas precisam de revisão dos professores — agora com mais urgência, porque o **simulado de certificação** sorteia delas e uma resposta errada no banco pode reprovar um aluno. Atenção principal às que citam números de lei (CLT, FGTS do aprendiz, prazos do CPC, cotas).
 - **LGPD** (rascunhos prontos em [`docs/lgpd`](docs/lgpd/README.md), com o mapa dos dados que o sistema guarda — **precisam de revisão de advogado**): política de privacidade, termos de uso, consentimento do responsável (a maioria é menor) e contrato com a escola dizendo que ela é a controladora dos dados e o First2Work o operador. **Gemini:** no plano gratuito o Google pode usar o conteúdo enviado pra melhorar os produtos; com texto de aluno menor de idade, usar o plano pago antes do piloto.
@@ -354,6 +354,6 @@ Situação em 01/11/2026. Já resolvido nesta rodada: login do aluno por usuári
 
 **Verificado e o que falta verificar:**
 
-- **Migrações conferidas num Postgres 16 de verdade (31/10/2026):** numa cópia do banco de dev, todas as revisões de `c4e8a1b2d3f5` até `f2b8d4a6c1e3` (versão do cadastro) subiram sem erro, os downgrades/upgrades das novas também, e o `alembic check` não acusou diferença entre o banco e o `models.py`. Na migração dos cursos, quem estava em Ciências da Natureza fica sem curso, pra escola reclassificar.
+- **Migrações conferidas num Postgres 16 de verdade (31/10/2026):** numa cópia do banco de dev, todas as revisões de `c4e8a1b2d3f5` até `f2b8d4a6c1e3` (versão do cadastro) subiram sem erro, os downgrades/upgrades das novas também, e o `alembic check` não acusou diferença entre o banco e o `models.py`. Em 01/11/2026 a `a3c5e7f9b1d2` (e-mail do responsável) subiu no banco de dev e o `alembic check` continuou limpo; a suíte de testes passou (271 ok, 5 pulados). Na migração dos cursos, quem estava em Ciências da Natureza fica sem curso, pra escola reclassificar.
 - **Testado no navegador com o backend real e o Gemini de verdade:** login e primeiro acesso do aluno, pedido de senha e aprovação, códigos da turma, gerador de currículo, entrevista contínua com laudo, simulado de certificação (reprovação, bloqueio do ciclo, anti-cópia, saída de tela), contas da gestão e auditoria.
 - **Não verificado ainda:** uma impressão real do PDF e dos bilhetes de código de acesso pela janela do navegador; as rodadas de 5 entrevistas de ponta a ponta no navegador (cobertas pelos testes automatizados, mas exigiriam ~35 chamadas ao Gemini); as telas novas no **modo demonstração** (o build passa, mas não foram clicadas).

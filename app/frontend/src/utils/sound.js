@@ -1,7 +1,7 @@
 // Sons curtos de feedback (acerto/erro/level-up/liga), gerados por síntese via
 // Web Audio API -- sem precisar de arquivos de áudio externos.
 
-const CHAVE_SOM_ATIVADO = 'play2work_som_ativado';
+const CHAVE_SOM_ATIVADO = 'first2work_som_ativado';
 
 let audioCtx = null;
 

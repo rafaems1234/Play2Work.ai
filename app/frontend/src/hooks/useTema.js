@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 // Tema do app do aluno: 'escuro' (padrão) ou 'claro'. Fica no atributo
 // data-tema do <html> -- as variáveis de index.css fazem o resto -- e a
 // escolha é salva no navegador (é só preferência de quem está usando).
-const CHAVE_TEMA = 'play2work_tema';
-const EVENTO_TEMA = 'play2work-tema';
+const CHAVE_TEMA = 'first2work_tema';
+const EVENTO_TEMA = 'first2work-tema';
 
 export const temaSalvo = () => {
   try {

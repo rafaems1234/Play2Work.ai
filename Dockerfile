@@ -1,7 +1,7 @@
 # Backend do First2Work.ai (FastAPI). O front é publicado à parte (build estático do Vite).
 #
-#   docker build -t play2work-api .
-#   docker run --env-file app/.env -p 8000:8000 play2work-api
+#   docker build -t first2work-api .
+#   docker run --env-file app/.env -p 8000:8000 first2work-api
 #
 # Na subida, prepara o banco (cria as tabelas num banco vazio ou aplica as
 # migrações que faltam, e garante uma escola) e inicia o servidor.
@@ -23,8 +23,8 @@ COPY app/alembic ./alembic
 COPY app/frontend/src/data ./frontend/src/data
 
 # Não roda como root
-RUN useradd --create-home --uid 10001 play2work && chown -R play2work /srv
-USER play2work
+RUN useradd --create-home --uid 10001 first2work && chown -R first2work /srv
+USER first2work
 
 EXPOSE 8000
 # --proxy-headers: atrás do proxy da hospedagem, o IP real do cliente (rate limit e auditoria)

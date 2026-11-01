@@ -3,10 +3,10 @@ Isolamento entre escolas contra um Postgres DE VERDADE (o filtro automático de
 tenancy.py só existe numa sessão real do SQLAlchemy, não no MagicMock dos
 outros testes).
 
-Roda só com PLAY2WORK_TEST_DB apontando pra um banco de TESTE já migrado
+Roda só com FIRST2WORK_TEST_DB apontando pra um banco de TESTE já migrado
 (alembic upgrade head) e populado (python seed.py):
 
-    PLAY2WORK_TEST_DB=postgresql://usuario:senha@localhost:5432/play2work_teste pytest test_multiescola.py
+    FIRST2WORK_TEST_DB=postgresql://usuario:senha@localhost:5432/first2work_teste pytest test_multiescola.py
 
 Cria uma escola temporária e apaga no fim. Nunca aponte pra produção.
 """
@@ -15,8 +15,8 @@ import sys
 
 import pytest
 
-BANCO = os.environ.get("PLAY2WORK_TEST_DB")
-pytestmark = pytest.mark.skipif(not BANCO, reason="defina PLAY2WORK_TEST_DB (Postgres de teste) para rodar")
+BANCO = os.environ.get("FIRST2WORK_TEST_DB")
+pytestmark = pytest.mark.skipif(not BANCO, reason="defina FIRST2WORK_TEST_DB (Postgres de teste) para rodar")
 
 if BANCO:
     os.environ["DATABASE_URL"] = BANCO

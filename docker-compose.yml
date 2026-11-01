@@ -11,15 +11,15 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: play2work
-      POSTGRES_USER: play2work
+      POSTGRES_DB: first2work
+      POSTGRES_USER: first2work
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-troque-esta-senha}
     volumes:
       - dados_postgres:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U play2work -d play2work"]
+      test: ["CMD-SHELL", "pg_isready -U first2work -d first2work"]
       interval: 5s
       retries: 10
 
@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
     env_file: app/.env
     environment:
-      DATABASE_URL: postgresql://play2work:${POSTGRES_PASSWORD:-troque-esta-senha}@banco:5432/play2work
+      DATABASE_URL: postgresql://first2work:${POSTGRES_PASSWORD:-troque-esta-senha}@banco:5432/first2work
     depends_on:
       banco:
         condition: service_healthy
