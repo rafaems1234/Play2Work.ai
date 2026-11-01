@@ -26,13 +26,14 @@ from sqlalchemy.orm import Session
 
 import auditoria
 from auth import (
-    ADMIN_SENHA, PERFIS_GESTAO, GestorAtual, criar_token_admin, exigir_administrador, exigir_auditor,
+    ADMIN_SENHA, PERFIS_GESTAO, GestorAtual, criar_token_admin, escola_de_instalacao, exigir_administrador, exigir_auditor,
     existe_administrador, get_admin_atual, hash_senha, verificar_senha,
 )
+from tenancy import todas_as_escolas
 from database import get_db
 from fuso import FUSO_ESCOLA, agora_utc
 from limiter import limiter
-from models import RegistroAuditoria, UsuarioGestao
+from models import Escola, RegistroAuditoria, UsuarioGestao
 
 router = APIRouter(prefix="/admin", tags=["Play2Work.AI - Gestão e auditoria"])
 
@@ -80,7 +81,8 @@ def senha_temporaria() -> str:
 
 def _gestor_para_dict(g: GestorAtual) -> dict:
     return {"id": g.id, "nome": g.nome, "usuario": g.usuario, "papel": g.papel, "instalacao": g.instalacao,
-            "deve_trocar_senha": g.deve_trocar_senha, "permissoes": g.permissoes, "perfis": PERFIS_GESTAO}
+            "deve_trocar_senha": g.deve_trocar_senha, "permissoes": g.permissoes, "perfis": PERFIS_GESTAO,
+            "escola": {"id": g.escola_id, "nome": g.escola_nome}}
 
 
 def _conta_para_dict(c: UsuarioGestao) -> dict:
@@ -95,18 +97,21 @@ def _conta_para_dict(c: UsuarioGestao) -> dict:
 def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
     agora = agora_utc()
     usuario = data.usuario.strip().lower()
-    if not existe_administrador(db):
-        # Instalação: sem nenhum Administrador, entra-se com a ADMIN_SENHA pra criar o primeiro
+    escola_inst = escola_de_instalacao(db)
+    if escola_inst is not None and not existe_administrador(db, escola_inst.id):
+        # Instalação: escola sem nenhum Administrador -> entra-se com a ADMIN_SENHA pra criar o primeiro
         if not ADMIN_SENHA:
             raise HTTPException(status_code=503, detail="Painel ainda não configurado: defina ADMIN_SENHA no .env para criar o primeiro Administrador.")
         if secrets.compare_digest(data.senha.encode("utf-8"), ADMIN_SENHA.encode("utf-8")):
-            gestor = GestorAtual(id=None, nome="Instalação", usuario="instalacao", papel="administrador", instalacao=True)
+            gestor = GestorAtual(id=None, nome="Instalação", usuario="instalacao", papel="administrador", instalacao=True,
+                                 escola_id=escola_inst.id, escola_nome=escola_inst.nome)
             request.state.gestor = gestor
             return {"token": criar_token_admin(), "gestor": _gestor_para_dict(gestor)}
     conta = db.query(UsuarioGestao).filter(UsuarioGestao.usuario == usuario).first() if usuario else None
     if conta and conta.login_bloqueado_ate and conta.login_bloqueado_ate > agora:
         raise HTTPException(status_code=429, detail=f"Muitas tentativas erradas. Espere {LOGIN_BLOQUEIO_MINUTOS} minutos.")
-    if not conta or not conta.ativo or not verificar_senha(data.senha, conta.senha_hash):
+    escola = db.get(Escola, conta.escola_id) if conta else None
+    if not conta or not conta.ativo or (escola is not None and not escola.ativa) or not verificar_senha(data.senha, conta.senha_hash):
         if conta:
             conta.login_falhas = (conta.login_falhas or 0) + 1
             if conta.login_falhas >= LOGIN_FALHAS_MAX:
@@ -118,7 +123,8 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
     conta.login_bloqueado_ate = None
     conta.ultimo_acesso_em = agora
     db.commit()
-    gestor = GestorAtual(id=conta.id, nome=conta.nome, usuario=conta.usuario, papel=conta.papel, deve_trocar_senha=bool(conta.deve_trocar_senha))
+    gestor = GestorAtual(id=conta.id, nome=conta.nome, usuario=conta.usuario, papel=conta.papel, deve_trocar_senha=bool(conta.deve_trocar_senha),
+                         escola_id=conta.escola_id, escola_nome=getattr(escola, "nome", None))
     request.state.gestor = gestor  # a auditoria registra quem entrou
     return {"token": criar_token_admin(conta), "gestor": _gestor_para_dict(gestor)}
 
@@ -157,7 +163,8 @@ def listar_contas(_: GestorAtual = Depends(exigir_administrador), db: Session = 
 @router.post("/gestao/usuarios", status_code=201)
 def criar_conta(data: NovaContaRequest, _: GestorAtual = Depends(exigir_administrador), db: Session = Depends(get_db)):
     usuario = data.usuario.strip().lower()
-    if usuario == "instalacao" or db.query(UsuarioGestao.id).filter(UsuarioGestao.usuario == usuario).first():
+    # Usuário de login é único no sistema todo (todas as escolas): o login não pergunta a escola
+    if usuario == "instalacao" or todas_as_escolas(db.query(UsuarioGestao.id).filter(UsuarioGestao.usuario == usuario)).first():
         raise HTTPException(status_code=409, detail="Esse usuário já existe. Escolha outro.")
     senha = senha_temporaria()
     conta = UsuarioGestao(nome=data.nome.strip(), usuario=usuario, senha_hash=hash_senha(senha), papel=data.papel, ativo=True, deve_trocar_senha=True)
@@ -216,8 +223,9 @@ def resetar_senha(conta_id: int, _: GestorAtual = Depends(exigir_administrador),
 
 # ------------------------------------------------------------------ auditoria (Administrador, Auditor)
 
-def _filtrar(db: Session, usuario_id, acao, entidade, de, ate, busca):
-    consulta = db.query(RegistroAuditoria)
+def _filtrar(db: Session, escola_id, usuario_id, acao, entidade, de, ate, busca):
+    # A auditoria fica fora do filtro automático (tem registro sem escola): filtra aqui
+    consulta = db.query(RegistroAuditoria).filter(RegistroAuditoria.escola_id == escola_id)
     if usuario_id:
         consulta = consulta.filter(RegistroAuditoria.usuario_gestao_id == usuario_id)
     if acao:
@@ -248,14 +256,14 @@ def listar_auditoria(
     usuario_id: Optional[int] = None, acao: Optional[str] = Query(None, max_length=15), entidade: Optional[str] = Query(None, max_length=40),
     de: Optional[date] = None, ate: Optional[date] = None, busca: Optional[str] = Query(None, max_length=100),
     pagina: int = Query(1, ge=1), por_pagina: int = Query(50, ge=1, le=200),
-    _: GestorAtual = Depends(exigir_auditor), db: Session = Depends(get_db),
+    gestor: GestorAtual = Depends(exigir_auditor), db: Session = Depends(get_db),
 ):
     if auditoria.purgar_antigos(db):  # o que passou de 2 anos sai
         db.commit()
-    consulta = _filtrar(db, usuario_id, acao, entidade, de, ate, busca)
+    consulta = _filtrar(db, gestor.escola_id, usuario_id, acao, entidade, de, ate, busca)
     total = consulta.count()
     itens = consulta.order_by(RegistroAuditoria.criado_em.desc(), RegistroAuditoria.id.desc()).offset((pagina - 1) * por_pagina).limit(por_pagina).all()
-    entidades = sorted(e for (e,) in db.query(RegistroAuditoria.entidade).distinct().all() if e)
+    entidades = sorted(e for (e,) in db.query(RegistroAuditoria.entidade).filter(RegistroAuditoria.escola_id == gestor.escola_id).distinct().all() if e)
     pessoas = db.query(UsuarioGestao.id, UsuarioGestao.nome).order_by(UsuarioGestao.nome).all()
     return {
         "itens": [_registro_para_dict(r) for r in itens], "total": total, "pagina": pagina, "por_pagina": por_pagina,
@@ -271,7 +279,7 @@ def exportar_auditoria(
     de: Optional[date] = None, ate: Optional[date] = None, busca: Optional[str] = Query(None, max_length=100),
     gestor: GestorAtual = Depends(exigir_auditor), db: Session = Depends(get_db),
 ):
-    registros = _filtrar(db, usuario_id, acao, entidade, de, ate, busca).order_by(RegistroAuditoria.criado_em.desc()).limit(50_000).all()
+    registros = _filtrar(db, gestor.escola_id, usuario_id, acao, entidade, de, ate, busca).order_by(RegistroAuditoria.criado_em.desc()).limit(50_000).all()
     saida = io.StringIO()
     saida.write("﻿")  # BOM: o Excel em português abre com acento certo
     escritor = csv.writer(saida, delimiter=";")
@@ -287,7 +295,7 @@ def exportar_auditoria(
                            celula(f"{r.entidade or ''} {r.entidade_id or ''}".strip()), celula(r.ip)])
     # Exportar a auditoria também é auditado (GET não passa pelo middleware)
     auditoria.gravar({
-        "usuario_gestao_id": gestor.id, "usuario_nome": gestor.nome, "papel": gestor.papel, "acao": "exportou", "entidade": "auditoria",
+        "escola_id": gestor.escola_id, "usuario_gestao_id": gestor.id, "usuario_nome": gestor.nome, "papel": gestor.papel, "acao": "exportou", "entidade": "auditoria",
         "entidade_id": None, "metodo": "GET", "caminho": str(request.url.path), "status_http": 200, "dados": {"total": len(registros)},
         "antes": None, "ip": request.client.host if request.client else None, "ids": (), "modelo_descricao": f"Exportou a auditoria (CSV, {len(registros)} registros)",
     })

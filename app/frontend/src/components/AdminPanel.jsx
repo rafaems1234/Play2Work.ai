@@ -845,7 +845,7 @@ const AdminPanel = ({ aoSair }) => {
               <Logo size={30} />
               <div>
                 <div style={{ fontWeight: '800', color: 'var(--adm-forte)', fontSize: '18px' }}>Painel da Escola</div>
-                <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>Play2Work.ai{DEMO_MODE && <> · <IconMask style={{ verticalAlign: '-2px' }} /> demonstração</>}</div>
+                <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>{gestor.escola?.nome || 'Play2Work.ai'}{DEMO_MODE && <> · <IconMask style={{ verticalAlign: '-2px' }} /> demonstração</>}</div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

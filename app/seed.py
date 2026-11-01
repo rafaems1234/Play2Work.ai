@@ -18,6 +18,7 @@ import models
 from nomes import escolher_nome_exibicao, escolher_usuario
 from fuso import hoje as hoje_na_escola, agora_utc
 from acesso import CODIGO_VALIDADE_DIAS
+from tenancy import definir_escola
 
 # Login do aluno demo (id=1): usuário + senha. Só pra facilitar o login
 # local -- não use isso em produção.
@@ -49,6 +50,15 @@ def popular_banco():
 
     db = SessionLocal()
     try:
+        # Multi-escola: o seed é da "Escola piloto" (id 1). Com a escola na sessão,
+        # a limpeza abaixo só apaga dados dela e tudo o que for criado é dela.
+        escola = db.get(models.Escola, 1)
+        if escola is None:
+            escola = models.Escola(id=1, nome="Escola piloto", slug="piloto")
+            db.add(escola)
+            db.commit()
+        definir_escola(db, escola.id)
+
         print("🔄 Limpando registros antigos para evitar duplicidade...")
         db.query(models.QuizSessao).delete()
         db.query(models.Candidatura).delete()

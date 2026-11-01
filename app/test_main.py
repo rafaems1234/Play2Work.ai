@@ -2430,6 +2430,7 @@ def test_nao_pode_ficar_sem_administrador(mock_db):
 
 def test_criar_conta_devolve_senha_temporaria_e_guarda_so_o_hash(mock_db):
     mock_db.query().filter().first.return_value = None
+    mock_db.query().filter().execution_options().first.return_value = None  # usuário livre em todas as escolas
     r = client.post("/api/admin/gestao/usuarios", headers={"Authorization": f"Bearer {criar_token_admin()}"}, json={"nome": "Joao Silva", "usuario": "Joao.Silva", "papel": "auditor"})
     assert r.status_code == 201
     conta = mock_db.add.call_args[0][0]
@@ -2439,6 +2440,7 @@ def test_criar_conta_devolve_senha_temporaria_e_guarda_so_o_hash(mock_db):
 
 def test_alteracao_vira_registro_de_auditoria_sem_senha(mock_db, _gestao_e_auditoria_sem_banco):
     mock_db.query().filter().first.return_value = None
+    mock_db.query().filter().execution_options().first.return_value = None  # usuário livre em todas as escolas
     client.post("/api/admin/gestao/usuarios", headers={"Authorization": f"Bearer {criar_token_admin()}"}, json={"nome": "Joao Silva", "usuario": "joao", "papel": "visualizar"})
     registro = _gestao_e_auditoria_sem_banco[-1]
     assert registro["usuario_nome"] == "Teste Admin" and registro["acao"] == "incluiu" and registro["entidade"] == "usuario_gestao"

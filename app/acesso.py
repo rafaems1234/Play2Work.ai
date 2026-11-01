@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from auth import hash_senha, verificar_senha, normalizar_cpf
 from models import Estudante, PedidoNovaSenha
 from nomes import escolher_usuario
+from tenancy import todas_as_escolas
 
 CODIGO_DIGITOS = 6
 CODIGO_VALIDADE_DIAS = 7          # dá tempo de entregar pra turma inteira e o aluno usar
@@ -64,7 +65,8 @@ def gerar_usuario(db: Session, nome_completo: str) -> str:
     """Usuário livre pra esse nome, conferindo os já usados com o mesmo começo."""
     rascunho = escolher_usuario(nome_completo, set())
     prefixo = rascunho.split(".")[0]
-    ocupados = {u for (u,) in db.query(Estudante.usuario).filter(Estudante.usuario.like(f"{prefixo}%")).all() if u}
+    # Usuário de login é único no sistema todo (todas as escolas)
+    ocupados = {u for (u,) in todas_as_escolas(db.query(Estudante.usuario).filter(Estudante.usuario.like(f"{prefixo}%"))).all() if u}
     return escolher_usuario(nome_completo, ocupados)
 
 

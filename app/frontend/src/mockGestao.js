@@ -54,7 +54,7 @@ export const criarMockGestao = ({ ALUNOS, respostaFake, erroFake, agoraIso, dias
     return a ? `${a.nome} (#${id})` : `aluno #${id}`;
   };
   const tokenDe = (c) => `demo-admin-${c.id}-v${c.versao}`;
-  const gestorParaApi = (c) => ({ id: c.id, nome: c.nome, usuario: c.usuario, papel: c.papel, instalacao: false, deve_trocar_senha: c.deve_trocar_senha, permissoes: PERFIS_GESTAO[c.papel], perfis: PERFIS_GESTAO });
+  const gestorParaApi = (c) => ({ id: c.id, nome: c.nome, usuario: c.usuario, papel: c.papel, instalacao: false, deve_trocar_senha: c.deve_trocar_senha, permissoes: PERFIS_GESTAO[c.papel], perfis: PERFIS_GESTAO, escola: { id: 1, nome: 'Escola de demonstração' } });
   const contaParaApi = (c) => ({ id: c.id, nome: c.nome, usuario: c.usuario, papel: c.papel, ativo: c.ativo, deve_trocar_senha: c.deve_trocar_senha, ultimo_acesso_em: c.ultimo_acesso_em, criado_em: c.criado_em });
   const senhaTemporaria = () => Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 8).toUpperCase();
 

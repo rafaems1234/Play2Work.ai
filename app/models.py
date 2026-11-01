@@ -1,9 +1,33 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, Boolean, JSON, LargeBinary, Float, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.orm import relationship, deferred
+from sqlalchemy.orm import relationship, deferred, declared_attr
 from database import Base
 
-class Turma(Base):
+
+class Escola(Base):
+    """
+    Tabela 'escolas': cada escola (cliente) do Play2Work. Quase todas as outras
+    tabelas têm escola_id (mixin EscopoEscola) e toda consulta feita por um
+    aluno ou por uma conta da gestão já sai filtrada pela escola dela
+    (tenancy.py) -- uma escola nunca vê dado de outra.
+    """
+    __tablename__ = 'escolas'
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(120), nullable=False)
+    slug = Column(String(60), unique=True, nullable=False, index=True)  # identificador curto: "ee-tres-lagoas"
+    ativa = Column(Boolean, nullable=False, default=True, server_default="true")
+    criada_em = Column(DateTime, server_default=func.now())
+
+
+class EscopoEscola:
+    """Mixin: a linha pertence a uma escola. Preenchido sozinho no INSERT (tenancy.py)."""
+
+    @declared_attr
+    def escola_id(cls):
+        return Column(Integer, ForeignKey('escolas.id', ondelete="CASCADE"), nullable=False, index=True)
+
+class Turma(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'turmas'.
     Agrupa os estudantes como a escola organiza (ex: "3º A - Manhã"), pra
@@ -12,24 +36,30 @@ class Turma(Base):
     __tablename__ = 'turmas'
 
     id = Column(Integer, primary_key=True, index=True)
-    nome = Column(String(60), nullable=False, unique=True)
+    nome = Column(String(60), nullable=False)               # único dentro da escola (__table_args__)
     turno = Column(String(20), nullable=True)               # Manhã, Tarde, Noite, Integral
     criada_em = Column(DateTime, server_default=func.now())
 
     estudantes = relationship("Estudante", back_populates="turma")
 
+    __table_args__ = (UniqueConstraint('escola_id', 'nome', name='uq_turma_escola_nome'),)
 
-class Estudante(Base):
+
+class Estudante(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'estudantes'.
     Armazena os dados do aluno e o seu progresso na gamificação estilo Duolingo.
     """
     __tablename__ = 'estudantes'
+    __table_args__ = (
+        UniqueConstraint('escola_id', 'email', name='uq_estudante_escola_email'),
+        UniqueConstraint('escola_id', 'nome_exibicao', name='uq_estudante_escola_nome_exibicao'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String(100), nullable=False, index=True)   # Nome de login -- não é único: se repetir, o login desempata pela senha
-    email = Column(String(100), unique=True, nullable=False, index=True)  # Usado só no cadastro e na recuperação de senha
-    nome_exibicao = Column(String(60), unique=True, nullable=True)  # "Rafael S." -- único, é o que aparece no ranking (ver gerar_nome_exibicao)
+    email = Column(String(100), nullable=False, index=True)  # Único dentro da escola (__table_args__)
+    nome_exibicao = Column(String(60), nullable=True)  # "Rafael S." -- único, é o que aparece no ranking (ver gerar_nome_exibicao)
     cpf = Column(String(11), unique=True, nullable=True, index=True)  # Só dígitos -- login do aluno é CPF + data de nascimento (cadastrado pela escola)
     data_nascimento = Column(Date, nullable=True)
     linkedin = Column(String(255), nullable=True)            # URL do perfil do LinkedIn (opcional, coletado no cadastro)
@@ -145,7 +175,7 @@ class FotoCurriculo(Base):
     atualizada_em = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
-class UsuarioGestao(Base):
+class UsuarioGestao(EscopoEscola, Base):
     """
     Tabela 'usuarios_gestao': uma conta por pessoa da coordenação/secretaria
     (substitui a senha única do painel). Perfis (auth.PERFIS_GESTAO):
@@ -181,6 +211,9 @@ class RegistroAuditoria(Base):
     __tablename__ = 'auditoria'
 
     id = Column(Integer, primary_key=True, index=True)
+    # Escola opcional (login errado de usuário inexistente não tem escola). Fora
+    # do filtro automático: a listagem filtra pela escola de quem consulta.
+    escola_id = Column(Integer, ForeignKey('escolas.id', ondelete="CASCADE"), nullable=True, index=True)
     criado_em = Column(DateTime, server_default=func.now(), index=True)
     usuario_gestao_id = Column(Integer, ForeignKey('usuarios_gestao.id', ondelete="SET NULL"), nullable=True, index=True)
     usuario_nome = Column(String(100), nullable=False)
@@ -197,7 +230,7 @@ class RegistroAuditoria(Base):
     ip = Column(String(45), nullable=True)
 
 
-class PedidoNovaSenha(Base):
+class PedidoNovaSenha(EscopoEscola, Base):
     """
     Tabela 'pedidos_nova_senha': o aluno que esqueceu a senha pede uma nova
     na tela de login, e a coordenação aprova ou recusa no painel. Aprovar
@@ -217,7 +250,7 @@ class PedidoNovaSenha(Base):
     estudante = relationship("Estudante")
 
 
-class ObservacaoEstudante(Base):
+class ObservacaoEstudante(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'observacoes_estudantes'.
     Notas internas da coordenação/PAP sobre o aluno ("comportamento exemplar",
@@ -236,7 +269,7 @@ class ObservacaoEstudante(Base):
     estudante = relationship("Estudante", back_populates="observacoes")
 
 
-class MudancaStatusContratacao(Base):
+class MudancaStatusContratacao(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'mudancas_status_contratacao'.
     Cada vez que a escola muda o status de contratação do aluno, fica o
@@ -254,7 +287,7 @@ class MudancaStatusContratacao(Base):
     estudante = relationship("Estudante", back_populates="mudancas_status")
 
 
-class Vaga(Base):
+class Vaga(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'vagas'.
     Armazena as oportunidades de emprego extraídas do mercado de trabalho.
@@ -276,7 +309,7 @@ class Vaga(Base):
     candidaturas = relationship("Candidatura", back_populates="vaga", cascade="all, delete-orphan")
 
 
-class HistoricoEntrevista(Base):
+class HistoricoEntrevista(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'historico_entrevistas'.
     Guarda o histórico de mensagens trocadas entre o utilizador e a IA no Simulador.
@@ -296,7 +329,7 @@ class HistoricoEntrevista(Base):
     estudante = relationship("Estudante", back_populates="historico_entrevistas")
 
 
-class TentativaCertificacao(Base):
+class TentativaCertificacao(EscopoEscola, Base):
     """
     Tabela 'tentativas_certificacao': cada Simulado de Certificação (20
     questões, tentativa única por ciclo -- regras em certificacao.py). A
@@ -320,7 +353,7 @@ class TentativaCertificacao(Base):
     saidas_de_tela = Column(Integer, nullable=False, default=0, server_default="0")  # Trocou de aba/minimizou durante a prova
 
 
-class RodadaEntrevista(Base):
+class RodadaEntrevista(EscopoEscola, Base):
     """
     Tabela 'rodadas_entrevista': blocos de 5 entrevistas do simulador. Média
     >= 80 marca 'meta_atingida', mas quem confirma a "Meta de Entrevista
@@ -341,7 +374,7 @@ class RodadaEntrevista(Base):
     __table_args__ = (UniqueConstraint('estudante_id', 'numero', name='uq_rodada_estudante_numero'),)
 
 
-class SessaoEntrevista(Base):
+class SessaoEntrevista(EscopoEscola, Base):
     """
     Tabela 'sessoes_entrevista': uma entrevista contínua do simulador (5 a 7
     respostas) e o laudo final de desempenho, que fica na ficha do aluno.
@@ -369,7 +402,7 @@ class SessaoEntrevista(Base):
     mensagens = relationship("HistoricoEntrevista", order_by="HistoricoEntrevista.id", passive_deletes=True)
 
 
-class AtividadeDiaria(Base):
+class AtividadeDiaria(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'atividades_diarias'.
     Um registro por (estudante, dia) usado pra desenhar o calendário de
@@ -387,7 +420,7 @@ class AtividadeDiaria(Base):
     estudante = relationship("Estudante", back_populates="atividades_diarias")
 
 
-class Candidatura(Base):
+class Candidatura(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'candidaturas'.
     Registro real (persistido e consultável) de que um estudante se
@@ -411,7 +444,7 @@ class Candidatura(Base):
     vaga = relationship("Vaga", back_populates="candidaturas")
 
 
-class QuizSessao(Base):
+class QuizSessao(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'quiz_sessoes'.
     Guarda o gabarito (resposta certa + explicação) gerado pela IA do lado
@@ -435,7 +468,7 @@ class QuizSessao(Base):
     estudante = relationship("Estudante")
 
 
-class Curriculo(Base):
+class Curriculo(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'curriculos'.
     Armazena o resultado final do texto ou estrutura do currículo formatado pela IA.
@@ -451,7 +484,7 @@ class Curriculo(Base):
     estudante = relationship("Estudante", back_populates="curriculos")
 
 
-class EvidenciaCompetencia(Base):
+class EvidenciaCompetencia(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'evidencias_competencia'.
     Cada atividade concluída deixa uma linha por competência que ela
@@ -487,7 +520,7 @@ class MapaCompetencia(Base):
     atualizado_em = Column(DateTime, server_default=func.now())
 
 
-class RespostaSituacao(Base):
+class RespostaSituacao(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'respostas_situacoes'.
     Escolha do aluno numa situação de trabalho do "O que você faria?"
@@ -508,7 +541,7 @@ class RespostaSituacao(Base):
 # guarda, controla o acesso e registra a frequência pra comprovação de
 # carga horária (ver aulas.py).
 
-class ModuloTrilha(Base):
+class ModuloTrilha(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'modulos_trilha'.
     Um módulo da trilha EAD (ex: "Módulo 1 -- Mundo do trabalho"). Itinerário
@@ -527,7 +560,7 @@ class ModuloTrilha(Base):
     aulas = relationship("Aula", back_populates="modulo", cascade="all, delete-orphan", order_by="Aula.ordem")
 
 
-class Aula(Base):
+class Aula(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'aulas'.
     Uma aula: vídeo (YouTube não listado ou Vimeo, só o ID fica guardado),
@@ -558,7 +591,7 @@ class Aula(Base):
     materiais = relationship("MaterialAula", back_populates="aula", cascade="all, delete-orphan", order_by="MaterialAula.id")
 
 
-class PerguntaFixacao(Base):
+class PerguntaFixacao(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'perguntas_fixacao'.
     Pergunta de múltipla escolha da atividade de fixação de uma aula. O
@@ -577,7 +610,7 @@ class PerguntaFixacao(Base):
     aula = relationship("Aula", back_populates="perguntas")
 
 
-class MaterialAula(Base):
+class MaterialAula(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'materiais_aula'.
     Áudio de apoio ou PDF/slides pra baixar (leve: até 10 MB). Fica no
@@ -598,7 +631,7 @@ class MaterialAula(Base):
     aula = relationship("Aula", back_populates="materiais")
 
 
-class ProgressoAula(Base):
+class ProgressoAula(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'progresso_aulas'.
     Estado atual do aluno numa aula. 'blocos_assistidos' é uma string de
@@ -622,7 +655,7 @@ class ProgressoAula(Base):
     concluida_em = Column(DateTime, nullable=True)
 
 
-class LogFrequencia(Base):
+class LogFrequencia(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'log_frequencia'.
     Trilha de auditoria da frequência EAD -- só cresce, nunca é editada nem
@@ -642,7 +675,7 @@ class LogFrequencia(Base):
     registrado_em = Column(DateTime, server_default=func.now(), index=True)
 
 
-class ContratoAprendizagem(Base):
+class ContratoAprendizagem(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'contratos_aprendizagem'.
     Contrato de Jovem Aprendiz como a escola controla na planilha do PAP:
@@ -673,7 +706,7 @@ class ContratoAprendizagem(Base):
     criado_em = Column(DateTime, server_default=func.now())
 
 
-class RetiradaCertificado(Base):
+class RetiradaCertificado(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'retiradas_certificado'.
     O certificado de conclusão de um módulo da trilha EAD é entregue em mãos
@@ -699,7 +732,7 @@ class RetiradaCertificado(Base):
 # coordenação pode ocultar uma mensagem imprópria (o original fica guardado).
 # Regras em mensagens.py.
 
-class Canal(Base):
+class Canal(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'canais'.
     Grupo de empresa não guarda lista de membros: quem está contratado pela
@@ -721,7 +754,7 @@ class Canal(Base):
     estudante = relationship("Estudante")
 
 
-class Mensagem(Base):
+class Mensagem(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'mensagens'.
     Uma mensagem num canal. Imutável: só a coordenação pode ocultar (quem

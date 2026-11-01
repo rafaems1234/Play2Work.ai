@@ -9,7 +9,8 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Estudante, UsuarioGestao
+from models import Escola, Estudante, UsuarioGestao
+from tenancy import definir_escola  # importar já registra o filtro automático por escola
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,8 @@ class GestorAtual:
     papel: str
     instalacao: bool = False
     deve_trocar_senha: bool = False
+    escola_id: Optional[int] = None
+    escola_nome: Optional[str] = None
 
     @property
     def permissoes(self) -> dict:
@@ -126,23 +129,37 @@ def _payload_do_token(authorization: str | None) -> dict | None:
         return None
 
 
-def existe_administrador(db: Session) -> bool:
-    return db.query(UsuarioGestao.id).filter(UsuarioGestao.papel == "administrador", UsuarioGestao.ativo.is_(True)).first() is not None
+def escola_de_instalacao(db: Session) -> Optional[Escola]:
+    """A escola que a senha de instalação abre: a primeira cadastrada. As outras
+    escolas nascem com o primeiro Administrador já criado (criar_escola.py)."""
+    return db.query(Escola).order_by(Escola.id).first()
+
+
+def existe_administrador(db: Session, escola_id: Optional[int] = None) -> bool:
+    consulta = db.query(UsuarioGestao.id).filter(UsuarioGestao.papel == "administrador", UsuarioGestao.ativo.is_(True))
+    if escola_id is not None:
+        consulta = consulta.filter(UsuarioGestao.escola_id == escola_id)
+    return consulta.first() is not None
 
 
 def carregar_gestor(db: Session, payload: dict) -> Optional[GestorAtual]:
     """Quem é o dono do token -- ou None se a conta sumiu, foi desativada ou mudou de senha/perfil."""
     if payload.get("sub") == INSTALACAO:
-        if existe_administrador(db):
-            return None  # a senha de instalação morre quando existe um Administrador
-        return GestorAtual(id=None, nome="Instalação", usuario=INSTALACAO, papel="administrador", instalacao=True)
+        escola = escola_de_instalacao(db)
+        if escola is None or existe_administrador(db, escola.id):
+            return None  # a senha de instalação morre quando a escola tem um Administrador
+        return GestorAtual(id=None, nome="Instalação", usuario=INSTALACAO, papel="administrador", instalacao=True, escola_id=escola.id, escola_nome=escola.nome)
     try:
         gestor = db.query(UsuarioGestao).filter(UsuarioGestao.id == int(payload["sub"])).first()
     except (KeyError, ValueError):
         return None
     if not gestor or not gestor.ativo or payload.get("v", 0) != (gestor.sessao_versao or 0):
         return None
-    return GestorAtual(id=gestor.id, nome=gestor.nome, usuario=gestor.usuario, papel=gestor.papel, deve_trocar_senha=bool(gestor.deve_trocar_senha))
+    escola = db.get(Escola, gestor.escola_id) if gestor.escola_id else None
+    if escola is not None and not escola.ativa:
+        return None  # escola desativada (contrato encerrado): ninguém entra
+    return GestorAtual(id=gestor.id, nome=gestor.nome, usuario=gestor.usuario, papel=gestor.papel, deve_trocar_senha=bool(gestor.deve_trocar_senha),
+                       escola_id=gestor.escola_id, escola_nome=getattr(escola, "nome", None))
 
 
 def get_admin_atual(request: Request, authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> GestorAtual:
@@ -160,6 +177,7 @@ def get_admin_atual(request: Request, authorization: str | None = Header(default
     if gestor is None:
         raise erro
     request.state.gestor = gestor
+    definir_escola(db, gestor.escola_id)  # daqui pra frente, toda consulta é só desta escola
     metodo, caminho = request.method, request.url.path
     if gestor.deve_trocar_senha and caminho not in ("/api/admin/gestao/minha-senha", "/api/admin/gestao/eu"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Troque a senha temporária antes de continuar.")
@@ -201,4 +219,8 @@ def get_estudante_atual(
     estudante = db.query(Estudante).filter(Estudante.id == estudante_id).first()
     if not estudante or payload.get("v", 0) != (estudante.sessao_versao or 0):
         raise erro
+    escola = db.get(Escola, estudante.escola_id) if estudante.escola_id else None
+    if escola is not None and not escola.ativa:
+        raise erro  # escola desativada (contrato encerrado)
+    definir_escola(db, estudante.escola_id)  # o aluno só enxerga a própria escola (ranking, vagas, trilha, chat...)
     return estudante

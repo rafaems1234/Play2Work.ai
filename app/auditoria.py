@@ -174,6 +174,11 @@ def gravar(registro: dict) -> None:
     """Grava um registro numa sessão própria (a da rota já foi fechada)."""
     db = SessionLocal()
     try:
+        tentado = registro.pop("usuario_tentado", None)
+        if not registro.get("escola_id") and tentado:
+            # Login errado: se o usuário existe, o registro vai pra escola dele
+            conta = db.query(UsuarioGestao).filter(UsuarioGestao.usuario == tentado.strip().lower()).first()
+            registro["escola_id"] = conta.escola_id if conta else None
         if registro.get("entidade_aluno_id"):
             aluno = db.get(Estudante, int(registro.pop("entidade_aluno_id")))
             registro["descricao"] = _descrever(registro.pop("modelo_descricao"), registro.pop("ids"), registro.get("dados") or {}, aluno.nome if aluno else None)
@@ -257,6 +262,8 @@ class MiddlewareAuditoria:
 
             if registro_acao:
                 registro = {
+                    "escola_id": getattr(gestor, "escola_id", None),
+                    "usuario_tentado": None if gestor else str((dados or {}).get("usuario", ""))[:40],
                     "usuario_gestao_id": getattr(gestor, "id", None),
                     "usuario_nome": nome[:100],
                     "papel": getattr(gestor, "papel", None),

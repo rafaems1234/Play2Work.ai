@@ -14,6 +14,7 @@ from fuso import hoje as hoje_na_escola, agora_utc, data_local
 from competencias import mapas_de_varios, nota_de_competencias, mapa_para_tela
 from atividades import SITUACOES
 from aulas import certificados_dos_alunos
+from tenancy import escola_da_sessao, todas_as_escolas
 import acesso
 import certificacao
 from entrevista_routes import laudo_para_dict, rodada_para_dict
@@ -110,8 +111,12 @@ def _validar_cpf_unico(cpf_digitado: str, db: Session, ignorar_id: Optional[int]
     cpf = normalizar_cpf(cpf_digitado)
     if not cpf_valido(cpf):
         raise HTTPException(status_code=400, detail="CPF inválido — confira os números")
-    existente = db.query(Estudante).filter(Estudante.cpf == cpf).first()
+    # CPF é único no sistema todo (o primeiro acesso é por CPF + código, sem perguntar a escola)
+    existente = todas_as_escolas(db.query(Estudante).filter(Estudante.cpf == cpf)).first()
     if existente and existente.id != ignorar_id:
+        if existente.escola_id != escola_da_sessao(db):
+            # Não revela o nome de aluno de outra escola
+            raise HTTPException(status_code=409, detail="Esse CPF já está cadastrado em outra escola. Se o aluno foi transferido, fale com o suporte do Play2Work.")
         raise HTTPException(status_code=409, detail=f"Esse CPF já está cadastrado ({existente.nome})")
     return cpf
 
