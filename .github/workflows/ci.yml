@@ -74,6 +74,8 @@ jobs:
         run: python preparar_banco.py
       - name: Modelos batem com as migrações
         run: alembic check
+      - name: Dados de teste (seed)
+        run: python seed.py
       - name: Isolamento entre escolas num Postgres real
         run: pytest -q test_multiescola.py
 
