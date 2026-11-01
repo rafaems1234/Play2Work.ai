@@ -1,8 +1,6 @@
 # First2Work.AI 🚀 
 > A plataforma do primeiro emprego · Treine. Evolua. Seja contratado.
 
-> **Marca:** o projeto se chamava *Play2Work.ai* e virou **First2Work.ai** em 01/11/2026 (logo F2W). O repositório e o site de demonstração também foram renomeados (o endereço antigo `rafaems1234/Play2Work.ai` redireciona pro novo no GitHub, mas o site antigo no Pages sai do ar). As chaves internas do navegador e os nomes do banco/Docker também passaram pra `first2work` (quem já tinha entrado no demo precisa entrar de novo).
-
 O **First2Work.AI** é um ecossistema tecnológico completo projetado para democratizar o acesso à orientação profissional e impulsionar a empregabilidade de jovens estudantes em busca do primeiro emprego e vagas de Jovem Aprendiz.
 
 Através de uma abordagem de **gamificação comportamental** (inspirada em mecânicas de jogos e RPGs de alta performance), a plataforma transforma a preparação para processos seletivos num hábito de estudo diário -- sem loja, moedas ou mecânicas de uso compulsivo, já que o público é majoritariamente menor de idade. O sistema utiliza Inteligência Artificial de última geração integrada a bancos relacionais para analisar perfis, simular entrevistas realistas, escolher um itinerário formativo e calcular a aderência técnica (*match*) de vagas em tempo real. O aluno entra com usuário e senha próprios (o primeiro acesso é com CPF + um código que a escola entrega em mãos) e a escola tem um **Painel da Escola** pra gerir turmas, alunos e itinerários e indicar os alunos de melhor desempenho às vagas das empresas parceiras (ver "Modo demonstração" abaixo pra rodar sem backend nenhum).
