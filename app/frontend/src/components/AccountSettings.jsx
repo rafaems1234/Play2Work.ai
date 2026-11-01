@@ -127,6 +127,19 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
         }
         .account-save-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 20px rgb(var(--accent-strong-rgb) / 0.3); }
         .account-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Duas colunas no computador (perfil | LinkedIn e senha) pra não precisar rolar; uma no celular */
+        .conta-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 18px; }
+        .conta-coluna-dir { padding-left: 28px; border-left: 1px solid rgb(var(--accent-rgb) / 0.1); }
+        .conta-titulo { font-size: 12px; font-weight: 700; color: var(--txt-4); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .conta-rotulo { font-size: 12px; color: var(--txt-4); margin-bottom: 2px; }
+        .conta-valor { font-size: 14px; color: var(--txt-1b); font-weight: 600; margin-bottom: 10px; overflow-wrap: anywhere; }
+        .conta-rodape { display: flex; align-items: center; gap: 16px; margin-top: 22px; padding-top: 18px; border-top: 1px solid rgb(var(--accent-rgb) / 0.1); }
+        @media (max-width: 720px) {
+          .conta-grade { grid-template-columns: 1fr; gap: 22px; }
+          .conta-coluna-dir { padding-left: 0; border-left: none; padding-top: 20px; border-top: 1px solid rgb(var(--accent-rgb) / 0.1); }
+          .conta-rodape { flex-direction: column; align-items: stretch; }
+        }
       `}</style>
 
       <motion.div
@@ -134,12 +147,12 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
         animate={{ opacity: 1, y: 0, scale: 1 }}
         style={{
           width: '100%',
-          maxWidth: '420px',
+          maxWidth: forcado ? '420px' : '780px',
           background: 'rgb(var(--surface-rgb) / 0.98)',
           backdropFilter: 'blur(20px)',
           border: '1px solid rgb(var(--accent-rgb) / 0.2)',
           borderRadius: '24px',
-          padding: '32px',
+          padding: '28px 32px',
           position: 'relative',
           zIndex: 1,
           maxHeight: '90vh',
@@ -169,97 +182,101 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
         )}
 
         {!forcado && (
-          <>
-            <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--txt-4)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Foto do perfil</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <Avatar caminho="/api/estudante/me/foto" versao={fotoVersao} nome={estudante?.nome} tamanho={64} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
-                  <SeletorFoto
-                    className="account-save-btn"
-                    rotulo={enviandoFoto ? 'Enviando...' : fotoVersao ? 'Trocar foto' : 'Adicionar foto'}
-                    disabled={enviandoFoto}
-                    aoEscolher={enviarFoto}
-                    aoErro={setErroFoto}
-                  />
-                  {fotoVersao && (
-                    <button type="button" onClick={removerFoto} style={{ background: 'none', border: 'none', color: 'var(--txt-4)', fontSize: '12px', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
-                      Remover foto
-                    </button>
+          <div className="conta-grade">
+            {/* Esquerda: quem é o aluno (dados vêm da escola) */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                <Avatar caminho="/api/estudante/me/foto" versao={fotoVersao} nome={estudante?.nome} tamanho={60} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--txt-1)', overflowWrap: 'anywhere' }}>{estudante?.nome}</div>
+                  {estudante?.usuario && (
+                    <div style={{ fontSize: '13px', color: 'var(--accent-soft)', fontWeight: '700', fontFamily: 'var(--mono)', marginTop: '2px' }} title="Usuário pra entrar">{estudante.usuario}</div>
                   )}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '8px', flexWrap: 'wrap' }}>
+                    <SeletorFoto
+                      className="account-save-btn"
+                      rotulo={enviandoFoto ? 'Enviando...' : fotoVersao ? 'Trocar foto' : 'Adicionar foto'}
+                      disabled={enviandoFoto}
+                      aoEscolher={enviarFoto}
+                      aoErro={setErroFoto}
+                    />
+                    {fotoVersao && (
+                      <button type="button" onClick={removerFoto} style={{ background: 'none', border: 'none', color: 'var(--txt-4)', fontSize: '12px', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
+                        Remover foto
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-              <p style={{ fontSize: '12px', color: 'var(--txt-4)', lineHeight: 1.5, margin: '10px 0 0' }}>
+              <p style={{ fontSize: '12px', color: 'var(--txt-4)', lineHeight: 1.5, margin: '0 0 16px' }}>
                 Só a coordenação da escola vê sua foto. Ela não aparece no ranking.
               </p>
-              {erroFoto && <div style={{ color: 'var(--erro)', fontSize: '12px', marginTop: '8px' }}>{erroFoto}</div>}
-            </div>
+              {erroFoto && <div style={{ color: 'var(--erro)', fontSize: '12px', margin: '-8px 0 12px' }}>{erroFoto}</div>}
 
-            <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
-              {estudante?.usuario && (
-                <>
-                  <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '4px' }}>Usuário (pra entrar)</div>
-                  <div style={{ fontSize: '15px', color: 'var(--accent-soft)', fontWeight: '700', marginBottom: '10px', fontFamily: 'var(--mono)' }}>{estudante.usuario}</div>
-                </>
-              )}
-              <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '4px' }}>Nome</div>
-              <div style={{ fontSize: '15px', color: 'var(--txt-1b)', fontWeight: '600', marginBottom: '10px' }}>{estudante?.nome}</div>
-              <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '4px' }}>E-mail</div>
-              <div style={{ fontSize: '15px', color: 'var(--txt-1b)', fontWeight: '600', marginBottom: '10px' }}>{estudante?.email}</div>
+              <div className="conta-rotulo">E-mail</div>
+              <div className="conta-valor">{estudante?.email}</div>
               {/* Definido pela escola no painel -- o aluno só vê */}
-              <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '4px' }}>Itinerário formativo</div>
-              <div style={{ fontSize: '15px', color: 'var(--txt-1b)', fontWeight: '600' }}>{itinerario || 'Ainda não definido pela escola'}</div>
+              <div className="conta-rotulo">Itinerário formativo</div>
+              <div className="conta-valor">{itinerario || 'Ainda não definido pela escola'}</div>
+              <p style={{ fontSize: '12px', color: 'var(--txt-4)', lineHeight: 1.5, margin: '4px 0 0' }}>
+                Nome, e-mail, turma e itinerário são cadastrados pela escola. Se algo estiver errado, fale com a coordenação.
+              </p>
             </div>
 
-            <form onSubmit={salvarPerfil} style={{ marginBottom: '28px' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--txt-4)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LinkedIn</div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{ position: 'relative', flex: 1 }}>
-                  <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-5)' }}>
-                    <IconLinkedIn />
-                  </span>
-                  <input
-                    type="url"
-                    placeholder="linkedin.com/in/seu-perfil"
-                    className="account-input"
-                    style={{ paddingLeft: '38px' }}
-                    value={linkedin}
-                    onChange={(e) => setLinkedin(e.target.value)}
-                  />
+            {/* Direita: o que o aluno pode mudar */}
+            <div className="conta-coluna-dir">
+              <form onSubmit={salvarPerfil} style={{ marginBottom: '22px' }}>
+                <div className="conta-titulo">LinkedIn</div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--txt-5)' }}>
+                      <IconLinkedIn />
+                    </span>
+                    <input
+                      type="url"
+                      placeholder="linkedin.com/in/seu-perfil"
+                      className="account-input"
+                      style={{ paddingLeft: '38px' }}
+                      value={linkedin}
+                      onChange={(e) => setLinkedin(e.target.value)}
+                    />
+                  </div>
+                  <button type="submit" disabled={salvandoPerfil} className="account-save-btn">
+                    {salvandoPerfil ? '...' : sucessoPerfil ? <IconCheck /> : 'Salvar'}
+                  </button>
                 </div>
-                <button type="submit" disabled={salvandoPerfil} className="account-save-btn">
-                  {salvandoPerfil ? '...' : sucessoPerfil ? <IconCheck /> : 'Salvar'}
-                </button>
-              </div>
-              {erroPerfil && <div style={{ color: 'var(--erro)', fontSize: '12px', marginTop: '8px' }}>{erroPerfil}</div>}
-            </form>
+                {erroPerfil && <div style={{ color: 'var(--erro)', fontSize: '12px', marginTop: '8px' }}>{erroPerfil}</div>}
+              </form>
 
-            <form onSubmit={trocarSenha} style={{ marginBottom: '28px', paddingTop: '20px', borderTop: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--txt-4)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trocar senha</div>
-              <div style={{ display: 'grid', gap: '8px' }}>
-                <CampoSenha id="conta-senha-atual" className="account-input" placeholder="Senha atual" autoComplete="current-password" valor={senhas.atual} aoMudar={mudarSenha('atual')} />
-                <CampoSenha id="conta-senha-nova" className="account-input" placeholder="Senha nova (8+ letras e números)" autoComplete="new-password" valor={senhas.nova} aoMudar={mudarSenha('nova')} />
-                <CampoSenha id="conta-senha-confirmar" className="account-input" placeholder="Repita a senha nova" autoComplete="new-password" valor={senhas.confirmar} aoMudar={mudarSenha('confirmar')} />
-              </div>
-              <button type="submit" disabled={trocandoSenha || !senhas.atual || !senhas.nova} className="account-save-btn" style={{ marginTop: '10px', width: '100%' }}>
-                {trocandoSenha ? 'Trocando...' : 'Trocar senha'}
-              </button>
-              {erroSenha && <div role="alert" style={{ color: 'var(--erro)', fontSize: '12px', marginTop: '8px' }}>{erroSenha}</div>}
-              {senhaTrocada && <div style={{ color: 'var(--ok)', fontSize: '12px', marginTop: '8px' }}>Senha trocada. Se você estava logado em outro aparelho, lá vai pedir pra entrar de novo.</div>}
-            </form>
-          </>
+              <form onSubmit={trocarSenha}>
+                <div className="conta-titulo">Trocar senha</div>
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  <CampoSenha id="conta-senha-atual" className="account-input" placeholder="Senha atual" autoComplete="current-password" valor={senhas.atual} aoMudar={mudarSenha('atual')} />
+                  <CampoSenha id="conta-senha-nova" className="account-input" placeholder="Senha nova (8+ letras e números)" autoComplete="new-password" valor={senhas.nova} aoMudar={mudarSenha('nova')} />
+                  <CampoSenha id="conta-senha-confirmar" className="account-input" placeholder="Repita a senha nova" autoComplete="new-password" valor={senhas.confirmar} aoMudar={mudarSenha('confirmar')} />
+                </div>
+                <button type="submit" disabled={trocandoSenha || !senhas.atual || !senhas.nova} className="account-save-btn" style={{ marginTop: '10px', width: '100%' }}>
+                  {trocandoSenha ? 'Trocando...' : 'Trocar senha'}
+                </button>
+                {erroSenha && <div role="alert" style={{ color: 'var(--erro)', fontSize: '12px', marginTop: '8px' }}>{erroSenha}</div>}
+                {senhaTrocada && <div style={{ color: 'var(--ok)', fontSize: '12px', marginTop: '8px' }}>Senha trocada. Se você estava logado em outro aparelho, lá vai pedir pra entrar de novo.</div>}
+              </form>
+            </div>
+          </div>
         )}
 
-        <p style={{ fontSize: '12px', color: 'var(--txt-4)', lineHeight: 1.6, marginBottom: '14px' }}>
-          Nome, e-mail, turma e itinerário são cadastrados pela escola — se algo estiver errado, fale com a coordenação. Esqueceu a senha? Saia e use "Esqueci minha senha" na tela de entrada.
-        </p>
-        <button
-          type="button"
-          onClick={aoSair}
-          style={{ width: '100%', padding: '11px', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: 'var(--erro-suave)', fontWeight: '700', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}
-        >
-          Sair da conta
-        </button>
+        <div className={forcado ? undefined : 'conta-rodape'}>
+          <p style={{ fontSize: '12px', color: 'var(--txt-4)', lineHeight: 1.6, margin: forcado ? '0 0 14px' : 0, flex: 1 }}>
+            Esqueceu a senha? Saia e use "Esqueci minha senha" na tela de entrada.
+          </p>
+          <button
+            type="button"
+            onClick={aoSair}
+            style={{ width: forcado ? '100%' : 'auto', padding: '11px 22px', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)', color: 'var(--erro-suave)', fontWeight: '700', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+          >
+            Sair da conta
+          </button>
+        </div>
       </motion.div>
     </div>
   );
