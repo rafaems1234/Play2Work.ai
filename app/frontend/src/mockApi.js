@@ -148,6 +148,12 @@ ALUNOS.forEach((a) => Object.assign(a, {
   telefone: `${DDD}9${String(91000000 + a.id * 137).slice(0, 8)}`,
   responsavel_telefone: `${DDD}9${String(88000000 + a.id * 211).slice(0, 8)}`,
 }, EXTRAS_ALUNOS[a.id] || {}));
+// Demonstração: e-mail do responsável a partir do nome ("Lúcia Nunes" -> lucia.nunes@email.com)
+ALUNOS.forEach((a) => {
+  a.responsavel_email = a.responsavel_nome
+    ? `${a.responsavel_nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(' ').filter(Boolean).join('.')}@email.com`
+    : null;
+});
 
 // Ficha do PAP de exemplo (dados fictícios, só pra demonstração)
 const SEXO_DEMO = { 1: 'Masculino', 2: 'Feminino', 3: 'Masculino', 4: 'Feminino', 5: 'Masculino', 6: 'Feminino', 7: 'Masculino', 8: 'Feminino', 9: 'Feminino', 10: 'Masculino', 11: 'Feminino', 12: 'Masculino' };
@@ -817,7 +823,7 @@ const atenderAdminInterno = async (metodo, caminho, query, corpo) => {
       data_nascimento: corpo.data_nascimento || null, email: corpo.email, turma_id: corpo.turma_id ?? null,
       itinerario: corpo.itinerario || null, habilidades: corpo.habilidades || [], xp_total: 0, ofensiva_dias: 0,
       taxa_acerto_quiz: null, liga: 'Bronze', total_candidaturas: 0,
-      telefone: corpo.telefone || null, responsavel_nome: corpo.responsavel_nome || null, responsavel_telefone: corpo.responsavel_telefone || null,
+      telefone: corpo.telefone || null, responsavel_nome: corpo.responsavel_nome || null, responsavel_telefone: corpo.responsavel_telefone || null, responsavel_email: corpo.responsavel_email || null,
       status_contratacao: 'disponivel', empresa_contratante: null, contratado_em: null, ja_trabalhou: null, experiencia_previa: null,
     };
     ALUNOS.push(aluno);
@@ -841,7 +847,7 @@ const atenderAdminInterno = async (metodo, caminho, query, corpo) => {
       aluno.nome = corpo.nome.trim();
       aluno.nome_exibicao = escolherNomeExibicao(aluno.nome, nomesOcupados(aluno.id));
     }
-    ['data_nascimento', 'email', 'turma_id', 'itinerario', 'habilidades', 'telefone', 'responsavel_nome', 'responsavel_telefone', 'ja_trabalhou', 'experiencia_previa'].forEach((campo) => {
+    ['data_nascimento', 'email', 'turma_id', 'itinerario', 'habilidades', 'telefone', 'responsavel_nome', 'responsavel_telefone', 'responsavel_email', 'ja_trabalhou', 'experiencia_previa'].forEach((campo) => {
       if (campo in corpo) aluno[campo] = corpo[campo];
     });
     if (corpo.ficha) {

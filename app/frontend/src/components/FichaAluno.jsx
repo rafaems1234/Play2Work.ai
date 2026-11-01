@@ -43,6 +43,7 @@ export const FormAluno = ({ inicial, turmas, itinerarios, aoSalvar, aoCancelar }
     telefone: mascararTelefone(inicial?.telefone || ''),
     responsavel_nome: inicial?.responsavel_nome || '',
     responsavel_telefone: mascararTelefone(inicial?.responsavel_telefone || ''),
+    responsavel_email: inicial?.responsavel_email || '',
     turma_id: inicial?.turma_id ?? '',
     itinerario: inicial?.itinerario || '',
     habilidades: (inicial?.habilidades || []).join(', '),
@@ -75,6 +76,7 @@ export const FormAluno = ({ inicial, turmas, itinerarios, aoSalvar, aoCancelar }
       telefone: somenteDigitos(campos.telefone) || null,
       responsavel_nome: campos.responsavel_nome.trim() || null,
       responsavel_telefone: somenteDigitos(campos.responsavel_telefone) || null,
+      responsavel_email: campos.responsavel_email.trim() || null,
       turma_id: campos.turma_id === '' ? null : Number(campos.turma_id),
       itinerario: campos.itinerario || null,
       habilidades: campos.habilidades.split(',').map((h) => h.trim()).filter(Boolean),
@@ -116,6 +118,10 @@ export const FormAluno = ({ inicial, turmas, itinerarios, aoSalvar, aoCancelar }
         <div>
           <label className="adm-rotulo" htmlFor="fa-resp-tel">Celular do responsável</label>
           <input id="fa-resp-tel" className="adm-input" inputMode="tel" placeholder="(67) 99999-0000" value={campos.responsavel_telefone} onChange={mudarTelefone('responsavel_telefone')} />
+        </div>
+        <div>
+          <label className="adm-rotulo" htmlFor="fa-resp-email">E-mail do responsável</label>
+          <input id="fa-resp-email" type="email" className="adm-input" value={campos.responsavel_email} onChange={mudar('responsavel_email')} maxLength={255} />
         </div>
 
         <div className="adm-form-secao">Escola</div>
@@ -278,15 +284,29 @@ const BlocoStatus = ({ aluno, empresas = [], aoAtualizar }) => {
 };
 
 // ------------------------------------------------------------------ aba Dados
+// Clicar no número abre a conversa no WhatsApp (no computador da escola, o WhatsApp Web);
+// "ligar" é pra quem está no celular.
 const Telefone = ({ numero }) => {
   if (!numero) return '—';
   return (
     <>
-      <a className="adm-a" href={`tel:+55${numero}`}>{mascararTelefone(numero)}</a>
+      <a className="adm-a" href={linkWhatsapp(numero)} target="_blank" rel="noreferrer" title="Abrir conversa no WhatsApp">{mascararTelefone(numero)}</a>
       {' · '}
-      <a className="adm-a" href={linkWhatsapp(numero)} target="_blank" rel="noreferrer">WhatsApp</a>
+      <a className="adm-a" href={`tel:+55${numero}`} style={{ fontSize: '12px' }}>ligar</a>
     </>
   );
+};
+
+const Email = ({ email }) => (email ? <a className="adm-a" href={`mailto:${email}`} title="Escrever e-mail">{email}</a> : '—');
+
+// Aceita "linkedin.com/in/fulano" ou a URL inteira; só abre se for mesmo do LinkedIn
+const LinkedIn = ({ url }) => {
+  if (!url) return '—';
+  const completo = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  let host = '';
+  try { host = new URL(completo).hostname; } catch { /* endereço inválido */ }
+  if (!/(^|\.)linkedin\.com$/i.test(host)) return url;
+  return <a className="adm-a" href={completo} target="_blank" rel="noreferrer" title="Abrir perfil no LinkedIn">{completo.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '')}</a>;
 };
 
 const AbaDados = ({ aluno, turmas, itinerarios, empresas, aoSalvar, aoAtualizar }) => {
@@ -316,10 +336,12 @@ const AbaDados = ({ aluno, turmas, itinerarios, empresas, aoSalvar, aoAtualizar 
 
   const contato = [
     ['CPF (senha)', mascararCpf(aluno.cpf || '') || '—'],
-    ['E-mail', aluno.email ? <a className="adm-a" href={`mailto:${aluno.email}`}>{aluno.email}</a> : '—'],
+    ['E-mail', <Email email={aluno.email} />],
     ['Celular', <Telefone numero={aluno.telefone} />],
+    ['LinkedIn', <LinkedIn url={aluno.linkedin} />],
     ['Responsável', aluno.responsavel_nome || '—'],
     ['Celular do responsável', <Telefone numero={aluno.responsavel_telefone} />],
+    ['E-mail do responsável', <Email email={aluno.responsavel_email} />],
   ];
   const escola = [
     ['No ranking', aluno.nome_exibicao],

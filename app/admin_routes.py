@@ -50,6 +50,7 @@ class NovoEstudanteRequest(BaseModel):
     telefone: Optional[str] = Field(default=None, max_length=20)
     responsavel_nome: Optional[str] = Field(default=None, max_length=100)
     responsavel_telefone: Optional[str] = Field(default=None, max_length=20)
+    responsavel_email: Optional[EmailStr] = None
     ficha: Optional[dict] = None  # campos da planilha do PAP (data/ficha_pap.json)
 
 
@@ -64,6 +65,7 @@ class AtualizarEstudanteRequest(BaseModel):
     telefone: Optional[str] = Field(default=None, max_length=20)
     responsavel_nome: Optional[str] = Field(default=None, max_length=100)
     responsavel_telefone: Optional[str] = Field(default=None, max_length=20)
+    responsavel_email: Optional[EmailStr] = None
     ja_trabalhou: Optional[bool] = None
     experiencia_previa: Optional[str] = Field(default=None, max_length=2000)
     ficha: Optional[dict] = None  # campos da planilha do PAP (data/ficha_pap.json)
@@ -255,6 +257,7 @@ def _estudante_para_dict(est: Estudante, taxa_acerto: float | None, total_candid
         "telefone": est.telefone,
         "responsavel_nome": est.responsavel_nome,
         "responsavel_telefone": est.responsavel_telefone,
+        "responsavel_email": est.responsavel_email,
         "idade": _idade(est.data_nascimento),
         "status_contratacao": est.status_contratacao or "disponivel",
         "empresa_contratante": est.empresa_contratante,
@@ -372,6 +375,7 @@ def cadastrar_estudante(data: NovoEstudanteRequest, db: Session = Depends(get_db
         telefone=_normalizar_telefone(data.telefone),
         responsavel_nome=(data.responsavel_nome or "").strip() or None,
         responsavel_telefone=_normalizar_telefone(data.responsavel_telefone),
+        responsavel_email=(data.responsavel_email or None),
         cadastro_atualizado_em=hoje_na_escola(),
         **ficha_pap.validar("aluno", data.ficha or {}, parcial=True),
     )
@@ -431,6 +435,8 @@ def atualizar_estudante(estudante_id: int, data: AtualizarEstudanteRequest, gest
         estudante.responsavel_nome = (data.responsavel_nome or "").strip() or None
     if "responsavel_telefone" in campos:
         estudante.responsavel_telefone = _normalizar_telefone(data.responsavel_telefone)
+    if "responsavel_email" in campos:
+        estudante.responsavel_email = data.responsavel_email or None
     if "ja_trabalhou" in campos:
         estudante.ja_trabalhou = data.ja_trabalhou
     if "experiencia_previa" in campos:
