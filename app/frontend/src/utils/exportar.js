@@ -33,6 +33,7 @@ export const COLUNAS_ALUNOS = [
   ['Celular', (a) => mascararTelefone(a.telefone || ''), true],
   ['Responsável', (a) => a.responsavel_nome || '', true],
   ['Celular do responsável', (a) => mascararTelefone(a.responsavel_telefone || ''), true],
+  ['E-mail do responsável', (a) => a.responsavel_email || '', true],
   ['Turma', (a) => a.turma || '', true],
   ['Itinerário', (a) => a.itinerario || '', true],
   ['Status do aprendiz', (a) => ROTULO_STATUS[a.status_contratacao] || '', true],

@@ -66,6 +66,7 @@ class Estudante(EscopoEscola, Base):
     telefone = Column(String(11), nullable=True)             # Celular do aluno, só dígitos com DDD (cadastrado pela escola)
     responsavel_nome = Column(String(100), nullable=True)    # Responsável legal -- a maioria dos alunos é menor de idade
     responsavel_telefone = Column(String(11), nullable=True)
+    responsavel_email = Column(String(255), nullable=True)   # Pra a escola falar com o responsável direto da ficha
     # 🔑 Acesso (regras em acesso.py). O aluno entra com usuário + senha. O
     # primeiro acesso, e cada senha nova aprovada pela escola, é feito com CPF
     # + código de acesso que a coordenação gera no painel e entrega em mãos.
