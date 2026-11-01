@@ -41,18 +41,25 @@ const LoginAdmin = ({ aoEntrar, aoSair }) => {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState(null);
   const [enviando, setEnviando] = useState(false);
+  // Conta com verificação em duas etapas: a senha certa devolve um desafio, e o login termina com o código do celular
+  const [desafio, setDesafio] = useState(null);
+  const [codigo, setCodigo] = useState('');
 
   const entrar = async (e) => {
     e.preventDefault();
     try {
       setEnviando(true);
       setErro(null);
-      const resposta = await apiFetch('/api/admin/login', { method: 'POST', body: JSON.stringify({ usuario: usuario.trim(), senha }) });
+      const resposta = desafio
+        ? await apiFetch('/api/admin/login/2fa', { method: 'POST', body: JSON.stringify({ desafio, codigo: codigo.trim() }) })
+        : await apiFetch('/api/admin/login', { method: 'POST', body: JSON.stringify({ usuario: usuario.trim(), senha }) });
       if (!resposta.ok) {
+        if (desafio && resposta.status === 401 && /tempo/i.test(await resposta.clone().text())) { setDesafio(null); setCodigo(''); }
         setErro(await lerErro(resposta, 'Não foi possível entrar.'));
         return;
       }
       const dados = await resposta.json();
+      if (dados.precisa_2fa) { setDesafio(dados.desafio); setCodigo(''); return; }
       salvarToken('admin', dados.token);
       aoEntrar(dados.gestor);
     } catch (err) {
@@ -73,14 +80,25 @@ const LoginAdmin = ({ aoEntrar, aoSair }) => {
             <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>Acesso da gestão</div>
           </div>
         </div>
-        <label className="adm-rotulo" htmlFor="adm-usuario">Usuário</label>
-        <input id="adm-usuario" className="adm-input" autoComplete="username" autoCapitalize="none" value={usuario} onChange={(e) => setUsuario(e.target.value)} autoFocus />
-        <label className="adm-rotulo" htmlFor="adm-senha" style={{ marginTop: '10px' }}>Senha</label>
-        <input id="adm-senha" type="password" autoComplete="current-password" className="adm-input" value={senha} onChange={(e) => setSenha(e.target.value)} />
+        {desafio ? (
+          <>
+            <p style={{ fontSize: '13px', color: 'var(--adm-texto)', margin: '0 0 10px', lineHeight: 1.5 }}>Abra o app autenticador no celular e digite o código de 6 dígitos do <strong>First2Work</strong>.</p>
+            <label className="adm-rotulo" htmlFor="adm-codigo">Código</label>
+            <input id="adm-codigo" className="adm-input" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/[^\d ]/g, ''))} autoFocus style={{ letterSpacing: '4px', fontSize: '18px', textAlign: 'center' }} />
+          </>
+        ) : (
+          <>
+            <label className="adm-rotulo" htmlFor="adm-usuario">Usuário</label>
+            <input id="adm-usuario" className="adm-input" autoComplete="username" autoCapitalize="none" value={usuario} onChange={(e) => setUsuario(e.target.value)} autoFocus />
+            <label className="adm-rotulo" htmlFor="adm-senha" style={{ marginTop: '10px' }}>Senha</label>
+            <input id="adm-senha" type="password" autoComplete="current-password" className="adm-input" value={senha} onChange={(e) => setSenha(e.target.value)} />
+          </>
+        )}
         {erro && <div className="adm-erro"><IconWarning /> {erro}</div>}
-        <button type="submit" className="adm-btn" disabled={enviando || !senha} style={{ width: '100%', marginTop: '16px' }}>
-          {enviando ? 'Entrando...' : 'Entrar'}
+        <button type="submit" className="adm-btn" disabled={enviando || (desafio ? codigo.replace(/\D/g, '').length !== 6 : !senha)} style={{ width: '100%', marginTop: '16px' }}>
+          {enviando ? 'Entrando...' : desafio ? 'Confirmar código' : 'Entrar'}
         </button>
+        {desafio && <button type="button" className="adm-link" onClick={() => { setDesafio(null); setCodigo(''); setErro(null); }} style={{ marginTop: '10px' }}>← Voltar pra senha</button>}
         <p style={{ fontSize: '11px', color: 'var(--adm-suave)', margin: '10px 0 0', lineHeight: 1.5 }}>
           Primeira vez? Deixe o usuário em branco e entre com a senha de instalação para criar a conta do Administrador.
         </p>
@@ -117,6 +135,68 @@ const TrocaSenhaObrigatoria = ({ gestor, aoTrocar, aoSair }) => {
         <input type="password" className="adm-input" placeholder="Repita a senha nova" autoComplete="new-password" value={campos.confirmar} onChange={(e) => setCampos({ ...campos, confirmar: e.target.value })} style={{ marginTop: '8px' }} />
         {erro && <div className="adm-erro"><IconWarning /> {erro}</div>}
         <button type="submit" className="adm-btn" disabled={!campos.atual || !campos.nova} style={{ width: '100%', marginTop: '14px' }}>Salvar senha e entrar</button>
+        <button type="button" className="adm-link" onClick={aoSair} style={{ marginTop: '12px' }}>Sair</button>
+      </form>
+    </div>
+  );
+};
+
+// Verificação em duas etapas obrigatória: o servidor só libera o painel depois de ativar
+const AtivarDoisFatores = ({ gestor, aoAtivar, aoSair }) => {
+  const [dados, setDados] = useState(null); // { qr, segredo }
+  const [codigo, setCodigo] = useState('');
+  const [erro, setErro] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+
+  const gerar = useCallback(async () => {
+    setErro(null);
+    const r = await apiFetch('/api/admin/gestao/2fa/iniciar', { method: 'POST' });
+    if (!r.ok) { setErro(await lerErro(r, 'Não foi possível gerar o QR Code.')); return; }
+    setDados(await r.json());
+  }, []);
+  const gerouRef = useRef(false);
+  useEffect(() => { if (!gerouRef.current) { gerouRef.current = true; gerar(); } }, [gerar]);
+
+  const ativar = async (e) => {
+    e.preventDefault();
+    setEnviando(true);
+    setErro(null);
+    try {
+      const r = await apiFetch('/api/admin/gestao/2fa/ativar', { method: 'POST', body: JSON.stringify({ codigo: codigo.trim() }) });
+      if (!r.ok) { setErro(await lerErro(r, 'Não foi possível ativar.')); return; }
+      salvarToken('admin', (await r.json()).token);
+      aoAtivar();
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', position: 'relative' }}>
+      <form onSubmit={ativar} className="adm-card" style={{ width: '100%', maxWidth: '420px', position: 'relative', zIndex: 1 }}>
+        <div style={{ fontWeight: 800, color: 'var(--adm-forte)', fontSize: '17px', marginBottom: '4px' }}>Proteja a sua conta, {gestor.nome.split(' ')[0]}</div>
+        <p style={{ fontSize: '13px', color: 'var(--adm-texto)', margin: '0 0 12px', lineHeight: 1.5 }}>
+          O painel mostra dados de alunos menores de idade, então além da senha ele pede um código do seu celular.
+          Instale um app autenticador (Google Authenticator, Microsoft Authenticator ou Authy), toque em <strong>adicionar</strong> e leia o QR Code.
+        </p>
+        {dados ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0 8px' }}>
+              <img src={dados.qr} alt="QR Code para o app autenticador" width="190" height="190" style={{ background: '#fff', borderRadius: '10px' }} />
+            </div>
+            <details style={{ fontSize: '12px', color: 'var(--adm-suave)', marginBottom: '10px' }}>
+              <summary style={{ cursor: 'pointer' }}>Não consegue ler o QR Code?</summary>
+              <div style={{ marginTop: '6px' }}>Digite esta chave no app: <code style={{ userSelect: 'all', wordBreak: 'break-all', fontWeight: 700 }}>{dados.segredo.match(/.{1,4}/g).join(' ')}</code></div>
+            </details>
+            <label className="adm-rotulo" htmlFor="adm-codigo-2fa">Código que aparece no app</label>
+            <input id="adm-codigo-2fa" className="adm-input" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/[^\d ]/g, ''))} style={{ letterSpacing: '4px', fontSize: '18px', textAlign: 'center' }} />
+          </>
+        ) : !erro && <p style={{ fontSize: '13px', color: 'var(--adm-suave)' }}>Gerando o QR Code…</p>}
+        {erro && <div className="adm-erro"><IconWarning /> {erro}</div>}
+        <button type="submit" className="adm-btn" disabled={enviando || !dados || codigo.replace(/\D/g, '').length !== 6} style={{ width: '100%', marginTop: '14px' }}>
+          {enviando ? 'Ativando...' : 'Ativar e entrar'}
+        </button>
+        <p style={{ fontSize: '11px', color: 'var(--adm-suave)', margin: '10px 0 0', lineHeight: 1.5 }}>Trocou ou perdeu o celular? Um Administrador zera a verificação na aba Equipe, e você ativa de novo.</p>
         <button type="button" className="adm-link" onClick={aoSair} style={{ marginTop: '12px' }}>Sair</button>
       </form>
     </div>
@@ -804,7 +884,7 @@ const AdminPanel = ({ aoSair }) => {
   }, [logado, carregarGestor]);
 
   useEffect(() => {
-    if (logado && gestor && !gestor.deve_trocar_senha) recarregar();
+    if (logado && gestor && !gestor.deve_trocar_senha && !gestor.dois_fatores_pendente) recarregar();
   }, [logado, gestor]);
 
   // Só o resumo, a cada 30 s: mantém o contador de mensagens não lidas da aba Mensagens em dia
@@ -847,6 +927,8 @@ const AdminPanel = ({ aoSair }) => {
         <p style={{ position: 'relative', zIndex: 1, textAlign: 'center', paddingTop: '40vh', color: 'var(--adm-suave)' }}>Carregando…</p>
       ) : gestor.deve_trocar_senha ? (
         <TrocaSenhaObrigatoria gestor={gestor} aoTrocar={carregarGestor} aoSair={sair} />
+      ) : gestor.dois_fatores_pendente ? (
+        <AtivarDoisFatores gestor={gestor} aoAtivar={carregarGestor} aoSair={sair} />
       ) : (
         <div className={gestor.permissoes.alterar ? '' : 'adm-somente-leitura'} style={{ position: 'relative', zIndex: 1, maxWidth: '1320px', margin: '0 auto', padding: '20px 16px 100px' }}>
           <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>

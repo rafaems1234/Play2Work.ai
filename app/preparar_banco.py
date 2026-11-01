@@ -16,10 +16,11 @@ import os
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import inspect
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.orm import sessionmaker
 
 import models
-from database import SessionLocal, engine
+from database import MIGRACAO_DATABASE_URL
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 
@@ -27,6 +28,10 @@ PASTA = os.path.dirname(os.path.abspath(__file__))
 def preparar() -> None:
     config = Config(os.path.join(PASTA, "alembic.ini"))
     config.set_main_option("script_location", os.path.join(PASTA, "alembic"))
+    # Tudo aqui roda como o dono do banco (MIGRACAO_DATABASE_URL): criar tabela e
+    # a escola inicial. A API, depois, entra com o usuário restrito.
+    engine = create_engine(MIGRACAO_DATABASE_URL, connect_args={"options": "-c timezone=UTC"})
+    SessionLocal = sessionmaker(bind=engine)
     tabelas = set(inspect(engine).get_table_names())
     if "estudantes" not in tabelas:
         print("Banco vazio: criando as tabelas e marcando a versão mais nova das migrações...")
@@ -46,6 +51,7 @@ def preparar() -> None:
             print(f"Escola criada: {nome}. Entre no painel com o usuário em branco e a ADMIN_SENHA para criar o primeiro Administrador.")
     finally:
         db.close()
+        engine.dispose()
     print("Banco pronto.")
 
 

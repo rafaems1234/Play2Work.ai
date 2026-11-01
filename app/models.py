@@ -204,6 +204,11 @@ class UsuarioGestao(EscopoEscola, Base):
     sessao_versao = Column(Integer, nullable=False, default=0, server_default="0")  # Desativar/trocar senha/papel derruba as sessões
     ultimo_acesso_em = Column(DateTime, nullable=True)
     criado_em = Column(DateTime, server_default=func.now())
+    # Verificação em duas etapas (dois_fatores.py). O segredo é gravado ao iniciar a
+    # ativação e só passa a valer quando a pessoa confirma o primeiro código.
+    totp_segredo = Column(String(64), nullable=True)
+    totp_ativado_em = Column(DateTime, nullable=True)
+    totp_ultimo_passo = Column(BigInteger, nullable=True)   # código já usado não vale de novo
 
 
 class RegistroAuditoria(Base):

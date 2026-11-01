@@ -9,6 +9,10 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 # URL de conexão com o PostgreSQL, configurada via variável de ambiente
 SQLALCHEMY_DATABASE_URL = os.environ["DATABASE_URL"]
+# Em produção a API entra com um usuário que só lê e grava dados (sem criar nem
+# apagar tabela); as migrações rodam com o dono do banco. Ver docs/deploy/banco.md.
+# Sem esta variável, as migrações usam a mesma DATABASE_URL (desenvolvimento).
+MIGRACAO_DATABASE_URL = os.environ.get("MIGRACAO_DATABASE_URL") or SQLALCHEMY_DATABASE_URL
 
 # Aqui criamos o engine diretamente
 # Sessão sempre em UTC: o now() das colunas com server_default grava no mesmo

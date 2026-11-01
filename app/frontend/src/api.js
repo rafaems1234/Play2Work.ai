@@ -11,7 +11,7 @@ export const DEMO_MODE = String(import.meta.env.VITE_DEMO_MODE ?? 'true') !== 'f
 // CPF + código da escola) e o do painel da escola. Cada rota usa o token do
 // seu "papel". 401 nas rotas de entrada é "dado errado", não sessão expirada.
 const CHAVES_TOKEN = { aluno: 'first2work_token_aluno', admin: 'first2work_token_admin' };
-const ROTAS_DE_LOGIN = ['/api/auth/login', '/api/auth/primeiro-acesso/conferir', '/api/auth/primeiro-acesso', '/api/auth/esqueci-senha', '/api/admin/login'];
+const ROTAS_DE_LOGIN = ['/api/auth/login', '/api/auth/primeiro-acesso/conferir', '/api/auth/primeiro-acesso', '/api/auth/esqueci-senha', '/api/admin/login', '/api/admin/login/2fa'];
 
 const papelDaRota = (path) => (path.startsWith('/api/admin') ? 'admin' : 'aluno');
 

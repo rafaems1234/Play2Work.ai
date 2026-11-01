@@ -1,6 +1,6 @@
 import logging
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
@@ -23,7 +23,46 @@ logging.basicConfig(
 )
 
 
-app = FastAPI(title="First2Work AI API")
+# Documentação interativa (/docs, /redoc, /openapi.json) mostra todas as rotas pra
+# quem quiser ver: só abre com DOCS_ABERTAS=true no .env (desenvolvimento).
+DOCS_ABERTAS = (os.environ.get("DOCS_ABERTAS") or "").strip().lower() in ("true", "1", "sim")
+
+app = FastAPI(
+    title="First2Work AI API",
+    docs_url="/docs" if DOCS_ABERTAS else None,
+    redoc_url="/redoc" if DOCS_ABERTAS else None,
+    openapi_url="/openapi.json" if DOCS_ABERTAS else None,
+)
+
+# Cabeçalhos de segurança em toda resposta. A API só devolve JSON e arquivos
+# (o front baixa tudo por fetch), então a CSP pode fechar tudo: nada de script,
+# nada de ser aberta dentro de iframe. A documentação, quando aberta, precisa
+# carregar o Swagger, então fica sem essa CSP.
+CABECALHOS_SEGURANCA = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "cross-origin",  # o front fica em outro endereço e precisa ler as respostas
+}
+CSP_API = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+ROTAS_DA_DOCUMENTACAO = ("/docs", "/redoc", "/openapi.json")
+
+
+@app.middleware("http")
+async def cabecalhos_de_seguranca(request: Request, call_next):
+    resposta = await call_next(request)
+    for nome, valor in CABECALHOS_SEGURANCA.items():
+        resposta.headers.setdefault(nome, valor)
+    if not request.url.path.startswith(ROTAS_DA_DOCUMENTACAO):
+        resposta.headers.setdefault("Content-Security-Policy", CSP_API)
+    if request.url.path.startswith("/api/"):
+        resposta.headers.setdefault("Cache-Control", "no-store")  # dado de aluno não fica em cache de navegador nem de proxy
+    if request.url.scheme == "https":
+        # Só faz efeito em HTTPS; o scheme é o real quando o proxy é confiável (FORWARDED_ALLOW_IPS)
+        resposta.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return resposta
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

@@ -35,7 +35,7 @@ RETENCAO_DIAS = 730  # 2 anos
 PREFIXO = "/api/admin"
 METODOS_DE_ALTERACAO = {"POST", "PUT", "DELETE", "PATCH"}
 TAMANHO_MAXIMO_CORPO = 64_000
-CAMPOS_SENSIVEIS = re.compile(r"senha|password|codigo|token|hash|imagem|base64|arquivo|conteudo|gabarito", re.I)
+CAMPOS_SENSIVEIS = re.compile(r"senha|password|codigo|token|hash|imagem|base64|arquivo|conteudo|gabarito|desafio|segredo", re.I)
 
 ACOES = {
     "incluiu": "Incluiu", "alterou": "Alterou", "excluiu": "Excluiu", "exportou": "Exportou",
@@ -84,6 +84,9 @@ ROTAS = [
     ("PUT", r"/gestao/usuarios/(\d+)", "alterou", "usuario_gestao", "Alterou a conta da gestão #{id}", UsuarioGestao),
     ("POST", r"/gestao/usuarios/(\d+)/resetar-senha", "alterou", "usuario_gestao", "Gerou senha temporária para a conta #{id}", None),
     ("POST", r"/gestao/minha-senha", "alterou", "usuario_gestao", "Trocou a própria senha", None),
+    ("POST", r"/gestao/2fa/iniciar", "alterou", "usuario_gestao", "Gerou o QR Code da verificação em duas etapas", None),
+    ("POST", r"/gestao/2fa/ativar", "alterou", "usuario_gestao", "Ativou a verificação em duas etapas", None),
+    ("POST", r"/gestao/usuarios/(\d+)/resetar-2fa", "alterou", "usuario_gestao", "Zerou a verificação em duas etapas da conta #{id}", None),
     ("POST", r"/auditoria/exportacao", "exportou", "exportacao", "Exportou {descricao}", None),
 ]
 _ROTAS = [(m, re.compile(rf"^{p}$"), a, e, d, mod) for m, p, a, e, d, mod in ROTAS]
@@ -202,10 +205,9 @@ def gravar(registro: dict) -> None:
 
 
 def _ip(scope) -> Optional[str]:
-    cabecalhos = dict(scope.get("headers") or [])
-    encaminhado = cabecalhos.get(b"x-forwarded-for")
-    if encaminhado:
-        return encaminhado.decode("latin-1").split(",")[0].strip()[:45]
+    # Nada de ler X-Forwarded-For aqui: qualquer um escreve esse cabeçalho. O
+    # uvicorn já troca o client pelo IP real quando a requisição vem do proxy
+    # confiável (FORWARDED_ALLOW_IPS, ver Dockerfile) -- e só nesse caso.
     cliente = scope.get("client")
     return cliente[0][:45] if cliente else None
 
@@ -222,7 +224,7 @@ class MiddlewareAuditoria:
 
         metodo, caminho = scope["method"], scope["path"]
         acao, entidade, ids, modelo, modelo_descricao = identificar(metodo, caminho)
-        eh_login = caminho == f"{PREFIXO}/login"
+        eh_login = caminho in (f"{PREFIXO}/login", f"{PREFIXO}/login/2fa")
         antes = None
         if modelo and ids:  # alteração/exclusão de um registro conhecido: foto de como estava
             try:
@@ -251,13 +253,20 @@ class MiddlewareAuditoria:
                 dados = json.loads(bytes(corpo) or b"{}") if corpo else None
             except (ValueError, UnicodeDecodeError):
                 dados = {"_corpo": "não é JSON (arquivo/formulário)"}
-            gestor = (scope.get("state") or {}).get("gestor")
+            estado = scope.get("state") or {}
+            gestor = estado.get("gestor")
             codigo = status_http["codigo"]
+            tentado = str(estado.get("usuario_tentado") or ((dados or {}).get("usuario", "") if isinstance(dados, dict) else ""))[:40]
 
-            if eh_login:
+            if eh_login and estado.get("login_parcial"):
+                registro_acao, nome, descricao = None, None, None  # senha certa, falta o código: ainda não entrou
+            elif eh_login:
                 registro_acao = "entrou" if codigo < 400 else "falhou_login"
-                nome = gestor.nome if gestor else f"(tentou como '{str((dados or {}).get('usuario', ''))[:40]}')"
-                descricao = "Entrou no painel" if codigo < 400 else "Errou usuário ou senha do painel"
+                nome = gestor.nome if gestor else f"(tentou como '{tentado}')"
+                if codigo < 400:
+                    descricao = "Entrou no painel" + (" (com verificação em duas etapas)" if caminho.endswith("/2fa") else "")
+                else:
+                    descricao = "Errou o código da verificação em duas etapas" if caminho.endswith("/2fa") else "Errou usuário ou senha do painel"
             elif gestor is None:
                 registro_acao, nome, descricao = None, None, None  # sem login válido: a rota já recusou com 401
             elif codigo == 403:
@@ -270,7 +279,7 @@ class MiddlewareAuditoria:
             if registro_acao:
                 registro = {
                     "escola_id": getattr(gestor, "escola_id", None),
-                    "usuario_tentado": None if gestor else str((dados or {}).get("usuario", ""))[:40],
+                    "usuario_tentado": None if gestor else tentado,
                     "usuario_gestao_id": getattr(gestor, "id", None),
                     "usuario_nome": nome[:100],
                     "papel": getattr(gestor, "papel", None),
