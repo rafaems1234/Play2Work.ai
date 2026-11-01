@@ -54,7 +54,7 @@ Depois rode o front com `VITE_DEMO_MODE=false VITE_API_URL=http://localhost:8000
 
 ### Completo sem Docker
 ```bash
-python -m venv .venv && .venv\Scripts\activate   # Linux/Mac: source .venv/bin/activate
+py -3.12 -m venv .venv && .venv\Scripts\activate   # Linux/Mac: source .venv/bin/activate
 pip install -r requirements.txt
 cd app
 alembic upgrade head
@@ -68,7 +68,7 @@ cd app && pytest -q
 ```
 Os testes usam mocks e não mexem no banco. O **CI** (`.github/workflows/ci.yml`) roda a cada PR e push na `main`: testes, `pip-audit`, build do front, `npm audit` e a montagem da imagem Docker. O Dependabot abre PRs de atualização toda segunda.
 
-O servidor e o CI usam **Python 3.12**. Dá pra desenvolver em 3.10, mas o 3.10 não recebe mais correções de segurança, então vale instalar o 3.12 e recriar o `.venv`.
+Use **Python 3.12** (o mesmo do servidor e do CI). As bibliotecas atuais não instalam mais em 3.10.
 
 ## Configuração (`app/.env`)
 
