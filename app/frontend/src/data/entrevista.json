@@ -48,6 +48,8 @@
     "respostas_maximas": 7,
     "xp_maximo": 150,
     "laudos_com_xp_por_dia": 3,
+    "entrevistas_por_dia": 1,
+    "laudos_oficiais_por_semana": 3,
     "entrevistas_por_rodada": 5,
     "meta_da_rodada": 80
   },

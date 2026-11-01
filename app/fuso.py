@@ -37,3 +37,16 @@ def inicio_do_dia_utc() -> datetime:
     comparar com colunas do banco ("quantas atividades o aluno fez hoje")."""
     meia_noite_local = datetime.combine(hoje(), datetime.min.time(), tzinfo=FUSO_ESCOLA)
     return meia_noite_local.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def inicio_da_semana_utc() -> datetime:
+    """Segunda-feira 00:00 desta semana em Três Lagoas, como datetime ingênuo
+    em UTC (cota semanal de laudos: a semana vira na segunda, como a liga)."""
+    segunda = hoje() - timedelta(days=hoje().weekday())
+    meia_noite_local = datetime.combine(segunda, datetime.min.time(), tzinfo=FUSO_ESCOLA)
+    return meia_noite_local.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def mes_atual() -> date:
+    """Dia 1 do mês corrente no fuso da escola (o teto de gasto da IA é mensal)."""
+    return hoje().replace(day=1)

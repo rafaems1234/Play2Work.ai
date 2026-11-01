@@ -17,6 +17,7 @@ from fuso import hoje as hoje_na_escola, agora_utc
 from nomes import escolher_nome_exibicao
 from schemas import CurriculoIaSchema, ConversaEntrevistaSchema, LaudoEntrevistaSchema
 from entrevista import RESPOSTAS_MINIMAS, RESPOSTAS_MAXIMAS
+import uso_ia
 
 # ❤️ Configuração do sistema de vidas/congelamento de ofensiva.
 # Sem moedas nem loja: as vidas voltam sozinhas com o tempo, pelo combo de
@@ -302,12 +303,26 @@ MODELO_GEMINI = os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite"
 TENTATIVAS_GEMINI = 2   # 503 ("alta demanda") costuma passar em segundos
 
 
+def ia_configurada() -> bool:
+    """Há chave da IA neste servidor. Sem ela, as regras são o motor de todo mundo."""
+    return client is not None
+
+
+def motor_ia() -> str:
+    """Quem avalia quando a IA responde -- vai gravado no laudo."""
+    return f"gemini:{MODELO_GEMINI}"
+
+
 def gerar_json_gemini(prompt: str, schema, instrucao_sistema: str | None = None) -> dict:
     """
     Chama o Gemini pedindo JSON no formato do schema. Repete uma vez se o
     modelo estiver sobrecarregado (503). Cota estourada (429) não repete --
     só gastaria mais cota -- e sobe na hora pra quem chamou cair no fallback.
+    Com o teto de gasto do mês batido, nem chama (uso_ia.TetoIaAtingido);
+    toda resposta soma os tokens no consumo do mês.
     """
+    if uso_ia.teto_atingido():
+        raise uso_ia.TetoIaAtingido("teto de gasto da IA do mês atingido")
     for tentativa in range(1, TENTATIVAS_GEMINI + 1):
         try:
             response = client.models.generate_content(
@@ -319,6 +334,7 @@ def gerar_json_gemini(prompt: str, schema, instrucao_sistema: str | None = None)
                     **({'system_instruction': instrucao_sistema} if instrucao_sistema else {}),
                 },
             )
+            uso_ia.registrar(MODELO_GEMINI, getattr(response, "usage_metadata", None))
             return json.loads(response.text)
         except genai_errors.APIError as e:
             if e.code != 503 or tentativa == TENTATIVAS_GEMINI:

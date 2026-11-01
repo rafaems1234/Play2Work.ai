@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, Boolean, JSON, LargeBinary, Float, UniqueConstraint, func
+from sqlalchemy import Column, Integer, BigInteger, String, Text, ForeignKey, DateTime, Date, Boolean, JSON, LargeBinary, Float, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship, deferred, declared_attr
 from database import Base
@@ -402,6 +402,11 @@ class SessaoEntrevista(EscopoEscola, Base):
     parecer_recrutador = Column(Text, nullable=True)
     xp_concedido = Column(Integer, nullable=True)
     laudo_por_ia = Column(Boolean, nullable=True)    # False = laudo de reserva (sem IA ou ela falhou)
+    # Oficial = conta pra rodada e pro mapa de competências. Provisório (False) = saiu pelas
+    # regras de reserva num sistema com IA ligada: a régua é outra, então não entra na média.
+    laudo_oficial = Column(Boolean, nullable=True)
+    laudo_motor = Column(String(80), nullable=True)            # "gemini:<modelo>" ou "regras" -- quem avaliou
+    laudo_motivo_provisorio = Column(String(20), nullable=True)  # cota_semanal | ia_indisponivel | teto_mensal
     resumo = Column(String(160), nullable=True)      # Síntese de uma frase pro feed compacto da escola
     rodada_id = Column(Integer, ForeignKey('rodadas_entrevista.id', ondelete="SET NULL"), nullable=True, index=True)  # Nulo = treino livre (depois da meta)
 
@@ -788,3 +793,22 @@ class LeituraCanal(Base):
     canal_id = Column(Integer, ForeignKey('canais.id', ondelete="CASCADE"), primary_key=True)
     estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), primary_key=True)
     lida_em = Column(DateTime, nullable=False)
+
+
+class UsoIa(Base):
+    """
+    Tabela 'uso_ia': consumo da IA por mês e modelo, somado a cada chamada
+    (tokens que a própria API informa). É da PLATAFORMA, não de uma escola
+    (sem escola_id de propósito): o teto de gasto é global. Regras em uso_ia.py.
+    """
+    __tablename__ = 'uso_ia'
+    __table_args__ = (UniqueConstraint('mes', 'modelo', name='uq_uso_ia_mes_modelo'),)
+
+    id = Column(Integer, primary_key=True)
+    mes = Column(Date, nullable=False)                 # dia 1 do mês, no fuso da escola
+    modelo = Column(String(80), nullable=False)
+    chamadas = Column(Integer, nullable=False, default=0, server_default="0")
+    tokens_entrada = Column(BigInteger, nullable=False, default=0, server_default="0")
+    tokens_saida = Column(BigInteger, nullable=False, default=0, server_default="0")   # inclui os de raciocínio, cobrados como saída
+    custo_usd = Column(Float, nullable=False, default=0, server_default="0")         # estimado pelos preços do .env
+    atualizado_em = Column(DateTime, nullable=True)
