@@ -66,7 +66,9 @@ python -m uvicorn main:app --reload --port 8000
 ```bash
 cd app && pytest -q
 ```
-Os testes usam mocks e não mexem no banco.
+Os testes usam mocks e não mexem no banco. O **CI** (`.github/workflows/ci.yml`) roda a cada PR e push na `main`: testes, `pip-audit`, build do front, `npm audit` e a montagem da imagem Docker. O Dependabot abre PRs de atualização toda segunda.
+
+O servidor e o CI usam **Python 3.12**. Dá pra desenvolver em 3.10, mas o 3.10 não recebe mais correções de segurança, então vale instalar o 3.12 e recriar o `.venv`.
 
 ## Configuração (`app/.env`)
 
@@ -84,12 +86,11 @@ Lista completa e comentada em [`app/.env.example`](app/.env.example).
 
 ## Segurança
 
-Senhas com bcrypt, verificação em duas etapas na gestão, perfis checados no servidor, auditoria que nem a API consegue editar, cabeçalhos de segurança e CSP, limite de tentativas por IP (só aceito do proxy confiável) e banco com privilégio mínimo em produção. Como configurar na hospedagem: [`docs/deploy/banco.md`](docs/deploy/banco.md).
+Senhas com bcrypt, verificação em duas etapas na gestão, perfis checados no servidor, auditoria que nem a API consegue editar, cabeçalhos de segurança e CSP, limite de tentativas por IP (só aceito do proxy confiável) banco com privilégio mínimo em produção, logs de acesso sem os valores das buscas (nome/CPF não vão pro log) e dependências auditadas no CI. Como configurar na hospedagem: [`docs/deploy/banco.md`](docs/deploy/banco.md).
 
 ## O que falta antes do piloto
 
 - **Hospedagem:** subir a API (a ideia é Azure, região Brasil) com HTTPS, backup automático testado, segredos no cofre e monitoramento. Seguir o [`docs/deploy/banco.md`](docs/deploy/banco.md).
-- **CI:** rodar os testes e `pip-audit`/`npm audit` a cada PR. Hoje o GitHub só publica o site.
 - **Gemini no plano pago**, com alerta de orçamento no Google.
 - **Token do painel em cookie `httpOnly`:** entra junto com o domínio próprio (`first2work.com.br`).
 - **Escola e jurídico:** revisão das 630 questões pelos professores, LGPD com advogado (rascunhos em [`docs/lgpd`](docs/lgpd/README.md)), registro da marca no INPI e alguém da coordenação cuidando da aba Acessos.
