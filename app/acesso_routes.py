@@ -17,8 +17,8 @@ from fuso import agora_utc
 from limiter import limiter
 from models import Estudante, PedidoNovaSenha, Turma
 
-router_aluno = APIRouter(tags=["Play2Work.AI - Acesso do aluno"])
-router_admin = APIRouter(prefix="/admin", tags=["Play2Work.AI - Painel da Escola"], dependencies=[Depends(get_admin_atual)])
+router_aluno = APIRouter(tags=["First2Work.AI - Acesso do aluno"])
+router_admin = APIRouter(prefix="/admin", tags=["First2Work.AI - Painel da Escola"], dependencies=[Depends(get_admin_atual)])
 
 
 class LoginRequest(BaseModel):

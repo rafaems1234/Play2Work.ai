@@ -38,7 +38,7 @@ from curriculo import gerar as gerar_curriculo, dados_do_sistema, TextoRecusado
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    tags=["Play2Work.AI - Endpoints"]
+    tags=["First2Work.AI - Endpoints"]
 )
 
 # ----------------------------------------------------------------------

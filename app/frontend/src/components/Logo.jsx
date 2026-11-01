@@ -1,12 +1,12 @@
 import React, { useId } from 'react';
 
-// Marca do Play2Work: "P" geométrico com botão de play no miolo (Play → Work).
+// Marca do First2Work: monograma "F2W" (o "2" em branco, F e W no degradê).
 // Mesmo desenho de public/favicon.svg, inline pra herdar tamanho e não
 // depender do caminho base do deploy.
 const Logo = ({ size = 32, comFundo = true, style }) => {
   const gradId = useId();
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label="Play2Work.ai" style={{ display: 'block', flexShrink: 0, ...style }}>
+    <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label="First2Work.ai" style={{ display: 'block', flexShrink: 0, ...style }}>
       <defs>
         <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#2e7bff" />
@@ -19,8 +19,13 @@ const Logo = ({ size = 32, comFundo = true, style }) => {
           <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="13.25" fill="none" stroke={`url(#${gradId})`} strokeOpacity="0.55" strokeWidth="1.5" />
         </>
       )}
-      <path d="M21 51V15h13.5a11.5 11.5 0 0 1 0 23H21" fill="none" stroke={`url(#${gradId})`} strokeWidth="8" strokeLinejoin="round" />
-      <path d="M30.5 21.5v10l8-5z" fill="#fff" />
+      <text
+        x="32" y="41.5" textAnchor="middle"
+        fontFamily="'Space Grotesk', 'Inter', 'Segoe UI', Arial, sans-serif"
+        fontSize="23" fontWeight="800" letterSpacing="-1" fill={`url(#${gradId})`}
+      >
+        F<tspan fill="#fff">2</tspan>W
+      </text>
     </svg>
   );
 };

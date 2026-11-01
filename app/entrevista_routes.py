@@ -23,7 +23,7 @@ from models import Estudante, HistoricoEntrevista, RodadaEntrevista, SessaoEntre
 from services import AIService
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["Play2Work.AI - Simulador de entrevista"])
+router = APIRouter(tags=["First2Work.AI - Simulador de entrevista"])
 
 ABERTAS = ("em_andamento", "aguardando_laudo")
 

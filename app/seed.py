@@ -23,7 +23,7 @@ from tenancy import definir_escola
 # Login do aluno demo (id=1): usuário + senha. Só pra facilitar o login
 # local -- não use isso em produção.
 USUARIO_DEMO = "rafael.sozza"
-SENHA_DEMO = "play2work123"
+SENHA_DEMO = "first2work123"
 # Bianca (id=2) ainda não fez o primeiro acesso: entra com o CPF dela + este
 # código, pra dar pra testar o fluxo. Em produção o código é sorteado no painel.
 CODIGO_PRIMEIRO_ACESSO_DEMO = "246810"

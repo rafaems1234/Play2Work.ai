@@ -40,7 +40,7 @@ const BilhetesDeAcesso = ({ codigos }) => (
     `}</style>
     {codigos.map((c) => (
       <div key={`${c.estudante_id}-${c.codigo}`} className="adm-bilhete">
-        <div className="marca">Play2Work.ai — acesso do aluno</div>
+        <div className="marca">First2Work.ai — acesso do aluno</div>
         <div className="nome">{c.nome}{c.turma ? ` · ${c.turma}` : ''}</div>
         <div>Usuário: <strong>{c.usuario}</strong></div>
         <div className="codigo">{codigoLegivel(c.codigo)}</div>

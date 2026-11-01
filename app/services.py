@@ -391,7 +391,7 @@ Regras que nunca mudam:
 class AIService:
     """
     Serviço inteligente que gerencia regras de negócio, integrações externas,
-    IA generativa estruturada e gamificação do Play2Work.AI.
+    IA generativa estruturada e gamificação do First2Work.AI.
     """
 
     @staticmethod

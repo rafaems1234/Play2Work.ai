@@ -1,4 +1,4 @@
-# Backend do Play2Work.ai (FastAPI). O front é publicado à parte (build estático do Vite).
+# Backend do First2Work.ai (FastAPI). O front é publicado à parte (build estático do Vite).
 #
 #   docker build -t play2work-api .
 #   docker run --env-file app/.env -p 8000:8000 play2work-api

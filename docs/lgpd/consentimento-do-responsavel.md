@@ -4,7 +4,7 @@
 
 Eu, `[nome do responsável]`, CPF `[ ]`, responsável legal por `[nome do estudante]`, aluno(a) da turma `[ ]` da escola `[nome da escola]`, declaro que:
 
-1. Fui informado(a) de que a escola usa a plataforma **Play2Work.ai** para preparar os estudantes para vagas de Jovem Aprendiz, e li a **Política de Privacidade** (`[link]`).
+1. Fui informado(a) de que a escola usa a plataforma **First2Work.ai** para preparar os estudantes para vagas de Jovem Aprendiz, e li a **Política de Privacidade** (`[link]`).
 2. Estou ciente de que a escola cadastra na plataforma os dados do estudante (nome, CPF, data de nascimento, contatos, turma, curso e dados do Programa de Aprendizagem) e o meu nome e telefone como responsável.
 3. Estou ciente de que **o texto que o estudante escreve no simulador de entrevista e no gerador de currículo é enviado a um serviço de inteligência artificial do Google** para gerar as respostas, o laudo de desempenho e o currículo.
 4. Autorizo / não autorizo (marque) que a escola **indique o estudante a vagas de empresas parceiras**, compartilhando com a empresa o currículo e os dados necessários ao processo seletivo:

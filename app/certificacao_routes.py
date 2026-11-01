@@ -20,8 +20,8 @@ from database import get_db
 from fuso import agora_utc
 from models import Estudante, TentativaCertificacao
 
-router_aluno = APIRouter(tags=["Play2Work.AI - Simulado de certificação"])
-router_admin = APIRouter(prefix="/admin", tags=["Play2Work.AI - Painel da Escola"], dependencies=[Depends(get_admin_atual)])
+router_aluno = APIRouter(tags=["First2Work.AI - Simulado de certificação"])
+router_admin = APIRouter(prefix="/admin", tags=["First2Work.AI - Painel da Escola"], dependencies=[Depends(get_admin_atual)])
 
 
 class RespostaRequest(BaseModel):
