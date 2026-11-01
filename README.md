@@ -317,9 +317,9 @@ Situação em 31/10/2026. Já resolvido nesta rodada: login do aluno por usuári
 **Precisa de decisão ou de gente da escola (o código não resolve sozinho):**
 
 - **Conteúdo do banco de questões:** as 630 perguntas precisam de revisão dos professores — agora com mais urgência, porque o **simulado de certificação** sorteia delas e uma resposta errada no banco pode reprovar um aluno. Atenção principal às que citam números de lei (CLT, FGTS do aprendiz, prazos do CPC, cotas).
-- **LGPD:** política de privacidade, termos de uso, consentimento do responsável (a maioria é menor) e contrato com a escola dizendo que ela é a controladora dos dados e o Play2Work o operador. **Gemini:** no plano gratuito o Google pode usar o conteúdo enviado pra melhorar os produtos; com texto de aluno menor de idade, usar o plano pago antes do piloto.
+- **LGPD** (rascunhos prontos em [`docs/lgpd`](docs/lgpd/README.md), com o mapa dos dados que o sistema guarda — **precisam de revisão de advogado**): política de privacidade, termos de uso, consentimento do responsável (a maioria é menor) e contrato com a escola dizendo que ela é a controladora dos dados e o Play2Work o operador. **Gemini:** no plano gratuito o Google pode usar o conteúdo enviado pra melhorar os produtos; com texto de aluno menor de idade, usar o plano pago antes do piloto.
 - **Quem atende o painel:** combinar com a coordenação quem cuida da aba Acessos (pedidos de senha — sem alguém atendendo, o aluno que esqueceu a senha fica sem entrar, inclusive nas férias) e quem confirma as Metas de Entrevista.
-- **Hospedagem:** só o front (modo demonstração) está publicado. Falta hospedar o backend + Postgres com HTTPS e backup automático do banco.
+- **Hospedagem:** só o front (modo demonstração) está publicado. O backend já está pronto pra subir em contêiner (`Dockerfile` e `docker-compose.yml` com Postgres 16; a API aplica as migrações sozinha e lê `CORS_ORIGINS` pra aceitar o front publicado). Falta escolher o provedor, ligar HTTPS e o backup automático do banco. O Dockerfile ainda não foi construído numa máquina com Docker ativo.
 
 **Melhorias técnicas conhecidas:**
 
