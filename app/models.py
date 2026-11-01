@@ -128,6 +128,11 @@ class Estudante(EscopoEscola, Base):
     endereco = Column(String(255), nullable=True)
     documentos = Column(String(255), nullable=True)
     cadastro_atualizado_em = Column(Date, nullable=True)       # "data atualização" da planilha: muda quando a escola edita
+    # Conflito de edição: cada alteração do cadastro soma 1. Quem salva com uma
+    # versão velha (outra pessoa salvou no meio-tempo) recebe 409 em vez de sobrescrever.
+    versao_cadastro = Column(Integer, nullable=False, default=1, server_default="1")
+    cadastro_alterado_por = Column(String(100), nullable=True)
+    cadastro_alterado_em = Column(DateTime, nullable=True)
 
     criado_em = Column(DateTime, server_default=func.now())
 

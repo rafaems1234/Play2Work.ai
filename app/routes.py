@@ -574,6 +574,10 @@ def salvar_experiencia(data: ExperienciaRequest, estudante: Estudante = Depends(
     estudante.ja_trabalhou = data.ja_trabalhou
     texto = (data.experiencia_previa or "").strip()
     estudante.experiencia_previa = texto if data.ja_trabalhou and texto else None
+    # Nova versão do cadastro: a escola, se estiver com a ficha aberta, não sobrescreve isto
+    estudante.versao_cadastro = (estudante.versao_cadastro or 1) + 1
+    estudante.cadastro_alterado_por = f"{estudante.nome} (pelo app)"[:100]
+    estudante.cadastro_alterado_em = agora_utc()
     db.commit()
     return {"ja_trabalhou": estudante.ja_trabalhou, "experiencia_previa": estudante.experiencia_previa}
 

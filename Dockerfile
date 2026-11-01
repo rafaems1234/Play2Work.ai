@@ -3,7 +3,8 @@
 #   docker build -t play2work-api .
 #   docker run --env-file app/.env -p 8000:8000 play2work-api
 #
-# Na subida, aplica as migrações (alembic upgrade head) e inicia o servidor.
+# Na subida, prepara o banco (cria as tabelas num banco vazio ou aplica as
+# migrações que faltam, e garante uma escola) e inicia o servidor.
 FROM python:3.10-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -27,4 +28,4 @@ USER play2work
 
 EXPOSE 8000
 # --proxy-headers: atrás do proxy da hospedagem, o IP real do cliente (rate limit e auditoria)
-CMD ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["sh", "-c", "python preparar_banco.py && uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]

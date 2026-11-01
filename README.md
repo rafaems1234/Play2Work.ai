@@ -121,6 +121,7 @@ Play2Work.ai/
     ├── auditoria.py           # Middleware que registra o que cada conta da gestão faz (guarda de 2 anos)
     ├── tenancy.py             # Multi-escola: filtro automático por escola em toda consulta e carimbo no INSERT
     ├── criar_escola.py        # Cria uma escola nova com o primeiro Administrador
+    ├── preparar_banco.py      # Subida do contêiner: cria as tabelas num banco vazio ou aplica as migrações; garante uma escola
     ├── curriculo.py           # Currículo: cabeçalho do cadastro, triagem do texto e conteúdo sem invenção
     ├── competencias.py        # Mapa de competências (10 eixos da BNCC) e nota usada na indicação
     ├── mensagens.py           # Chat: conversa direta, grupo da empresa/turno e canal geral, moderação
@@ -187,6 +188,23 @@ Play2Work.ai/
 ---
 
 ## 🚀 Como Rodar Localmente
+
+### Jeito rápido: Docker (API + Postgres com um comando)
+
+Precisa só do Docker Desktop ligado.
+
+```bash
+cp app/.env.example app/.env      # no Windows: copy app\.env.example app\.env
+# edite app/.env: JWT_SECRET_KEY (obrigatória), ADMIN_SENHA (senha de instalação), GEMINI_API_KEY (opcional)
+docker compose up --build         # ou -d pra rodar em segundo plano
+```
+
+- A API sobe em **http://localhost:8000** (troque com `API_PORTA=8765 docker compose up --build`). Na primeira subida o contêiner **cria as tabelas, marca a versão das migrações e cria a "Escola piloto"**; nas próximas, só aplica as migrações que faltam (`app/preparar_banco.py`).
+- O Postgres fica num volume (`dados_postgres`): parar e subir de novo não perde nada. Pra zerar: `docker compose down -v`.
+- Primeiro acesso ao painel: rode o front (`cd app/frontend && npm install && VITE_DEMO_MODE=false VITE_API_URL=http://localhost:8000 npm run dev`), abra `#admin`, deixe o usuário em branco e entre com a `ADMIN_SENHA` pra criar o primeiro Administrador.
+- Front publicado em outro endereço? Ponha o endereço em `CORS_ORIGINS` no `app/.env`.
+
+### Jeito manual
 
 ### Pré-requisitos
 
@@ -319,7 +337,7 @@ Situação em 31/10/2026. Já resolvido nesta rodada: login do aluno por usuári
 - **Conteúdo do banco de questões:** as 630 perguntas precisam de revisão dos professores — agora com mais urgência, porque o **simulado de certificação** sorteia delas e uma resposta errada no banco pode reprovar um aluno. Atenção principal às que citam números de lei (CLT, FGTS do aprendiz, prazos do CPC, cotas).
 - **LGPD** (rascunhos prontos em [`docs/lgpd`](docs/lgpd/README.md), com o mapa dos dados que o sistema guarda — **precisam de revisão de advogado**): política de privacidade, termos de uso, consentimento do responsável (a maioria é menor) e contrato com a escola dizendo que ela é a controladora dos dados e o Play2Work o operador. **Gemini:** no plano gratuito o Google pode usar o conteúdo enviado pra melhorar os produtos; com texto de aluno menor de idade, usar o plano pago antes do piloto.
 - **Quem atende o painel:** combinar com a coordenação quem cuida da aba Acessos (pedidos de senha — sem alguém atendendo, o aluno que esqueceu a senha fica sem entrar, inclusive nas férias) e quem confirma as Metas de Entrevista.
-- **Hospedagem:** só o front (modo demonstração) está publicado. O backend já está pronto pra subir em contêiner (`Dockerfile` e `docker-compose.yml` com Postgres 16; a API aplica as migrações sozinha e lê `CORS_ORIGINS` pra aceitar o front publicado). Falta escolher o provedor, ligar HTTPS e o backup automático do banco. O Dockerfile ainda não foi construído numa máquina com Docker ativo.
+- **Hospedagem:** só o front (modo demonstração) está publicado. O backend já está pronto pra subir em contêiner (`Dockerfile` e `docker-compose.yml` com Postgres 16; a API aplica as migrações sozinha e lê `CORS_ORIGINS` pra aceitar o front publicado). Falta escolher o provedor, ligar HTTPS e o backup automático do banco. A preparação do banco foi testada num Postgres zerado e num já existente e o `docker compose config` valida, mas a imagem ainda não foi construída numa máquina com o Docker ligado.
 
 **Melhorias técnicas conhecidas:**
 
@@ -327,12 +345,11 @@ Situação em 31/10/2026. Já resolvido nesta rodada: login do aluno por usuári
 - **Painel da plataforma:** o multi-escola está pronto, mas criar/desativar escolas ainda é pelo `criar_escola.py` e pelo banco; falta uma tela pra equipe do Play2Work gerenciar as escolas (e, depois, cobrança por escola).
 - **Perfis mais finos:** os perfis da gestão valem pro painel inteiro; dá pra evoluir pra permissões por aba (ex.: alguém que só mexe na Trilha EAD). Pros perfis Visualizar e Auditor, os botões de alterar já ficam escondidos (e o servidor recusa de qualquer jeito).
 - **Auditoria na mesma transação:** o registro é gravado logo depois da alteração, numa conexão própria; pra rede estadual, mover pra mesma transação da alteração (como no Sozza Command).
-- **Duas pessoas editando o mesmo aluno:** quem salva por último sobrescreve a outra. Proposta: conferir a versão do registro antes de salvar e avisar o conflito.
-- **Resolvido em 31/10/2026:** fotos saem da memória da página ao sair (painel e app); foto HEIC/qualquer imagem que o navegador abra é convertida em JPEG antes de subir; limite de 10 envios de foto por minuto (30 no painel); busca por telefone só a partir de 5 dígitos.
+- **Resolvido em 31/10/2026:** **conflito de edição** — cada alteração do cadastro do aluno soma uma versão (`versao_cadastro`, com quem e quando); quem salvar a ficha com uma versão velha recebe "Fulano alterou o cadastro de X em 31/10 às 15:04, enquanto você editava" e nada é gravado (a ficha recarrega com a versão atual); vale também pra edição que o aluno faz no app; fotos saem da memória da página ao sair (painel e app); foto HEIC/qualquer imagem que o navegador abra é convertida em JPEG antes de subir; limite de 10 envios de foto por minuto (30 no painel); busca por telefone só a partir de 5 dígitos.
 - **Safari/iOS às vezes não dispara `afterprint`:** depois de baixar o PDF o título da aba pode ficar "Curriculo - Fulano" até recarregar.
 
 **Verificado e o que falta verificar:**
 
-- **Migrações conferidas num Postgres 16 de verdade (31/10/2026):** numa cópia do banco de dev, todas as revisões de `c4e8a1b2d3f5` até `e6a1c3f5b7d9` (multi-escola) subiram sem erro, os downgrades/upgrades das novas também, e o `alembic check` não acusou diferença entre o banco e o `models.py`. Na migração dos cursos, quem estava em Ciências da Natureza fica sem curso, pra escola reclassificar.
+- **Migrações conferidas num Postgres 16 de verdade (31/10/2026):** numa cópia do banco de dev, todas as revisões de `c4e8a1b2d3f5` até `f2b8d4a6c1e3` (versão do cadastro) subiram sem erro, os downgrades/upgrades das novas também, e o `alembic check` não acusou diferença entre o banco e o `models.py`. Na migração dos cursos, quem estava em Ciências da Natureza fica sem curso, pra escola reclassificar.
 - **Testado no navegador com o backend real e o Gemini de verdade:** login e primeiro acesso do aluno, pedido de senha e aprovação, códigos da turma, gerador de currículo, entrevista contínua com laudo, simulado de certificação (reprovação, bloqueio do ciclo, anti-cópia, saída de tela), contas da gestão e auditoria.
 - **Não verificado ainda:** uma impressão real do PDF e dos bilhetes de código de acesso pela janela do navegador; as rodadas de 5 entrevistas de ponta a ponta no navegador (cobertas pelos testes automatizados, mas exigiriam ~35 chamadas ao Gemini); as telas novas no **modo demonstração** (o build passa, mas não foram clicadas).

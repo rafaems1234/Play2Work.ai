@@ -295,13 +295,20 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
     const resposta = await apiFetch('/api/admin/estudantes', { method: 'POST', body: JSON.stringify(dados) });
     if (!resposta.ok) return lerErro(resposta, 'Não foi possível cadastrar.');
     setCadastrando(false);
-    setAviso(`${dados.nome} cadastrado(a). A senha de acesso é o CPF.`);
+    setAviso(`${dados.nome} cadastrado(a). Para o primeiro acesso, gere o código na aba Acessos e entregue ao aluno.`);
     await recarregar();
     return null;
   };
 
   const atualizar = async (dados) => {
-    const resposta = await apiFetch(`/api/admin/estudantes/${selecionadoId}`, { method: 'PUT', body: JSON.stringify(dados) });
+    // Manda a versão do cadastro que a ficha carregou: se alguém salvou no meio-tempo, o servidor recusa (409)
+    const versao = alunos.find((a) => a.id === selecionadoId)?.versao_cadastro;
+    const resposta = await apiFetch(`/api/admin/estudantes/${selecionadoId}`, { method: 'PUT', body: JSON.stringify({ ...dados, versao }) });
+    if (resposta.status === 409) {
+      const motivo = await lerErro(resposta, 'Outra pessoa alterou este cadastro enquanto você editava.');
+      await recarregar(); // a ficha passa a mostrar a versão atual
+      return motivo;
+    }
     if (!resposta.ok) return lerErro(resposta, 'Não foi possível salvar.');
     setAviso(`Dados de ${dados.nome} atualizados.`);
     await recarregar();

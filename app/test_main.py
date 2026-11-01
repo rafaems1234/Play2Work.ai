@@ -2155,8 +2155,8 @@ def test_escola_marca_desistencia_e_expirado(mock_db):
 
 
 def test_editar_aluno_salva_a_ficha_e_a_data_de_atualizacao(mock_db):
-    aluno = criar_mock_estudante(id=7, sexo=None, turma=None, habilidades=[], cadastro_atualizado_em=None)
-    mock_db.query().filter().first.return_value = aluno
+    aluno = criar_mock_estudante(id=7, sexo=None, turma=None, habilidades=[], cadastro_atualizado_em=None, versao_cadastro=1)
+    mock_db.query().filter().with_for_update().first.return_value = aluno  # a edição trava a linha (conflito de edição)
     response = client.put("/api/admin/estudantes/7", headers=ADMIN_HEADERS(), json={"ficha": {"sexo": "Masculino", "turno_escolar": "Noturno"}})
     assert response.status_code == 200
     assert aluno.sexo == "Masculino" and aluno.turno_escolar == "Noturno"
@@ -2470,3 +2470,35 @@ def test_registros_com_mais_de_2_anos_saem():
     auditoria.purgar_antigos(db)
     assert auditoria.RETENCAO_DIAS == 730
     db.query().filter().delete.assert_called_once()
+
+
+# ----------------------------------------------------------------------
+# CONFLITO DE EDIÇÃO DO CADASTRO DO ALUNO
+# ----------------------------------------------------------------------
+def _aluno_versao(versao, **extra):
+    return criar_mock_estudante(id=5, nome="Bianca Ferreira", versao_cadastro=versao, cadastro_alterado_por="Pedro Secretaria",
+                                cadastro_alterado_em=datetime(2026, 10, 31, 18, 4), turma=None, **extra)
+
+
+def test_salvar_com_versao_velha_da_409_e_nao_grava(mock_db):
+    aluno = _aluno_versao(4, telefone="67900000000")
+    mock_db.query().filter().with_for_update().first.return_value = aluno
+    r = client.put("/api/admin/estudantes/5", headers=ADMIN_HEADERS(), json={"telefone": "67911112222", "versao": 3})
+    assert r.status_code == 409
+    assert "Pedro Secretaria" in r.json()["detail"] and "31/10 às 14:04" in r.json()["detail"]  # 18:04 UTC = 14:04 em Três Lagoas
+    assert aluno.telefone == "67900000000" and aluno.versao_cadastro == 4
+    mock_db.commit.assert_not_called()
+
+
+def test_salvar_com_versao_certa_grava_e_soma_versao(mock_db):
+    aluno = _aluno_versao(4, telefone="67900000000")
+    mock_db.query().filter().with_for_update().first.return_value = aluno
+    r = client.put("/api/admin/estudantes/5", headers=ADMIN_HEADERS(), json={"telefone": "(67) 91111-2222", "versao": 4})
+    assert r.status_code == 200
+    assert aluno.telefone == "67911112222" and aluno.versao_cadastro == 5 and aluno.cadastro_alterado_por == "Teste Admin"
+
+
+def test_aluno_editando_no_app_tambem_muda_a_versao(mock_db, mock_estudante_logado):
+    mock_estudante_logado.versao_cadastro = 2
+    client.put("/api/estudante/me/experiencia", json={"ja_trabalhou": True, "experiencia_previa": "Ajudante na padaria"})
+    assert mock_estudante_logado.versao_cadastro == 3 and "pelo app" in mock_estudante_logado.cadastro_alterado_por

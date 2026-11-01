@@ -783,6 +783,11 @@ const atenderAdminInterno = async (metodo, caminho, query, corpo) => {
   if (matchAluno) {
     const aluno = ALUNOS.find((a) => a.id === Number(matchAluno[1]));
     if (!aluno) return erroFake('Aluno não encontrado', 404);
+    // Conflito de edição (espelho de admin_routes._conferir_versao)
+    if (corpo.versao != null && corpo.versao !== (aluno.versao_cadastro || 1)) {
+      return erroFake(`${aluno.cadastro_alterado_por || 'Outra pessoa'} alterou o cadastro de ${aluno.nome} enquanto você editava. Nada foi gravado: confira a versão atual e salve de novo.`, 409);
+    }
+    Object.assign(aluno, { versao_cadastro: (aluno.versao_cadastro || 1) + 1, cadastro_alterado_por: gestorAtualDemo?.nome || 'Coordenação', cadastro_alterado_em: agoraIso() });
     if (corpo.cpf) {
       const [cpf, erroCpf] = validarCpf(corpo.cpf, aluno.id);
       if (erroCpf) return erroCpf;

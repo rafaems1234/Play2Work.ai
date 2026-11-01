@@ -11,7 +11,7 @@ from database import get_db
 from limiter import limiter
 from services import ITINERARIOS_QUIZ, AIService, calcular_desempenho_para_vaga, taxas_de_acerto_quiz, gerar_nome_exibicao
 from auth import GestorAtual, get_admin_atual, normalizar_cpf, cpf_valido
-from fuso import hoje as hoje_na_escola, agora_utc, data_local
+from fuso import hoje as hoje_na_escola, agora_utc, data_local, FUSO_ESCOLA
 from competencias import mapas_de_varios, nota_de_competencias, mapa_para_tela
 from atividades import SITUACOES
 from aulas import certificados_dos_alunos
@@ -67,6 +67,7 @@ class AtualizarEstudanteRequest(BaseModel):
     ja_trabalhou: Optional[bool] = None
     experiencia_previa: Optional[str] = Field(default=None, max_length=2000)
     ficha: Optional[dict] = None  # campos da planilha do PAP (data/ficha_pap.json)
+    versao: Optional[int] = None  # versao_cadastro que a tela carregou (conflito de edição)
 
 
 class StatusContratacaoRequest(BaseModel):
@@ -152,6 +153,14 @@ def _normalizar_telefone(telefone: Optional[str]) -> Optional[str]:
     if len(digitos) not in (10, 11):
         raise HTTPException(status_code=400, detail="Telefone inválido — use DDD + número, ex: (67) 99999-0000")
     return digitos
+
+
+def data_hora_local(momento) -> Optional[str]:
+    """'31/10 às 15:04' no fuso da escola (o banco guarda em UTC)."""
+    if not momento:
+        return None
+    from datetime import timezone
+    return momento.replace(tzinfo=timezone.utc).astimezone(FUSO_ESCOLA).strftime("%d/%m às %H:%M")
 
 
 def _iso(valor) -> Optional[str]:
@@ -264,6 +273,9 @@ def _estudante_para_dict(est: Estudante, taxa_acerto: float | None, total_candid
         # Ficha do PAP (colunas da planilha) e o contrato mais recente
         **ficha_pap.para_dict(est, "aluno"),
         "cadastro_atualizado_em": _iso(est.cadastro_atualizado_em),
+        "versao_cadastro": est.versao_cadastro or 1,
+        "cadastro_alterado_por": est.cadastro_alterado_por,
+        "cadastro_alterado_em": _iso(est.cadastro_alterado_em),
         "contrato_atual": ficha_pap.contrato_para_dict(contrato_atual),
     }
 
@@ -369,9 +381,30 @@ def cadastrar_estudante(data: NovoEstudanteRequest, db: Session = Depends(get_db
     return _estudante_para_dict(estudante, None, 0, 0)
 
 
+def marcar_alteracao_do_cadastro(estudante: Estudante, quem: str) -> None:
+    """Nova versão do cadastro: quem estiver com a ficha aberta numa versão anterior não sobrescreve."""
+    estudante.versao_cadastro = (estudante.versao_cadastro or 1) + 1
+    estudante.cadastro_alterado_por = (quem or "")[:100] or None
+    estudante.cadastro_alterado_em = agora_utc()
+
+
+def _conferir_versao(estudante: Estudante, versao: Optional[int]) -> None:
+    if versao is not None and versao != (estudante.versao_cadastro or 1):
+        quem = estudante.cadastro_alterado_por or "outra pessoa"
+        quando = data_hora_local(estudante.cadastro_alterado_em)
+        raise HTTPException(status_code=409, detail=(
+            f"{quem} alterou o cadastro de {estudante.nome}{f' em {quando}' if quando else ''}, enquanto você editava. "
+            "Para não apagar o que foi salvo, nada foi gravado: a ficha foi recarregada com a versão atual; confira e salve de novo."
+        ))
+
+
 @router.put("/estudantes/{estudante_id}", dependencies=protegido)
-def atualizar_estudante(estudante_id: int, data: AtualizarEstudanteRequest, db: Session = Depends(get_db)):
-    estudante = _buscar_estudante(estudante_id, db)
+def atualizar_estudante(estudante_id: int, data: AtualizarEstudanteRequest, gestor: GestorAtual = Depends(get_admin_atual), db: Session = Depends(get_db)):
+    # Trava a linha até o commit: duas pessoas salvando no mesmo instante não passam juntas
+    estudante = db.query(Estudante).filter(Estudante.id == estudante_id).with_for_update().first()
+    if not estudante:
+        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+    _conferir_versao(estudante, data.versao)
 
     campos = data.model_dump(exclude_unset=True)
     if campos.get("nome") and data.nome.strip() != estudante.nome:
@@ -406,9 +439,11 @@ def atualizar_estudante(estudante_id: int, data: AtualizarEstudanteRequest, db: 
         for campo, valor in ficha_pap.validar("aluno", data.ficha, parcial=True).items():
             setattr(estudante, campo, valor)
     estudante.cadastro_atualizado_em = hoje_na_escola()  # "data atualização" da planilha
+    marcar_alteracao_do_cadastro(estudante, gestor.nome)
     db.commit()
     db.refresh(estudante)
     return {
+        "versao_cadastro": estudante.versao_cadastro,
         "id": estudante.id,
         "nome": estudante.nome,
         "nome_exibicao": estudante.nome_exibicao or estudante.nome,
@@ -490,7 +525,7 @@ def apagar_contrato(contrato_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/estudantes/{estudante_id}/status", dependencies=protegido)
-def mudar_status_contratacao(estudante_id: int, data: StatusContratacaoRequest, db: Session = Depends(get_db)):
+def mudar_status_contratacao(estudante_id: int, data: StatusContratacaoRequest, gestor: GestorAtual = Depends(get_admin_atual), db: Session = Depends(get_db)):
     """
     Status do aprendiz como na planilha: contratado (com a empresa), no aguardo
     (fila), desistência ou expirado.
@@ -512,6 +547,7 @@ def mudar_status_contratacao(estudante_id: int, data: StatusContratacaoRequest, 
     # O selo do app vira "Contratado" (ou volta pro nível do XP) junto com a marcação da escola
     estudante.categoria_status = AIService.calcular_categoria_status(estudante.xp_total or 0, data.status == "contratado")
     db.add(MudancaStatusContratacao(estudante_id=estudante.id, status=data.status, empresa=empresa))
+    marcar_alteracao_do_cadastro(estudante, gestor.nome)
     db.commit()
     return {
         "status_contratacao": estudante.status_contratacao,
