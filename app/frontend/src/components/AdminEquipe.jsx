@@ -112,11 +112,19 @@ const AbaEquipe = ({ gestor }) => {
                 <td>
                   <span className={`adm-chip pequeno ${c.ativo ? COR[c.papel] : ''}`}>{c.ativo ? 'Ativa' : 'Desativada'}</span>
                   {c.deve_trocar_senha && c.ativo && <div style={{ fontSize: '11px', color: '#c98a04' }}>aguardando trocar a senha temporária</div>}
+                  {c.dois_fatores_ativo !== undefined && c.ativo && (
+                    <div style={{ fontSize: '11px', color: c.dois_fatores_ativo ? '#059669' : '#c98a04' }}>
+                      {c.dois_fatores_ativo ? 'verificação em duas etapas ativa' : 'falta ativar a verificação em duas etapas'}
+                    </div>
+                  )}
                 </td>
                 <td className="mono">{c.ultimo_acesso_em ? dataHoraIsoParaBr(c.ultimo_acesso_em) : <span className="adm-vazio">nunca</span>}</td>
                 <td className="num">
                   <span style={{ display: 'inline-flex', gap: '6px' }}>
                     <button type="button" className="adm-btn secundario pequeno" onClick={() => resetar(c)}>Senha temporária</button>
+                    {c.dois_fatores_ativo && c.id !== gestor?.id && (
+                      <button type="button" className="adm-btn secundario pequeno" title="Celular perdido ou trocado: a pessoa ativa de novo no próximo login" onClick={() => chamar(`/api/admin/gestao/usuarios/${c.id}/resetar-2fa`, 'POST')}>Zerar verificação</button>
+                    )}
                     {c.id !== gestor?.id && (
                       <button type="button" className="adm-btn secundario pequeno" onClick={() => chamar(`/api/admin/gestao/usuarios/${c.id}`, 'PUT', { ativo: !c.ativo })}>{c.ativo ? 'Desativar' : 'Reativar'}</button>
                     )}

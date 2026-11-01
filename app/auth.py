@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+import dois_fatores
 from database import get_db
 from models import Escola, Estudante, UsuarioGestao
 from tenancy import definir_escola  # importar já registra o filtro automático por escola
@@ -70,7 +71,12 @@ PERFIS_GESTAO = {
     "visualizar": {"rotulo": "Visualizar", "alterar": False, "auditar": False, "contas": False},
 }
 # Ações que qualquer perfil pode fazer, mesmo sem poder alterar dados
-ROTAS_LIVRES = {("POST", "/api/admin/auditoria/exportacao"), ("POST", "/api/admin/gestao/minha-senha")}
+ROTAS_LIVRES = {
+    ("POST", "/api/admin/auditoria/exportacao"), ("POST", "/api/admin/gestao/minha-senha"),
+    ("POST", "/api/admin/gestao/2fa/iniciar"), ("POST", "/api/admin/gestao/2fa/ativar"),
+}
+# O que dá pra fazer antes de ativar a verificação em duas etapas obrigatória
+ROTAS_CONFIGURAR_2FA = ("/api/admin/gestao/eu", "/api/admin/gestao/2fa/iniciar", "/api/admin/gestao/2fa/ativar")
 
 
 @dataclass
@@ -82,12 +88,40 @@ class GestorAtual:
     instalacao: bool = False
     deve_trocar_senha: bool = False
     escola_id: Optional[int] = None
+    dois_fatores_ativo: bool = False
+    dois_fatores_pendente: bool = False   # obrigatória e ainda não ativada: só libera a tela de ativar
     escola_nome: Optional[str] = None
 
     @property
     def permissoes(self) -> dict:
         return PERFIS_GESTAO.get(self.papel, PERFIS_GESTAO["visualizar"])
 JWT_EXPIRA_HORAS_ADMIN = 12
+DESAFIO_2FA_MINUTOS = 5   # entre a senha certa e o código do celular
+
+
+def gestor_da_conta(conta: UsuarioGestao, escola: Optional[Escola]) -> "GestorAtual":
+    ativo = conta.totp_ativado_em is not None
+    return GestorAtual(
+        id=conta.id, nome=conta.nome, usuario=conta.usuario, papel=conta.papel, deve_trocar_senha=bool(conta.deve_trocar_senha),
+        escola_id=conta.escola_id, escola_nome=getattr(escola, "nome", None),
+        dois_fatores_ativo=ativo, dois_fatores_pendente=dois_fatores.obrigatoria() and not ativo,
+    )
+
+
+def criar_desafio_2fa(conta: UsuarioGestao) -> str:
+    """Senha certa, falta o código: um token curto que SÓ serve pra /admin/login/2fa."""
+    agora = datetime.datetime.now(datetime.timezone.utc)
+    payload = {"sub": str(conta.id), "papel": "desafio_2fa", "v": conta.sessao_versao or 0, "iat": agora,
+               "exp": agora + datetime.timedelta(minutes=DESAFIO_2FA_MINUTOS)}
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def ler_desafio_2fa(desafio: str) -> Optional[dict]:
+    try:
+        payload = jwt.decode(desafio, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+    return payload if payload.get("papel") == "desafio_2fa" else None
 
 
 def normalizar_cpf(cpf: str) -> str:
@@ -158,8 +192,7 @@ def carregar_gestor(db: Session, payload: dict) -> Optional[GestorAtual]:
     escola = db.get(Escola, gestor.escola_id) if gestor.escola_id else None
     if escola is not None and not escola.ativa:
         return None  # escola desativada (contrato encerrado): ninguém entra
-    return GestorAtual(id=gestor.id, nome=gestor.nome, usuario=gestor.usuario, papel=gestor.papel, deve_trocar_senha=bool(gestor.deve_trocar_senha),
-                       escola_id=gestor.escola_id, escola_nome=getattr(escola, "nome", None))
+    return gestor_da_conta(gestor, escola)
 
 
 def get_admin_atual(request: Request, authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> GestorAtual:
@@ -181,6 +214,8 @@ def get_admin_atual(request: Request, authorization: str | None = Header(default
     metodo, caminho = request.method, request.url.path
     if gestor.deve_trocar_senha and caminho not in ("/api/admin/gestao/minha-senha", "/api/admin/gestao/eu"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Troque a senha temporária antes de continuar.")
+    if not gestor.deve_trocar_senha and gestor.dois_fatores_pendente and caminho not in ROTAS_CONFIGURAR_2FA:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ative a verificação em duas etapas antes de continuar.")
     if metodo not in ("GET", "HEAD", "OPTIONS") and not gestor.permissoes["alterar"] and (metodo, caminho) not in ROTAS_LIVRES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"O seu perfil ({gestor.permissoes['rotulo']}) é só de visualização.")
     return gestor

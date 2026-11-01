@@ -2,6 +2,10 @@
 Contas da gestão e auditoria do Painel da Escola (perfis em auth.PERFIS_GESTAO).
 
   POST /admin/login                         usuário + senha (ou a senha de instalação, sem Administrador)
+  POST /admin/login/2fa                     2º passo: código do app autenticador (contas com 2FA ativa)
+  POST /admin/gestao/2fa/iniciar            gera o segredo e o QR Code pra ativar a verificação em duas etapas
+  POST /admin/gestao/2fa/ativar             confirma o 1º código e liga a verificação
+  POST /admin/gestao/usuarios/{id}/resetar-2fa    zera a de alguém (celular perdido) [Administrador]
   GET  /admin/gestao/eu                     quem está logado e o que pode
   POST /admin/gestao/minha-senha            troca a própria senha (obrigatório depois de senha temporária)
   GET  /admin/gestao/usuarios               contas da equipe                     [Administrador]
@@ -25,9 +29,10 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 import auditoria
+import dois_fatores
 from auth import (
-    ADMIN_SENHA, PERFIS_GESTAO, GestorAtual, criar_token_admin, escola_de_instalacao, exigir_administrador, exigir_auditor,
-    existe_administrador, get_admin_atual, hash_senha, verificar_senha,
+    ADMIN_SENHA, PERFIS_GESTAO, GestorAtual, criar_desafio_2fa, criar_token_admin, escola_de_instalacao, exigir_administrador,
+    exigir_auditor, existe_administrador, get_admin_atual, gestor_da_conta, hash_senha, ler_desafio_2fa, verificar_senha,
 )
 from tenancy import todas_as_escolas
 from database import get_db
@@ -60,6 +65,15 @@ class AtualizarContaRequest(BaseModel):
     ativo: Optional[bool] = None
 
 
+class Login2faRequest(BaseModel):
+    desafio: str = Field(max_length=2000)
+    codigo: str = Field(max_length=12)
+
+
+class Ativar2faRequest(BaseModel):
+    codigo: str = Field(max_length=12)
+
+
 class MinhaSenhaRequest(BaseModel):
     senha_atual: str = Field(max_length=200)
     nova_senha: str = Field(max_length=200)
@@ -81,13 +95,24 @@ def senha_temporaria() -> str:
 
 def _gestor_para_dict(g: GestorAtual) -> dict:
     return {"id": g.id, "nome": g.nome, "usuario": g.usuario, "papel": g.papel, "instalacao": g.instalacao,
-            "deve_trocar_senha": g.deve_trocar_senha, "permissoes": g.permissoes, "perfis": PERFIS_GESTAO,
+            "deve_trocar_senha": g.deve_trocar_senha, "dois_fatores_ativo": g.dois_fatores_ativo,
+            "dois_fatores_pendente": g.dois_fatores_pendente, "permissoes": g.permissoes, "perfis": PERFIS_GESTAO,
             "escola": {"id": g.escola_id, "nome": g.escola_nome}}
 
 
 def _conta_para_dict(c: UsuarioGestao) -> dict:
     return {"id": c.id, "nome": c.nome, "usuario": c.usuario, "papel": c.papel, "ativo": bool(c.ativo),
-            "deve_trocar_senha": bool(c.deve_trocar_senha), "ultimo_acesso_em": _iso(c.ultimo_acesso_em), "criado_em": _iso(c.criado_em)}
+            "deve_trocar_senha": bool(c.deve_trocar_senha), "dois_fatores_ativo": c.totp_ativado_em is not None,
+            "ultimo_acesso_em": _iso(c.ultimo_acesso_em), "criado_em": _iso(c.criado_em)}
+
+
+def _contar_falha(db: Session, conta: UsuarioGestao, agora) -> None:
+    """Senha ou código errado: 5 seguidos travam a conta (os dois contam juntos)."""
+    conta.login_falhas = (conta.login_falhas or 0) + 1
+    if conta.login_falhas >= LOGIN_FALHAS_MAX:
+        conta.login_falhas = 0
+        conta.login_bloqueado_ate = agora + timedelta(minutes=LOGIN_BLOQUEIO_MINUTOS)
+    db.commit()
 
 
 # ------------------------------------------------------------------ login
@@ -113,20 +138,49 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
     escola = db.get(Escola, conta.escola_id) if conta else None
     if not conta or not conta.ativo or (escola is not None and not escola.ativa) or not verificar_senha(data.senha, conta.senha_hash):
         if conta:
-            conta.login_falhas = (conta.login_falhas or 0) + 1
-            if conta.login_falhas >= LOGIN_FALHAS_MAX:
-                conta.login_falhas = 0
-                conta.login_bloqueado_ate = agora + timedelta(minutes=LOGIN_BLOQUEIO_MINUTOS)
-            db.commit()
+            _contar_falha(db, conta, agora)
         raise HTTPException(status_code=401, detail="Usuário ou senha incorretos.")
+    if conta.totp_ativado_em is not None:
+        # Senha certa, mas ainda não entrou: falta o código do celular. As falhas
+        # não zeram aqui, senão daria pra chutar o código acertando a senha de novo.
+        request.state.login_parcial = True
+        return {"precisa_2fa": True, "desafio": criar_desafio_2fa(conta)}
+    return _concluir_login(request, db, conta, escola, agora)
+
+
+def _concluir_login(request: Request, db: Session, conta: UsuarioGestao, escola, agora) -> dict:
     conta.login_falhas = 0
     conta.login_bloqueado_ate = None
     conta.ultimo_acesso_em = agora
     db.commit()
-    gestor = GestorAtual(id=conta.id, nome=conta.nome, usuario=conta.usuario, papel=conta.papel, deve_trocar_senha=bool(conta.deve_trocar_senha),
-                         escola_id=conta.escola_id, escola_nome=getattr(escola, "nome", None))
+    gestor = gestor_da_conta(conta, escola)
     request.state.gestor = gestor  # a auditoria registra quem entrou
     return {"token": criar_token_admin(conta), "gestor": _gestor_para_dict(gestor)}
+
+
+@router.post("/login/2fa")
+@limiter.limit("10/minute")
+def login_2fa(request: Request, data: Login2faRequest, db: Session = Depends(get_db)):
+    agora = agora_utc()
+    payload = ler_desafio_2fa(data.desafio)
+    if not payload:
+        raise HTTPException(status_code=401, detail="O tempo pra digitar o código acabou. Entre de novo com usuário e senha.")
+    conta = db.query(UsuarioGestao).filter(UsuarioGestao.id == int(payload["sub"])).first()
+    if conta:
+        request.state.usuario_tentado = conta.usuario
+    if not conta or not conta.ativo or payload.get("v", 0) != (conta.sessao_versao or 0) or conta.totp_ativado_em is None:
+        raise HTTPException(status_code=401, detail="O tempo pra digitar o código acabou. Entre de novo com usuário e senha.")
+    if conta.login_bloqueado_ate and conta.login_bloqueado_ate > agora:
+        raise HTTPException(status_code=429, detail=f"Muitas tentativas erradas. Espere {LOGIN_BLOQUEIO_MINUTOS} minutos.")
+    escola = db.get(Escola, conta.escola_id) if conta.escola_id else None
+    if escola is not None and not escola.ativa:
+        raise HTTPException(status_code=401, detail="Usuário ou senha incorretos.")
+    passo = dois_fatores.verificar(conta.totp_segredo, data.codigo, conta.totp_ultimo_passo)
+    if passo is None:
+        _contar_falha(db, conta, agora)
+        raise HTTPException(status_code=401, detail="Código incorreto ou já usado. Confira o app autenticador e tente o próximo código.")
+    conta.totp_ultimo_passo = passo
+    return _concluir_login(request, db, conta, escola, agora)
 
 
 @router.get("/gestao/eu")
@@ -148,6 +202,49 @@ def minha_senha(data: MinhaSenhaRequest, gestor: GestorAtual = Depends(get_admin
         raise HTTPException(status_code=422, detail="Escolha uma senha diferente da atual e que não contenha o seu usuário.")
     conta.senha_hash = hash_senha(nova)
     conta.deve_trocar_senha = False
+    conta.sessao_versao = (conta.sessao_versao or 0) + 1
+    db.commit()
+    return {"token": criar_token_admin(conta)}
+
+
+# ------------------------------------------------------------------ verificação em duas etapas (a própria conta)
+
+def _minha_conta(db: Session, gestor: GestorAtual) -> UsuarioGestao:
+    if gestor.instalacao:
+        raise HTTPException(status_code=400, detail="A conta de instalação é provisória: crie a sua conta de Administrador e ative nela.")
+    conta = db.query(UsuarioGestao).filter(UsuarioGestao.id == gestor.id).first()
+    if not conta:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+    return conta
+
+
+@router.post("/gestao/2fa/iniciar")
+def iniciar_2fa(gestor: GestorAtual = Depends(get_admin_atual), db: Session = Depends(get_db)):
+    """Novo segredo (ainda não vale). Chamar de novo troca o segredo e invalida o QR anterior."""
+    conta = _minha_conta(db, gestor)
+    if conta.totp_ativado_em is not None:
+        raise HTTPException(status_code=409, detail="A verificação em duas etapas já está ativa nesta conta.")
+    conta.totp_segredo = dois_fatores.novo_segredo()
+    conta.totp_ultimo_passo = None
+    db.commit()
+    link = dois_fatores.uri(conta.totp_segredo, conta.usuario)
+    return {"segredo": conta.totp_segredo, "uri": link, "qr": dois_fatores.qr_svg(link)}
+
+
+@router.post("/gestao/2fa/ativar")
+@limiter.limit("10/minute")
+def ativar_2fa(request: Request, data: Ativar2faRequest, gestor: GestorAtual = Depends(get_admin_atual), db: Session = Depends(get_db)):
+    """Confere o primeiro código e liga. As outras sessões abertas (sem 2FA) caem."""
+    conta = _minha_conta(db, gestor)
+    if conta.totp_ativado_em is not None:
+        raise HTTPException(status_code=409, detail="A verificação em duas etapas já está ativa nesta conta.")
+    if not conta.totp_segredo:
+        raise HTTPException(status_code=409, detail="Gere o QR Code primeiro.")
+    passo = dois_fatores.verificar(conta.totp_segredo, data.codigo, None)
+    if passo is None:
+        raise HTTPException(status_code=422, detail="Código incorreto. Confira se o relógio do celular está certo e digite o código que aparece agora.")
+    conta.totp_ativado_em = agora_utc()
+    conta.totp_ultimo_passo = passo
     conta.sessao_versao = (conta.sessao_versao or 0) + 1
     db.commit()
     return {"token": criar_token_admin(conta)}
@@ -219,6 +316,20 @@ def resetar_senha(conta_id: int, _: GestorAtual = Depends(exigir_administrador),
     conta.sessao_versao = (conta.sessao_versao or 0) + 1
     db.commit()
     return {"senha_temporaria": senha}
+
+
+@router.post("/gestao/usuarios/{conta_id}/resetar-2fa")
+def resetar_2fa(conta_id: int, _: GestorAtual = Depends(exigir_administrador), db: Session = Depends(get_db)):
+    """Celular perdido ou trocado: a pessoa ativa de novo no próximo login."""
+    conta = db.query(UsuarioGestao).filter(UsuarioGestao.id == conta_id).first()
+    if not conta:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+    conta.totp_segredo = None
+    conta.totp_ativado_em = None
+    conta.totp_ultimo_passo = None
+    conta.sessao_versao = (conta.sessao_versao or 0) + 1
+    db.commit()
+    return _conta_para_dict(conta)
 
 
 # ------------------------------------------------------------------ auditoria (Administrador, Auditor)

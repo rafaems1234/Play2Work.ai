@@ -10,7 +10,7 @@ from alembic import context
 # Garante que os módulos do backend (database.py, models.py) sejam importáveis
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database import Base, SQLALCHEMY_DATABASE_URL  # noqa: E402
+from database import Base, MIGRACAO_DATABASE_URL  # noqa: E402
 import models  # noqa: E402, F401  (garante que todas as tabelas sejam registradas em Base.metadata)
 
 # this is the Alembic Config object, which provides
@@ -18,7 +18,7 @@ import models  # noqa: E402, F401  (garante que todas as tabelas sejam registrad
 config = context.config
 
 # Usa a mesma URL de conexão do resto do backend (vinda do .env)
-config.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
+config.set_main_option("sqlalchemy.url", MIGRACAO_DATABASE_URL.replace("%", "%%"))  # dono do banco; %% por causa do configparser
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

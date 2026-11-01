@@ -2631,3 +2631,140 @@ def test_cada_chamada_soma_o_uso_do_mes():
         cliente.models.generate_content.return_value = resposta
         assert services.gerar_json_gemini("oi", dict) == {"ok": True}
     registrar.assert_called_once_with(services.MODELO_GEMINI, resposta.usage_metadata)
+
+# ------------------------------------------------------------------ segurança: 2FA, cabeçalhos, docs, IP
+
+import time as _time
+
+import pyotp
+
+import auditoria as _auditoria
+import dois_fatores
+import main as _main
+from auth import criar_desafio_2fa, ler_desafio_2fa
+
+
+SEGREDO_TESTE = pyotp.random_base32()
+
+
+def _codigo(passo_relativo=0, segredo=SEGREDO_TESTE):
+    totp = pyotp.TOTP(segredo)
+    return totp.at(_time.time() + passo_relativo * totp.interval)
+
+
+def test_totp_aceita_o_codigo_atual_e_o_vizinho_e_recusa_o_resto():
+    agora = _time.time()
+    passo = int(agora // 30)
+    assert dois_fatores.verificar(SEGREDO_TESTE, _codigo(), None) is not None
+    assert dois_fatores.verificar(SEGREDO_TESTE, _codigo(-1), None) is not None   # relógio do celular um pouco atrasado
+    assert dois_fatores.verificar(SEGREDO_TESTE, _codigo(-3), None) is None
+    assert dois_fatores.verificar(SEGREDO_TESTE, "12345", None) is None
+    assert dois_fatores.verificar(None, _codigo(), None) is None
+    assert dois_fatores.verificar(SEGREDO_TESTE, _codigo(), passo + 1) is None    # código já usado não vale de novo
+
+
+def test_totp_aceita_codigo_com_espaco():
+    codigo = _codigo()
+    assert dois_fatores.verificar(SEGREDO_TESTE, f"{codigo[:3]} {codigo[3:]}", None) is not None
+
+
+def _conta_2fa(**extra):
+    base = dict(id=7, nome="Maria", usuario="maria", senha_hash=hash_senha("Senha2026forte"), papel="administrador", ativo=True,
+                deve_trocar_senha=False, sessao_versao=2, login_falhas=0, login_bloqueado_ate=None, escola_id=None,
+                totp_segredo=SEGREDO_TESTE, totp_ativado_em=datetime(2026, 11, 1), totp_ultimo_passo=None)
+    base.update(extra)
+    return UsuarioGestao(**base)
+
+
+def test_conta_com_2fa_nao_recebe_token_so_com_a_senha(mock_db):
+    mock_db.query().filter().first.return_value = _conta_2fa()
+    with patch("gestao_routes.existe_administrador", return_value=True):
+        corpo = client.post("/api/admin/login", json={"usuario": "maria", "senha": "Senha2026forte"}).json()
+    assert corpo["precisa_2fa"] and "token" not in corpo
+    assert ler_desafio_2fa(corpo["desafio"])["sub"] == "7"
+
+
+def test_desafio_nao_serve_como_token_do_painel(mock_db):
+    desafio = criar_desafio_2fa(_conta_2fa())
+    assert client.get("/api/admin/turmas", headers={"Authorization": f"Bearer {desafio}"}).status_code == 401
+
+
+def test_segundo_passo_com_codigo_certo_entra_e_grava_o_passo(mock_db):
+    conta = _conta_2fa(login_falhas=3)
+    mock_db.query().filter().first.return_value = conta
+    resposta = client.post("/api/admin/login/2fa", json={"desafio": criar_desafio_2fa(conta), "codigo": _codigo()})
+    assert resposta.status_code == 200 and resposta.json()["token"]
+    assert conta.totp_ultimo_passo is not None and conta.login_falhas == 0
+
+
+def test_segundo_passo_com_codigo_errado_conta_falha_e_trava(mock_db):
+    conta = _conta_2fa(login_falhas=4)
+    mock_db.query().filter().first.return_value = conta
+    errado = "000000" if _codigo() != "000000" else "111111"
+    assert client.post("/api/admin/login/2fa", json={"desafio": criar_desafio_2fa(conta), "codigo": errado}).status_code == 401
+    assert conta.login_bloqueado_ate is not None  # 5ª falha seguida (senha + código contam juntos)
+
+
+def test_desafio_de_sessao_antiga_ou_invalido_cai(mock_db):
+    conta = _conta_2fa()
+    desafio_antigo = criar_desafio_2fa(conta)
+    conta.sessao_versao = 3  # trocou a senha / zeraram a 2FA depois
+    mock_db.query().filter().first.return_value = conta
+    assert client.post("/api/admin/login/2fa", json={"desafio": desafio_antigo, "codigo": _codigo()}).status_code == 401
+    assert client.post("/api/admin/login/2fa", json={"desafio": "lixo", "codigo": _codigo()}).status_code == 401
+
+
+def test_2fa_pendente_so_libera_a_tela_de_ativar(mock_db):
+    with _como("visualizar", dois_fatores_pendente=True):
+        cab = {"Authorization": f"Bearer {criar_token_admin()}"}
+        assert client.get("/api/admin/turmas", headers=cab).status_code == 403
+        assert client.get("/api/admin/gestao/eu", headers=cab).json()["dois_fatores_pendente"]
+
+
+def test_ativar_2fa_confere_o_codigo_e_derruba_as_outras_sessoes(mock_db):
+    conta = _conta_2fa(totp_ativado_em=None, totp_segredo=None)
+    mock_db.query().filter().first.return_value = conta
+    with _como("visualizar", dois_fatores_pendente=True):
+        cab = {"Authorization": f"Bearer {criar_token_admin()}"}
+        gerado = client.post("/api/admin/gestao/2fa/iniciar", headers=cab).json()
+        assert gerado["qr"].startswith("data:image/svg+xml") and gerado["uri"].startswith("otpauth://totp/First2Work")
+        assert client.post("/api/admin/gestao/2fa/ativar", headers=cab, json={"codigo": "000000" if _codigo(segredo=gerado["segredo"]) != "000000" else "111111"}).status_code == 422
+        resposta = client.post("/api/admin/gestao/2fa/ativar", headers=cab, json={"codigo": _codigo(segredo=gerado["segredo"])})
+    assert resposta.status_code == 200 and conta.totp_ativado_em is not None and conta.sessao_versao == 3
+
+
+def test_administrador_zera_a_2fa_de_outra_conta(mock_db):
+    conta = _conta_2fa(id=9)
+    mock_db.query().filter().first.return_value = conta
+    r = client.post("/api/admin/gestao/usuarios/9/resetar-2fa", headers=ADMIN_HEADERS())
+    assert r.status_code == 200 and conta.totp_segredo is None and conta.totp_ativado_em is None and conta.sessao_versao == 3
+
+
+def test_2fa_obrigatoria_por_padrao_e_desligavel_so_por_configuracao(monkeypatch):
+    monkeypatch.delenv("GESTAO_2FA_OBRIGATORIA", raising=False)
+    assert dois_fatores.obrigatoria()
+    monkeypatch.setenv("GESTAO_2FA_OBRIGATORIA", "false")
+    assert not dois_fatores.obrigatoria()
+
+
+def test_auditoria_nao_grava_desafio_nem_segredo():
+    limpo = _auditoria.limpar({"desafio": "eyJ...", "codigo": "123456", "segredo": "ABC", "usuario": "maria"})
+    assert limpo.get("usuario") == "maria" and all(limpo.get(c) != v for c, v in (("desafio", "eyJ..."), ("codigo", "123456"), ("segredo", "ABC")))
+
+
+def test_ip_da_auditoria_ignora_x_forwarded_for_inventado():
+    escopo = {"headers": [(b"x-forwarded-for", b"1.2.3.4")], "client": ("10.0.0.9", 5555)}
+    assert _auditoria._ip(escopo) == "10.0.0.9"
+
+
+def test_respostas_da_api_levam_cabecalhos_de_seguranca():
+    r = client.get("/api/status")
+    assert r.headers["X-Content-Type-Options"] == "nosniff" and r.headers["X-Frame-Options"] == "DENY"
+    assert "default-src 'none'" in r.headers["Content-Security-Policy"] and r.headers["Cache-Control"] == "no-store"
+    assert "Strict-Transport-Security" not in r.headers  # só em HTTPS
+
+
+def test_documentacao_da_api_fechada_por_padrao():
+    if _main.DOCS_ABERTAS:
+        pytest.skip("DOCS_ABERTAS=true neste .env (desenvolvimento)")
+    assert client.get("/docs").status_code == 404 and client.get("/openapi.json").status_code == 404
