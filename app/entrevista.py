@@ -217,14 +217,16 @@ def laudo_sem_ia(respostas: list[str]) -> dict:
     avaliacoes = [avaliar_sem_ia(r)["notas"] for r in respostas] or [limpar_notas({})]
     notas = {c: round(sum(a[c] for a in avaliacoes) / len(avaliacoes)) for c in CRITERIOS}
     ordem = sorted(CRITERIOS, key=lambda c: (-notas[c], CRITERIOS.index(c)))
-    fortes = [REGRAS["laudo_reserva"]["fortes"][c] for c in ordem if notas[c] >= 7][:3]
+    # Cada critério entra numa lista só: forte (nota alta) ou a melhorar (o resto, do pior pro melhor)
+    criterios_fortes = [c for c in ordem if notas[c] >= 8][:3] or ([ordem[0]] if notas[ordem[0]] >= 6 else [])
+    fortes = [REGRAS["laudo_reserva"]["fortes"][c] for c in criterios_fortes]
     dicas = REGRAS["dicas"]
-    melhorias = [dicas["clareza_curta"] if c == "clareza" else dicas[c] for c in reversed(ordem) if notas[c] < 8][:3]
+    melhorias = [dicas["clareza_curta"] if c == "clareza" else dicas[c] for c in reversed(ordem) if c not in criterios_fortes and notas[c] < 9][:3]
     nota = nota_geral(notas)
     faixa = "alto" if nota >= 70 else "medio" if nota >= 45 else "baixo"
     return {
         "notas": notas,
-        "pontos_fortes": fortes or [REGRAS["laudo_reserva"]["fortes"]["postura"]],
+        "pontos_fortes": fortes or [REGRAS["laudo_reserva"]["forte_minimo"]],
         "pontos_melhoria": melhorias or [dicas["otima"]],
         "parecer_recrutador": REGRAS["laudo_reserva"]["parecer"][faixa],
         "resumo": REGRAS["laudo_reserva"]["resumo"][faixa],

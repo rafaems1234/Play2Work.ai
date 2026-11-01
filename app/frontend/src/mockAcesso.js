@@ -120,6 +120,12 @@ export const criarMockAcesso = ({ ALUNOS, TURMAS, respostaFake, erroFake, agoraI
       return { usuario: acesso.usuario, status_acesso: statusAcesso(acesso), codigo_acesso_expira_em: codigoValido(acesso) ? acesso.codigoExpira : null, senha_definida_em: acesso.senhaEm };
     },
     pendentes: () => pedidos.filter((p) => p.status === 'pendente').length,
+    // "Lucas Andrade (pedido #2)" -- pra descrição da auditoria
+    nomeDoPedido: (id) => {
+      const pedido = pedidos.find((p) => p.id === Number(id));
+      const aluno = pedido && ALUNOS.find((a) => a.id === pedido.estudante_id);
+      return aluno ? `${aluno.nome} (pedido #${id})` : `pedido #${id}`;
+    },
     usuarioDe: (alunoId) => acessos.get(alunoId)?.usuario ?? null,
 
     // Token do aluno: "demo-aluno-<id>-v<versão>" -- senha nova derruba os antigos

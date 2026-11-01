@@ -105,14 +105,17 @@ export const laudoDemo = (respostas) => {
   const ordem = [...CRITERIOS].sort((a, b) => notas[b] - notas[a] || CRITERIOS.indexOf(a) - CRITERIOS.indexOf(b));
   const { fortes, parecer } = REGRAS.laudo_reserva;
   const { dicas } = REGRAS;
-  const pontosFortes = ordem.filter((c) => notas[c] >= 7).slice(0, 3).map((c) => fortes[c]);
-  const melhorias = [...ordem].reverse().filter((c) => notas[c] < 8).slice(0, 3).map((c) => (c === 'clareza' ? dicas.clareza_curta : dicas[c]));
+  // Cada critério entra numa lista só: forte (nota alta) ou a melhorar (espelho de entrevista.laudo_sem_ia)
+  let criteriosFortes = ordem.filter((c) => notas[c] >= 8).slice(0, 3);
+  if (!criteriosFortes.length && notas[ordem[0]] >= 6) criteriosFortes = [ordem[0]];
+  const pontosFortes = criteriosFortes.map((c) => fortes[c]);
+  const melhorias = [...ordem].reverse().filter((c) => !criteriosFortes.includes(c) && notas[c] < 9).slice(0, 3).map((c) => (c === 'clareza' ? dicas.clareza_curta : dicas[c]));
   const nota = notaGeral(notas);
   return {
     notas,
     nota_geral: nota,
     xp: xpDaNota(nota),
-    pontos_fortes: pontosFortes.length ? pontosFortes : [fortes.postura],
+    pontos_fortes: pontosFortes.length ? pontosFortes : [REGRAS.laudo_reserva.forte_minimo],
     pontos_melhoria: melhorias.length ? melhorias : [dicas.otima],
     parecer_recrutador: parecer[nota >= 70 ? 'alto' : nota >= 45 ? 'medio' : 'baixo'],
     resumo: REGRAS.laudo_reserva.resumo[nota >= 70 ? 'alto' : nota >= 45 ? 'medio' : 'baixo'],

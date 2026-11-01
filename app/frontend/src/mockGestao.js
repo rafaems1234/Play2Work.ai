@@ -21,13 +21,38 @@ const ROTAS = [
   ['POST', /^\/vagas$/, 'incluiu', 'vaga', (c) => `Cadastrou a vaga ${c.titulo_vaga || ''}`],
   ['POST', /^\/vagas\/(\d+)\/indicar$/, 'incluiu', 'indicacao', (_, id) => `Indicou aluno(s) para a vaga #${id}`],
   ['POST', /^\/estudantes\/(\d+)\/codigo-acesso$/, 'incluiu', 'codigo_acesso', (_, id, nome) => `Gerou código de acesso para ${nome(id)}`],
-  ['POST', /^\/pedidos-senha\/(\d+)\/aprovar$/, 'alterou', 'pedido_senha', (_, id) => `Aprovou o pedido de senha nova #${id}`],
+  ['POST', /^\/pedidos-senha\/(\d+)\/aprovar$/, 'alterou', 'pedido_senha', (_, id, __, alunoDoPedido) => `Aprovou o pedido de senha nova de ${alunoDoPedido(id)}`],
+  ['POST', /^\/pedidos-senha\/(\d+)\/recusar$/, 'alterou', 'pedido_senha', (_, id, __, alunoDoPedido) => `Recusou o pedido de senha nova de ${alunoDoPedido(id)}`],
   ['POST', /^\/gestao\/usuarios$/, 'incluiu', 'usuario_gestao', (c) => `Criou a conta de ${c.nome} (${c.papel})`],
   ['PUT', /^\/gestao\/usuarios\/(\d+)$/, 'alterou', 'usuario_gestao', (_, id) => `Alterou a conta da gestão #${id}`],
   ['POST', /^\/auditoria\/exportacao$/, 'exportou', 'exportacao', (c) => `Exportou ${c.descricao}`],
+  ['POST', /^\/rodadas-entrevista\/(\d+)\/confirmar$/, 'alterou', 'rodada_entrevista', (_, id) => `Confirmou a Meta de Entrevista (rodada #${id})`],
+  ['POST', /^\/rodadas-entrevista\/(\d+)\/nao-confirmar$/, 'alterou', 'rodada_entrevista', (_, id) => `Não confirmou a meta e abriu nova rodada (rodada #${id})`],
+  ['POST', /^\/estudantes\/(\d+)\/contratos$/, 'incluiu', 'contrato', (_, id, nome) => `Incluiu contrato de aprendizagem de ${nome(id)}`],
+  ['PUT', /^\/contratos\/(\d+)$/, 'alterou', 'contrato', (_, id) => `Alterou o contrato de aprendizagem #${id}`],
+  ['DELETE', /^\/contratos\/(\d+)$/, 'excluiu', 'contrato', (_, id) => `Excluiu o contrato de aprendizagem #${id}`],
+  ['PUT', /^\/estudantes\/(\d+)\/foto$/, 'alterou', 'foto', (_, id, nome) => `Trocou a foto de ${nome(id)}`],
+  ['DELETE', /^\/estudantes\/(\d+)\/foto$/, 'excluiu', 'foto', (_, id, nome) => `Excluiu a foto de ${nome(id)}`],
+  ['PUT', /^\/candidaturas\/(\d+)$/, 'alterou', 'candidatura', (_, id) => `Atualizou a candidatura #${id}`],
+  ['POST', /^\/turmas\/(\d+)\/codigos-acesso$/, 'incluiu', 'codigo_acesso', (_, id) => `Gerou códigos de acesso da turma #${id}`],
+  ['POST', /^\/modulos$/, 'incluiu', 'modulo', (c) => `Criou o módulo ${c.titulo || ''}`],
+  ['PUT', /^\/modulos\/(\d+)$/, 'alterou', 'modulo', (_, id) => `Alterou o módulo #${id}`],
+  ['DELETE', /^\/modulos\/(\d+)$/, 'excluiu', 'modulo', (_, id) => `Excluiu o módulo #${id}`],
+  ['POST', /^\/modulos\/(\d+)\/aulas$/, 'incluiu', 'aula', (c) => `Criou a aula ${c.titulo || ''}`],
+  ['PUT', /^\/aulas\/(\d+)$/, 'alterou', 'aula', (_, id) => `Alterou a aula #${id}`],
+  ['DELETE', /^\/aulas\/(\d+)$/, 'excluiu', 'aula', (_, id) => `Excluiu a aula #${id}`],
+  ['PUT', /^\/aulas\/(\d+)\/perguntas$/, 'alterou', 'aula', (_, id) => `Alterou as perguntas de fixação da aula #${id}`],
+  ['PUT', /^\/estudantes\/(\d+)\/certificados\/(\d+)$/, 'alterou', 'certificado', (_, id, nome) => `Marcou a retirada do certificado de ${nome(id)}`],
+  ['DELETE', /^\/estudantes\/(\d+)\/certificados\/(\d+)$/, 'excluiu', 'certificado', (_, id, nome) => `Desfez a retirada do certificado de ${nome(id)}`],
+  ['POST', /^\/mensagens\/diretos$/, 'incluiu', 'conversa', () => 'Abriu conversa com aluno'],
+  ['POST', /^\/mensagens\/grupos$/, 'incluiu', 'grupo', (c) => `Criou o grupo ${c.nome || ''}`],
+  ['POST', /^\/mensagens\/canais\/(\d+)\/mensagens$/, 'incluiu', 'mensagem', (_, id) => `Enviou mensagem no canal #${id}`],
+  ['POST', /^\/mensagens\/(\d+)\/ocultar$/, 'alterou', 'mensagem', (_, id) => `Ocultou a mensagem #${id}`],
+  ['POST', /^\/gestao\/usuarios\/(\d+)\/resetar-senha$/, 'alterou', 'usuario_gestao', (_, id) => `Gerou senha temporária para a conta #${id}`],
+  ['POST', /^\/gestao\/minha-senha$/, 'alterou', 'usuario_gestao', () => 'Trocou a própria senha'],
 ];
 
-export const criarMockGestao = ({ ALUNOS, respostaFake, erroFake, agoraIso, diasAtras }) => {
+export const criarMockGestao = ({ ALUNOS, respostaFake, erroFake, agoraIso, diasAtras, alunoDoPedido = (id) => `pedido #${id}` }) => {
   let proximaContaId = 5;
   let proximoRegistroId = 1;
   const contas = [
@@ -93,7 +118,7 @@ export const criarMockGestao = ({ ALUNOS, respostaFake, erroFake, agoraIso, dias
       const regra = ROTAS.find(([m, padrao]) => m === metodo && padrao.test(resto));
       const id = regra ? (resto.match(regra[1]) || [])[1] : null;
       const acao = regra ? regra[2] : ({ POST: 'incluiu', PUT: 'alterou', DELETE: 'excluiu' }[metodo] || 'alterou');
-      const descricao = regra ? regra[4](corpo || {}, id, nomeAluno) : `${metodo} ${resto}`;
+      const descricao = regra ? regra[4](corpo || {}, id, nomeAluno, alunoDoPedido) : `${metodo} ${resto}`;
       const dados = corpo && !(corpo instanceof FormData)
         ? Object.fromEntries(Object.entries(corpo).map(([k, v]) => [k, /senha|codigo|imagem|base64/i.test(k) ? '[omitido]' : v]))
         : null;

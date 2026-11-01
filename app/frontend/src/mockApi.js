@@ -238,8 +238,10 @@ const registrarNaRodadaDemo = (alunoId, laudo) => {
     aberta = { id: proximaRodadaId++, numero: rodadas.length + 1, status: 'em_andamento', media: null };
     rodadas.push(aberta);
   }
+  // As anteriores da rodada, sem esta (que já está marcada como concluída) -- senão ela conta duas vezes
+  const anteriores = notasDaRodada(alunoId, aberta.id);
   laudo.rodada_id = aberta.id;
-  const notas = [...notasDaRodada(alunoId, aberta.id), laudo.nota_geral];
+  const notas = [...anteriores, laudo.nota_geral];
   if (notas.length >= ENTREVISTAS_POR_RODADA) {
     aberta.media = Math.round(notas.reduce((t, n) => t + n, 0) / notas.length);
     aberta.status = aberta.media >= META_DA_RODADA ? 'meta_atingida' : 'nao_atingida';
@@ -247,6 +249,48 @@ const registrarNaRodadaDemo = (alunoId, laudo) => {
   }
   return { ...rodadaParaApi(alunoId, aberta), feitas: notas.length, media: aberta.media ?? Math.round(notas.reduce((t, n) => t + n, 0) / notas.length) };
 };
+
+// Demonstração: a Bianca (2) já fez uma rodada abaixo da meta e outra que bateu a meta e
+// espera a coordenação confirmar -- assim o feed compacto, a evolução entre rodadas e o
+// botão "Confirmar meta" aparecem na ficha dela no painel.
+(() => {
+  const LAUDOS_BIANCA = [
+    [1, 62, 'Respostas corretas, mas curtas e sem exemplos'],
+    [1, 68, 'Boa vontade; ainda genérica ao falar de si'],
+    [1, 71, 'Melhorou nos exemplos; tom um pouco informal'],
+    [1, 74, 'Clara e respeitosa; faltou detalhar resultados'],
+    [1, 70, 'Oscilou nas perguntas sobre trabalho em equipe'],
+    [2, 78, 'Exemplos reais da lan house; boa postura'],
+    [2, 82, 'Objetiva e segura; cita resultados concretos'],
+    [2, 85, 'Boa articulação técnica; demonstrou leve timidez'],
+    [2, 80, 'Respondeu com clareza sobre organização do tempo'],
+    [2, 86, 'Muito boa: exemplos, clareza e postura profissional'],
+  ];
+  const rodadas = [
+    { id: proximaRodadaId++, numero: 1, status: 'nao_atingida', media: 69, concluida_em: diasAtras(12) },
+    { id: proximaRodadaId++, numero: 2, status: 'meta_atingida', media: 82, concluida_em: diasAtras(1) },
+  ];
+  rodadasEntrevista.set(2, rodadas);
+  const notasDe = (n) => ({ relevancia: Math.round(n / 10), clareza: Math.round(n / 10), exemplos: Math.round(n / 10) - 1, postura: Math.min(10, Math.round(n / 10) + 1) });
+  sessoesEntrevista.set(2, LAUDOS_BIANCA.map(([rodada, nota, resumo], i) => {
+    const id = proximaSessaoId++;
+    const quando = diasAtras(20 - i * 2, 15);
+    return {
+      id, status: 'concluida', respostas: 6,
+      mensagens: [
+        { remetente: 'ai', mensagem: PERGUNTA_INICIAL, categoria: null, em: quando },
+        { remetente: 'user', mensagem: 'Gosto de organizar informação; na lan house do meu tio eu fazia a planilha do caixa.', categoria: 'resposta', em: quando },
+        { remetente: 'ai', mensagem: 'Obrigada pela conversa! Foi muito bom te conhecer melhor.', categoria: null, em: quando },
+      ],
+      laudo: {
+        sessao_id: id, nota_geral: nota, notas: notasDe(nota), resumo, rodada_id: rodadas[rodada - 1].id,
+        pontos_fortes: ['Trouxe exemplos reais do trabalho na lan house.'], pontos_melhoria: ['Conte o resultado do que fez, com números quando possível.'],
+        parecer_recrutador: 'Você tem boas experiências para contar; continue treinando para falar delas com mais segurança.',
+        xp_concedido: Math.round((nota / 100) * 150), respostas: 6, por_ia: true, laudo_em: quando,
+      },
+    };
+  }));
+})();
 const entrevistas = new Map([[2, [
   { remetente: 'ai', mensagem: 'Me conta um pouco sobre você e por que quer trabalhar com dados.', em: diasAtras(5) },
   { remetente: 'user', mensagem: 'Gosto de organizar informação. Na lan house eu fazia a planilha de caixa do meu tio.', feedback: 'Ótimo exemplo prático! Mostra iniciativa.', xp: 40, em: diasAtras(5) },
@@ -677,7 +721,7 @@ const concederXpDemo = (xp) => {
 const mensagensDemo = criarMockMensagens({ ALUNOS, TURMAS, estado, respostaFake, erroFake, agoraIso, diasAtras });
 const acessoDemo = criarMockAcesso({ ALUNOS, TURMAS, respostaFake, erroFake, agoraIso, diasAtras });
 const certificacaoDemo = criarMockCertificacao({ respostaFake, erroFake, registrarEvidencias });
-const gestaoDemo = criarMockGestao({ ALUNOS, respostaFake, erroFake, agoraIso, diasAtras });
+const gestaoDemo = criarMockGestao({ ALUNOS, respostaFake, erroFake, agoraIso, diasAtras, alunoDoPedido: (id) => acessoDemo.nomeDoPedido(id) });
 const trilha = criarMockTrilha({ ALUNOS, estado, respostaFake, erroFake, registrarEvidencias, concederXp: concederXpDemo, nomeTurma, agoraIso, diasAtras });
 
 // Contas da gestão e auditoria (mockGestao.js): login por conta, travas do
