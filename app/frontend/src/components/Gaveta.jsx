@@ -1,9 +1,12 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { IconClose } from './icons';
+import useTravarRolagem from '../hooks/useTravarRolagem';
 
 // Painel lateral/modal genérico
-const Gaveta = ({ titulo, aoFechar, larga = false, children }) => (
+const Gaveta = ({ titulo, aoFechar, larga = false, children }) => {
+  useTravarRolagem();
+  return (
   <motion.div className="adm-fundo" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={aoFechar}>
     <motion.div
       className={`adm-gaveta ${larga ? 'larga' : ''}`}
@@ -22,6 +25,7 @@ const Gaveta = ({ titulo, aoFechar, larga = false, children }) => (
       {children}
     </motion.div>
   </motion.div>
-);
+  );
+};
 
 export default Gaveta;

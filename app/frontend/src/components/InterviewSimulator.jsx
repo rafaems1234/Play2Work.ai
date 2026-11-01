@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import useTravarRolagem from '../hooks/useTravarRolagem';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
@@ -29,6 +30,7 @@ const paraTela = (mensagens) => mensagens.map((m, i) => ({ id: i, remetente: m.r
 
 // ------------------------------------------------------------------ laudo final (modal)
 const ModalLaudo = ({ laudo, aoFechar, aoNovaEntrevista }) => {
+  useTravarRolagem();
   const nota = useCountUp(laudo.nota_geral || 0);
   return (
     <motion.div

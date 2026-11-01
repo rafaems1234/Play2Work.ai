@@ -5,8 +5,10 @@ import { apiFetch, lerErro, salvarToken } from '../api';
 import { CampoSenha } from './LoginAluno';
 import TechBackground from './TechBackground';
 import { Avatar, SeletorFoto } from './FotoPerfil';
+import useTravarRolagem from '../hooks/useTravarRolagem';
 
 const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto, forcado = false, aoFechar, aoAtualizarLinkedin, aoSair }) => {
+  useTravarRolagem();
   const [erroFoto, setErroFoto] = useState(null);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
 
