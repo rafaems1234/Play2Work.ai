@@ -26,10 +26,17 @@ const dispararConfete = () => {
   setTimeout(() => confetti({ particleCount: 60, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors: cores }), 150);
 };
 
+// Laudo provisório: saiu pelas regras, com outra régua, então não entra na rodada nem na média
+const AVISO_PROVISORIO = {
+  cota_semanal: 'Você já usou os laudos oficiais desta semana. Este é um laudo de treino: não entra na rodada nem na sua média. Os oficiais voltam na segunda-feira.',
+  ia_indisponivel: 'A IA não respondeu agora, então este laudo saiu pelas regras do sistema. É um laudo de treino: não entra na rodada nem na sua média.',
+  teto_mensal: 'A IA está pausada até o fim do mês, então este laudo saiu pelas regras do sistema. É um laudo de treino: não entra na rodada nem na sua média.',
+};
+
 const paraTela = (mensagens) => mensagens.map((m, i) => ({ id: i, remetente: m.remetente, texto: m.mensagem, categoria: m.categoria, novo: false }));
 
 // ------------------------------------------------------------------ laudo final (modal)
-const ModalLaudo = ({ laudo, aoFechar, aoNovaEntrevista }) => {
+const ModalLaudo = ({ laudo, podeComecar, aoFechar, aoNovaEntrevista }) => {
   useTravarRolagem();
   const nota = useCountUp(laudo.nota_geral || 0);
   return (
@@ -61,12 +68,19 @@ const ModalLaudo = ({ laudo, aoFechar, aoNovaEntrevista }) => {
               {laudo.limite_diario
                 ? 'Você já ganhou XP com 3 entrevistas hoje. O laudo vale do mesmo jeito; o XP volta amanhã.'
                 : `${laudo.respostas} respostas avaliadas na entrevista inteira.`}
-              {!laudo.por_ia && (DEMO_MODE
+              {laudo.oficial !== false && !laudo.por_ia && (DEMO_MODE
                 ? ' Na demonstração, o laudo sai pelas regras do sistema; com a IA ligada, ele cita o que você disse.'
                 : ' Laudo gerado pelas regras do sistema (a IA não respondeu agora).')}
             </div>
           </div>
         </div>
+
+        {laudo.oficial === false && (
+          <div className="laudo-bloco melhorar" role="note" style={{ marginTop: 0, marginBottom: '14px' }}>
+            <div className="laudo-titulo"><IconWarning /> Laudo de treino (provisório)</div>
+            {AVISO_PROVISORIO[laudo.motivo_provisorio] || AVISO_PROVISORIO.ia_indisponivel}
+          </div>
+        )}
 
         <div style={{ display: 'grid', gap: '6px', marginBottom: '18px' }}>
           {CRITERIOS.map(([id, rotulo]) => (
@@ -101,7 +115,9 @@ const ModalLaudo = ({ laudo, aoFechar, aoNovaEntrevista }) => {
         )}
         <p style={{ fontSize: '11px', color: 'var(--txt-5)', margin: '12px 0 0' }}>A coordenação da escola vê este laudo na sua ficha.</p>
 
-        <button type="button" onClick={aoNovaEntrevista} className="sim-restart-btn" style={{ width: '100%', marginTop: '16px' }}>Fazer outra entrevista</button>
+        {podeComecar
+          ? <button type="button" onClick={aoNovaEntrevista} className="sim-restart-btn" style={{ width: '100%', marginTop: '16px' }}>Fazer outra entrevista</button>
+          : <p style={{ fontSize: '13px', color: 'var(--txt-3)', textAlign: 'center', margin: '16px 0 0' }}>A próxima entrevista libera amanhã.</p>}
       </motion.div>
     </motion.div>
   );
@@ -117,6 +133,9 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
   const [gerandoLaudo, setGerandoLaudo] = useState(false);
   const [laudo, setLaudo] = useState(null);
   const [erro, setErro] = useState(null);
+  // Cotas do servidor: 1 entrevista por dia e N laudos oficiais por semana (sem cotas = demonstração, sem trava)
+  const [cotas, setCotas] = useState(null);
+  const [bloqueio, setBloqueio] = useState(null);
   const fimRef = useRef(null);
 
   const pontos = status?.xp_total ?? 0;
@@ -134,7 +153,9 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
     setErro(null);
     setLaudo(null);
     const r = await apiFetch('/api/entrevista/sessoes', { method: 'POST', body: JSON.stringify({ abertura }) });
+    if (r.status === 429) { setBloqueio(await lerErro(r, 'Você já fez a entrevista de hoje.')); return; }
     if (!r.ok) { setErro(await lerErro(r, 'Não foi possível começar a entrevista.')); return; }
+    setBloqueio(null);
     aplicarSessao(await r.json());
   }, []);
 
@@ -148,7 +169,9 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
       try {
         const r = await apiFetch('/api/entrevista/sessao-atual');
         const dados = r.ok ? await r.json() : { sessao: null };
+        if (dados.cotas) setCotas(dados.cotas);
         if (dados.sessao) aplicarSessao(dados.sessao);
+        else if (dados.cotas && !dados.cotas.pode_comecar) setBloqueio('Você já fez a entrevista de hoje. Amanhã tem outra! Enquanto isso, que tal o Quiz do Dia?');
         else await novaEntrevista('inicial');
       } catch (err) {
         console.error(err);
@@ -171,6 +194,7 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
       if (!r.ok) throw new Error(await lerErro(r, 'Tive um probleminha para processar isso. Pode tentar de novo?'));
       const dados = await r.json();
       if (!dados.contou) tocarSomErro();
+      if (dados.cotas) setCotas(dados.cotas);
       setSessao((s) => ({ ...s, status: dados.status, respostas: dados.respostas }));
       setHistorico((prev) => [
         ...prev.slice(0, -1),
@@ -194,6 +218,7 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
       const r = await apiFetch(`/api/entrevista/sessoes/${sessao.id}/laudo`, { method: 'POST' });
       if (!r.ok) throw new Error(await lerErro(r, 'Não foi possível gerar o laudo. Tente de novo.'));
       const dados = await r.json();
+      if (dados.cotas) setCotas(dados.cotas);
       setLaudo(dados);
       setSessao((s) => ({ ...s, status: 'concluida' }));
       if (dados.xp_concedido > 0) { tocarSomAcerto(); dispararConfete(); }
@@ -219,6 +244,7 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
   const maximo = sessao?.maximo ?? 7;
   const aguardandoLaudo = sessao?.status === 'aguardando_laudo';
   const concluida = sessao?.status === 'concluida';
+  const podeComecar = !cotas || cotas.pode_comecar;
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
@@ -290,6 +316,11 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
           <div>
             <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--txt-1b)', display: 'flex', alignItems: 'center', gap: '8px' }}><IconRobot /> IA Recrutadora</div>
             <div style={{ fontSize: '12px', color: 'var(--txt-3)', marginTop: '2px' }}>Entrevista para Jovem Aprendiz · a avaliação sai no laudo, no final</div>
+            {cotas && (
+              <div style={{ fontSize: '11px', color: 'var(--txt-4)', marginTop: '4px' }} title="Laudos oficiais contam na rodada. Depois deles, o laudo da semana sai como treino.">
+                Laudos oficiais desta semana: {Math.min(cotas.laudos_oficiais_semana, cotas.laudos_oficiais_por_semana)} de {cotas.laudos_oficiais_por_semana} · {cotas.entrevistas_por_dia} entrevista por dia
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             {sessao && (
@@ -304,7 +335,7 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
               <div className="sim-pulse" style={{ background: carregando ? '#facc15' : 'var(--ok)' }} />
               <span style={{ fontSize: '12px', color: 'var(--txt-4)' }}>{carregando ? 'ouvindo' : 'online'}</span>
             </div>
-            {sessao?.status === 'em_andamento' && respostas > 0 && (
+            {sessao?.status === 'em_andamento' && respostas > 0 && podeComecar && (
               <button type="button" onClick={() => novaEntrevista('recomeco')} className="sim-end-btn" title="Descarta esta entrevista sem laudo">Recomeçar</button>
             )}
           </div>
@@ -344,7 +375,17 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
 
         {/* Resposta / fim da entrevista */}
         <AnimatePresence mode="wait">
-          {aguardandoLaudo || concluida ? (
+          {bloqueio && !aguardandoLaudo ? (
+            <motion.div key="bloqueio" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '20px' }}>
+              <div className="sim-complete-card">
+                <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--txt-1b)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <IconTrophy /> Entrevista do dia feita
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--txt-3)', margin: '6px 0 0' }}>{bloqueio}</div>
+                {laudo && <button type="button" className="sim-end-btn" style={{ marginTop: '12px' }} onClick={() => setLaudo({ ...laudo, aberto: true })}>Ver laudo</button>}
+              </div>
+            </motion.div>
+          ) : aguardandoLaudo || concluida ? (
             <motion.div key="fim" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '20px' }}>
               <div className="sim-complete-card">
                 <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--txt-1b)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
@@ -356,7 +397,9 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
                 {concluida ? (
                   <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
                     {laudo && <button type="button" className="sim-end-btn" onClick={() => setLaudo({ ...laudo, aberto: true })}>Ver laudo</button>}
-                    <button type="button" className="sim-restart-btn" onClick={() => novaEntrevista('recomeco')}>Nova entrevista</button>
+                    {podeComecar
+                      ? <button type="button" className="sim-restart-btn" onClick={() => novaEntrevista('recomeco')}>Nova entrevista</button>
+                      : <span style={{ fontSize: '12px', color: 'var(--txt-4)', alignSelf: 'center' }}>A próxima entrevista libera amanhã.</span>}
                   </div>
                 ) : (
                   <button type="button" className="sim-restart-btn" onClick={gerarLaudo} disabled={gerandoLaudo}>
@@ -390,7 +433,7 @@ const InterviewSimulator = ({ status, aoGanharXp }) => {
       {createPortal(
         <AnimatePresence>
           {laudo && laudo.aberto !== false && (
-            <ModalLaudo laudo={laudo} aoFechar={() => setLaudo({ ...laudo, aberto: false })} aoNovaEntrevista={() => novaEntrevista('recomeco')} />
+            <ModalLaudo laudo={laudo} podeComecar={podeComecar} aoFechar={() => setLaudo({ ...laudo, aberto: false })} aoNovaEntrevista={() => novaEntrevista('recomeco')} />
           )}
         </AnimatePresence>,
         document.body,

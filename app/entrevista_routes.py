@@ -5,22 +5,34 @@ Rotas do simulador de entrevista contínua (regras em entrevista.py):
   POST /entrevista/sessoes                 começa uma entrevista nova
   POST /entrevista/sessoes/{id}/mensagens  uma troca com a entrevistadora
   POST /entrevista/sessoes/{id}/laudo      encerra e gera o laudo final (uma chamada à IA)
+
+Cotas por aluno (o que segura o custo da IA):
+  - ENTREVISTAS_POR_DIA entrevistas por dia. Conta a entrevista em que o aluno
+    já mandou alguma mensagem: "Recomeçar" depois de responder não abre outra.
+  - LAUDOS_OFICIAIS_POR_SEMANA laudos oficiais por semana (segunda a domingo).
+    Passou disso, o laudo sai PROVISÓRIO: pelas regras, sem chamar a IA, sem
+    entrar na rodada nem no mapa de competências. Também sai provisório quando
+    a IA falha ou o teto de gasto do mês bate -- a régua das regras é outra, e
+    misturar as duas na média seria injusto com quem pegou o dia ruim.
+    Num servidor SEM chave de IA, as regras são o motor de todo mundo e o
+    laudo delas é oficial.
 """
 import logging
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session
 
 import entrevista
 from auth import get_estudante_atual
 from competencias import registrar_evidencias
 from database import get_db
-from fuso import agora_utc, inicio_do_dia_utc
+from fuso import agora_utc, inicio_da_semana_utc, inicio_do_dia_utc
 from models import Estudante, HistoricoEntrevista, RodadaEntrevista, SessaoEntrevista
-from services import AIService
+import uso_ia
+from services import AIService, ia_configurada, motor_ia
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["First2Work.AI - Simulador de entrevista"])
@@ -54,8 +66,45 @@ def laudo_para_dict(sessao: SessaoEntrevista) -> dict:
         "xp_concedido": sessao.xp_concedido or 0,
         "respostas": sessao.respostas,
         "por_ia": bool(sessao.laudo_por_ia),
+        "oficial": sessao.laudo_oficial is not False,   # laudos antigos (nulo) eram todos oficiais
+        "motor": sessao.laudo_motor,
+        "motivo_provisorio": sessao.laudo_motivo_provisorio,
         "laudo_em": _iso(sessao.laudo_em),
     }
+
+
+def entrevistas_de_hoje(db: Session, estudante_id: int) -> int:
+    """Entrevistas começadas hoje que já gastaram IA (o aluno respondeu algo, ou já terminou)."""
+    respondeu = exists().where(HistoricoEntrevista.sessao_id == SessaoEntrevista.id, HistoricoEntrevista.remetente == "user")
+    return int(db.query(func.count(SessaoEntrevista.id)).filter(
+        SessaoEntrevista.estudante_id == estudante_id,
+        SessaoEntrevista.iniciada_em >= inicio_do_dia_utc(),
+        or_(SessaoEntrevista.status.in_(("aguardando_laudo", "concluida")), respondeu),
+    ).scalar() or 0)
+
+
+def laudos_oficiais_da_semana(db: Session, estudante_id: int) -> int:
+    return int(db.query(func.count(SessaoEntrevista.id)).filter(
+        SessaoEntrevista.estudante_id == estudante_id,
+        SessaoEntrevista.status == "concluida",
+        SessaoEntrevista.laudo_oficial.is_(True),
+        SessaoEntrevista.laudo_em >= inicio_da_semana_utc(),
+    ).scalar() or 0)
+
+
+def cotas(db: Session, estudante_id: int) -> dict:
+    hoje = entrevistas_de_hoje(db, estudante_id)
+    semana = laudos_oficiais_da_semana(db, estudante_id)
+    return {
+        "entrevistas_hoje": hoje,
+        "entrevistas_por_dia": entrevista.ENTREVISTAS_POR_DIA,
+        "pode_comecar": hoje < entrevista.ENTREVISTAS_POR_DIA,
+        "laudos_oficiais_semana": semana,
+        "laudos_oficiais_por_semana": entrevista.LAUDOS_OFICIAIS_POR_SEMANA,
+    }
+
+
+MENSAGEM_LIMITE_DIARIO = "Você já fez a entrevista de hoje. Amanhã tem outra! Enquanto isso, que tal o Quiz do Dia?"
 
 
 def rodada_para_dict(rodada: RodadaEntrevista, notas: list[int]) -> dict:
@@ -139,12 +188,17 @@ def sessao_atual(estudante: Estudante = Depends(get_estudante_atual), db: Sessio
     sessao = db.query(SessaoEntrevista).filter(
         SessaoEntrevista.estudante_id == estudante.id, SessaoEntrevista.status.in_(ABERTAS),
     ).order_by(SessaoEntrevista.id.desc()).first()
-    return {"sessao": _sessao_para_dict(sessao, _mensagens(db, sessao.id)) if sessao else None}
+    return {"sessao": _sessao_para_dict(sessao, _mensagens(db, sessao.id)) if sessao else None, "cotas": cotas(db, estudante.id)}
 
 
 @router.post("/entrevista/sessoes", status_code=201)
 def nova_sessao(data: NovaSessaoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
-    """Começa uma entrevista. A que estava aberta (sem laudo) fica como abandonada."""
+    """
+    Começa uma entrevista. A que estava aberta (sem laudo) fica como abandonada.
+    Só ENTREVISTAS_POR_DIA por dia (429 depois disso).
+    """
+    if entrevistas_de_hoje(db, estudante.id) >= entrevista.ENTREVISTAS_POR_DIA:
+        raise HTTPException(status_code=429, detail=MENSAGEM_LIMITE_DIARIO)
     for antiga in db.query(SessaoEntrevista).filter(
         SessaoEntrevista.estudante_id == estudante.id, SessaoEntrevista.status.in_(ABERTAS),
     ).all():
@@ -194,6 +248,7 @@ def enviar_mensagem(sessao_id: int, data: MensagemRequest, estudante: Estudante 
         "minimo": entrevista.RESPOSTAS_MINIMAS,
         "maximo": entrevista.RESPOSTAS_MAXIMAS,
         "status": sessao.status,
+        "cotas": cotas(db, estudante.id),
     }
 
 
@@ -201,7 +256,8 @@ def enviar_mensagem(sessao_id: int, data: MensagemRequest, estudante: Estudante 
 def gerar_laudo(sessao_id: int, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     """
     Uma chamada à IA com a conversa inteira. Nota geral e XP saem do servidor.
-    Só as primeiras entrevistas do dia dão XP (o laudo sai sempre).
+    Só as primeiras entrevistas do dia dão XP (o laudo sai sempre). Passada a
+    cota semanal de laudos oficiais, nem chama a IA: sai o laudo provisório.
     """
     sessao = _sessao_do_aluno(db, sessao_id, estudante, travar=True)
     if sessao.status == "concluida":
@@ -212,7 +268,20 @@ def gerar_laudo(sessao_id: int, estudante: Estudante = Depends(get_estudante_atu
     mensagens = _mensagens(db, sessao.id)
     respostas = [m.mensagem for m in mensagens if m.remetente == "user" and m.categoria == "resposta"]
     conversa = conversa_em_texto(mensagens)
-    laudo = entrevista.montar_laudo(respostas, lambda: AIService.gerar_laudo_entrevista(conversa, estudante.itinerario))
+    cota_esgotada = laudos_oficiais_da_semana(db, estudante.id) >= entrevista.LAUDOS_OFICIAIS_POR_SEMANA
+    if cota_esgotada:
+        laudo = entrevista.montar_laudo(respostas, lambda: None)
+    else:
+        laudo = entrevista.montar_laudo(respostas, lambda: AIService.gerar_laudo_entrevista(conversa, estudante.itinerario))
+    if laudo["por_ia"]:
+        oficial, motivo = True, None
+    elif cota_esgotada:
+        oficial, motivo = False, "cota_semanal"
+    elif not ia_configurada():
+        oficial, motivo = True, None   # sem IA no servidor: a régua das regras vale pra todos
+    else:
+        oficial, motivo = False, ("teto_mensal" if uso_ia.teto_atingido() else "ia_indisponivel")
+        logger.warning("Laudo provisório da sessão %s (%s): a IA não respondeu.", sessao.id, motivo)
 
     laudos_hoje = db.query(func.count(SessaoEntrevista.id)).filter(
         SessaoEntrevista.estudante_id == estudante.id, SessaoEntrevista.status == "concluida",
@@ -231,19 +300,25 @@ def gerar_laudo(sessao_id: int, estudante: Estudante = Depends(get_estudante_atu
     sessao.xp_concedido = xp
     sessao.laudo_por_ia = laudo["por_ia"]
     sessao.resumo = laudo["resumo"]
-    rodada = registrar_na_rodada(db, estudante.id, sessao)
+    sessao.laudo_oficial = oficial
+    sessao.laudo_motor = motor_ia() if laudo["por_ia"] else "regras"
+    sessao.laudo_motivo_provisorio = motivo
+    # Provisório não entra na rodada nem no mapa: a régua é outra
+    rodada = registrar_na_rodada(db, estudante.id, sessao) if oficial else None
 
-    # Entrevista concluída é treino do dia e vira evidência nos eixos que ela exercita
+    # Entrevista concluída é treino do dia (XP e ofensiva valem mesmo provisória)
     mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp)
-    notas = laudo["notas"]
-    registrar_evidencias(db, estudante.id, {
-        "comunicacao": round((notas["clareza"] + notas["postura"]) / 2 * 10),
-        "trabalho_projeto_vida": notas["relevancia"] * 10,
-        "autoconhecimento": notas["exemplos"] * 10,
-    }, origem="entrevista")
+    if oficial:
+        notas = laudo["notas"]
+        registrar_evidencias(db, estudante.id, {
+            "comunicacao": round((notas["clareza"] + notas["postura"]) / 2 * 10),
+            "trabalho_projeto_vida": notas["relevancia"] * 10,
+            "autoconhecimento": notas["exemplos"] * 10,
+        }, origem="entrevista")
     db.commit()
     return {
         **laudo_para_dict(sessao),
+        "cotas": cotas(db, estudante.id),
         "limite_diario": limite_diario,
         "rodada": rodada,
         "novos_pontos_totais": estudante.xp_total,

@@ -1371,6 +1371,7 @@ def sessao_mock(status="em_andamento", respostas=0, **extra):
 def test_nova_sessao_abandona_a_aberta_e_comeca_com_a_abertura(mock_db, mock_estudante_logado):
     antiga = sessao_mock()
     mock_db.query().filter().all.return_value = [antiga]
+    mock_db.query().filter().scalar.return_value = 0  # nenhuma entrevista hoje
     corpo = client.post("/api/entrevista/sessoes", json={"abertura": "recomeco"}).json()
     assert antiga.status == "abandonada"
     assert corpo["mensagens"][0]["mensagem"] == PERGUNTA_RECOMECO and corpo["maximo"] == RESPOSTAS_MAXIMAS
@@ -1438,7 +1439,7 @@ def test_laudo_depois_do_limite_diario_sai_sem_xp(mock_db, mock_estudante_logado
 
 
 def test_laudo_ja_gerado_nao_da_xp_de_novo(mock_db, mock_estudante_logado):
-    sessao = sessao_mock(status="concluida", respostas=5, nota_geral=70, notas={}, pontos_fortes=[], pontos_melhoria=[], parecer_recrutador="ok", xp_concedido=105, laudo_por_ia=True, laudo_em=None)
+    sessao = sessao_mock(status="concluida", respostas=5, nota_geral=70, notas={}, pontos_fortes=[], pontos_melhoria=[], parecer_recrutador="ok", xp_concedido=105, laudo_por_ia=True, laudo_em=None, laudo_oficial=True, laudo_motor="gemini:teste", laudo_motivo_provisorio=None)
     mock_db.query().filter().with_for_update().first.return_value = sessao
     with patch("entrevista_routes.AIService.processar_gamificacao_pos_atividade") as gamificacao:
         corpo = client.post("/api/entrevista/sessoes/5/laudo").json()
@@ -2511,3 +2512,122 @@ def test_laudo_sem_ia_nao_se_contradiz():
         laudo = laudo_sem_ia(respostas)
         assert laudo["pontos_fortes"] and laudo["pontos_melhoria"]
         assert not set(laudo["pontos_fortes"]) & set(laudo["pontos_melhoria"])
+
+# ------------------------------------------------------------------ cotas e teto da IA
+
+import services
+import uso_ia
+from entrevista import ENTREVISTAS_POR_DIA, LAUDOS_OFICIAIS_POR_SEMANA
+
+def test_segunda_entrevista_no_mesmo_dia_da_429_e_nao_abandona_a_atual(mock_db, mock_estudante_logado):
+    antiga = sessao_mock()
+    mock_db.query().filter().all.return_value = [antiga]
+    mock_db.query().filter().scalar.return_value = ENTREVISTAS_POR_DIA
+    resposta = client.post("/api/entrevista/sessoes", json={"abertura": "recomeco"})
+    assert resposta.status_code == 429 and "amanhã" in resposta.json()["detail"].lower()
+    assert antiga.status == "em_andamento"
+
+
+def _laudo_pronto(mock_db, contagem):
+    sessao = sessao_mock(status="aguardando_laudo", respostas=5)
+    mock_db.query().filter().with_for_update().first.return_value = sessao
+    mock_db.query().filter().order_by().all.return_value = []
+    mock_db.query().filter().scalar.return_value = contagem
+    return sessao
+
+
+DA_IA = {"notas": {"relevancia": 9, "clareza": 8, "exemplos": 7, "postura": 9}, "pontos_fortes": ["Bons exemplos"], "pontos_melhoria": ["Mais objetividade"], "parecer_recrutador": "Boa entrevista."}
+
+
+def test_laudo_com_ia_e_oficial_e_grava_o_motor(mock_db, mock_estudante_logado):
+    sessao = _laudo_pronto(mock_db, 0)
+    with patch("entrevista_routes.AIService.gerar_laudo_entrevista", return_value=DA_IA), \
+         patch("entrevista_routes.AIService.processar_gamificacao_pos_atividade", return_value=None), \
+         patch("entrevista_routes.registrar_evidencias") as evidencias:
+        corpo = client.post("/api/entrevista/sessoes/5/laudo").json()
+    assert sessao.laudo_oficial is True and sessao.laudo_motor.startswith("gemini:") and sessao.laudo_motivo_provisorio is None
+    assert corpo["oficial"] and corpo["cotas"]["laudos_oficiais_por_semana"] == LAUDOS_OFICIAIS_POR_SEMANA
+    evidencias.assert_called_once()
+
+
+def test_depois_da_cota_semanal_o_laudo_sai_provisorio_sem_chamar_a_ia(mock_db, mock_estudante_logado):
+    sessao = _laudo_pronto(mock_db, LAUDOS_OFICIAIS_POR_SEMANA)
+    with patch("entrevista_routes.AIService.gerar_laudo_entrevista") as ia, \
+         patch("entrevista_routes.AIService.processar_gamificacao_pos_atividade", return_value=None), \
+         patch("entrevista_routes.registrar_na_rodada") as rodada, \
+         patch("entrevista_routes.registrar_evidencias") as evidencias:
+        corpo = client.post("/api/entrevista/sessoes/5/laudo").json()
+    ia.assert_not_called()
+    rodada.assert_not_called()
+    evidencias.assert_not_called()
+    assert sessao.laudo_oficial is False and sessao.laudo_motivo_provisorio == "cota_semanal" and sessao.laudo_motor == "regras"
+    assert not corpo["oficial"] and corpo["motivo_provisorio"] == "cota_semanal" and corpo["rodada"] is None
+
+
+@pytest.mark.parametrize("teto, motivo", [(False, "ia_indisponivel"), (True, "teto_mensal")])
+def test_ia_falhando_num_servidor_com_ia_deixa_o_laudo_provisorio(mock_db, mock_estudante_logado, teto, motivo):
+    sessao = _laudo_pronto(mock_db, 0)
+    with patch("entrevista_routes.AIService.gerar_laudo_entrevista", return_value=None), \
+         patch("entrevista_routes.AIService.processar_gamificacao_pos_atividade", return_value=None), \
+         patch("entrevista_routes.ia_configurada", return_value=True), \
+         patch("entrevista_routes.uso_ia.teto_atingido", return_value=teto), \
+         patch("entrevista_routes.registrar_na_rodada") as rodada:
+        client.post("/api/entrevista/sessoes/5/laudo")
+    assert sessao.laudo_oficial is False and sessao.laudo_motivo_provisorio == motivo
+    rodada.assert_not_called()
+
+
+def test_servidor_sem_ia_o_laudo_das_regras_e_oficial(mock_db, mock_estudante_logado):
+    sessao = _laudo_pronto(mock_db, 0)
+    with patch("entrevista_routes.AIService.gerar_laudo_entrevista", return_value=None), \
+         patch("entrevista_routes.AIService.processar_gamificacao_pos_atividade", return_value=None), \
+         patch("entrevista_routes.ia_configurada", return_value=False), \
+         patch("entrevista_routes.registrar_na_rodada", return_value=None) as rodada:
+        client.post("/api/entrevista/sessoes/5/laudo")
+    assert sessao.laudo_oficial is True and sessao.laudo_motor == "regras"
+    rodada.assert_called_once()
+
+
+def test_sem_teto_definido_nao_corta(monkeypatch):
+    monkeypatch.delenv("GEMINI_TETO_MENSAL_USD", raising=False)
+    assert uso_ia.teto_atingido() is False
+
+
+def test_teto_sem_preco_desliga_a_ia(monkeypatch):
+    monkeypatch.setenv("GEMINI_TETO_MENSAL_USD", "50")
+    monkeypatch.delenv("GEMINI_PRECO_ENTRADA_USD_POR_MILHAO", raising=False)
+    monkeypatch.setenv("GEMINI_PRECO_SAIDA_USD_POR_MILHAO", "1")
+    assert uso_ia.teto_atingido() is True
+
+
+@pytest.mark.parametrize("gasto, cortou", [(49.99, False), (50, True)])
+def test_teto_compara_o_gasto_do_mes(monkeypatch, gasto, cortou):
+    monkeypatch.setenv("GEMINI_TETO_MENSAL_USD", "50")
+    monkeypatch.setenv("GEMINI_PRECO_ENTRADA_USD_POR_MILHAO", "0,10")
+    monkeypatch.setenv("GEMINI_PRECO_SAIDA_USD_POR_MILHAO", "0.40")
+    with patch("database.SessionLocal"), patch("uso_ia.gasto_do_mes", return_value=gasto):
+        assert uso_ia.teto_atingido() is cortou
+
+
+def test_custo_conta_raciocinio_como_saida(monkeypatch):
+    monkeypatch.setenv("GEMINI_PRECO_ENTRADA_USD_POR_MILHAO", "1")
+    monkeypatch.setenv("GEMINI_PRECO_SAIDA_USD_POR_MILHAO", "4")
+    entrada, saida = uso_ia._tokens(MagicMock(prompt_token_count=1_000_000, candidates_token_count=200_000, thoughts_token_count=300_000))
+    assert (entrada, saida) == (1_000_000, 500_000)
+    assert uso_ia.custo_estimado(entrada, saida) == pytest.approx(3.0)
+
+
+def test_teto_batido_nem_chama_o_gemini():
+    with patch("services.uso_ia.teto_atingido", return_value=True), patch("services.client") as cliente:
+        with pytest.raises(uso_ia.TetoIaAtingido):
+            services.gerar_json_gemini("oi", dict)
+    cliente.models.generate_content.assert_not_called()
+
+
+def test_cada_chamada_soma_o_uso_do_mes():
+    resposta = MagicMock(text='{"ok": true}')
+    with patch("services.uso_ia.teto_atingido", return_value=False), patch("services.client") as cliente, \
+         patch("services.uso_ia.registrar") as registrar:
+        cliente.models.generate_content.return_value = resposta
+        assert services.gerar_json_gemini("oi", dict) == {"ok": True}
+    registrar.assert_called_once_with(services.MODELO_GEMINI, resposta.usage_metadata)

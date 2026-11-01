@@ -649,7 +649,9 @@ const LinhaLaudo = ({ l }) => {
         <td className="mono">{dataIsoParaBr(l.laudo_em)}</td>
         <td className="num"><strong style={{ color: corDaNotaLaudo(l.nota_geral) }}>{l.nota_geral}%</strong></td>
         <td><span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: corDaNotaLaudo(l.nota_geral) }} aria-label={l.nota_geral >= 75 ? 'verde' : l.nota_geral >= 50 ? 'amarelo' : 'vermelho'} /></td>
-        <td>{l.resumo || <span className="adm-vazio">sem resumo</span>}{!l.por_ia && <span className="adm-vazio"> · sem IA</span>}</td>
+        <td>{l.resumo || <span className="adm-vazio">sem resumo</span>}{l.oficial === false
+                        ? <span className="adm-vazio" title={{ cota_semanal: 'Passou dos laudos oficiais da semana', teto_mensal: 'Teto de gasto da IA do mês atingido', ia_indisponivel: 'A IA não respondeu' }[l.motivo_provisorio] || 'Saiu pelas regras do sistema'}> · provisório (fora da rodada)</span>
+                        : !l.por_ia && <span className="adm-vazio"> · sem IA</span>}</td>
       </tr>
       {aberto && (
         <tr style={{ cursor: 'default' }}>
