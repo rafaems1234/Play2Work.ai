@@ -1,7 +1,7 @@
 # First2Work.AI 🚀 
 > A plataforma do primeiro emprego · Treine. Evolua. Seja contratado.
 
-> **Marca:** o projeto se chamava *Play2Work.ai* e virou **First2Work.ai** em 01/11/2026 (logo F2W). O repositório e o endereço do site de demonstração continuam com o nome antigo, assim como as chaves internas do navegador e os nomes do banco/Docker, pra não quebrar logins salvos nem o deploy.
+> **Marca:** o projeto se chamava *Play2Work.ai* e virou **First2Work.ai** em 01/11/2026 (logo F2W). O repositório e o site de demonstração também foram renomeados (o endereço antigo `rafaems1234/Play2Work.ai` redireciona pro novo no GitHub, mas o site antigo no Pages sai do ar). As chaves internas do navegador (`play2work_*`) e os nomes do banco/Docker continuam com o nome antigo, pra não quebrar logins salvos nem o banco existente.
 
 O **First2Work.AI** é um ecossistema tecnológico completo projetado para democratizar o acesso à orientação profissional e impulsionar a empregabilidade de jovens estudantes em busca do primeiro emprego e vagas de Jovem Aprendiz.
 
@@ -103,7 +103,7 @@ O projeto foi construído seguindo rigorosos padrões de mercado de governança 
 ## 📂 Estrutura Arquitetural do Sistema
 
 ```text
-Play2Work.ai/
+First2Work.ai/
 ├── requirements.txt          # Dependências do ecossistema Python (.venv)
 └── app/                      # CORE DO BACK-END (FastAPI)
     ├── alembic/               # Migrações de schema versionadas (Alembic)
@@ -282,7 +282,7 @@ O front-end sobe em `http://localhost:5173` e já aponta para o back-end em `htt
 >
 > **Neste modo não há IA:** a entrevista segue a lista fixa de perguntas e avalia a resposta pelas mesmas regras de reserva do backend (tamanho, exemplos concretos, gírias, desvio de assunto), e o currículo é montado só com as frases e habilidades do texto digitado, com as mesmas recusas. A IA de verdade (Gemini) só roda com o backend ligado e `GEMINI_API_KEY` no `app/.env`.
 >
-> **Versão publicada:** o workflow `.github/workflows/deploy-pages.yml` publica o front em modo demonstração a cada push na `main` que mexa em `app/frontend/` — https://rafaems1234.github.io/Play2Work.ai/ (painel em `#admin`).
+> **Versão publicada:** o workflow `.github/workflows/deploy-pages.yml` publica o front em modo demonstração a cada push na `main` que mexa em `app/frontend/` — https://rafaems1234.github.io/First2Work.ai/ (painel em `#admin`).
 
 ### Logins do modo demonstração
 
