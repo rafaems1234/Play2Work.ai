@@ -40,6 +40,43 @@ jobs:
           pip install pip-audit
           pip-audit -r requirements.txt --progress-spinner off
 
+  banco:
+    # Um Postgres 16 de verdade: o banco nasce do zero como na primeira subida do
+    # contêiner, o Alembic confere que os modelos batem com as migrações e o teste
+    # de isolamento entre escolas (que nos testes comuns é pulado) roda pra valer.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: first2work_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d first2work_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/first2work_ci
+      FIRST2WORK_TEST_DB: postgresql://ci:ci@localhost:5432/first2work_ci
+      JWT_SECRET_KEY: segredo-so-do-ci-${{ github.run_id }}-0123456789abcdef
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r ../requirements.txt
+      - name: Banco do zero (como na 1ª subida do contêiner)
+        run: python preparar_banco.py
+      - name: Modelos batem com as migrações
+        run: alembic check
+      - name: Isolamento entre escolas num Postgres real
+        run: pytest -q test_multiescola.py
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
