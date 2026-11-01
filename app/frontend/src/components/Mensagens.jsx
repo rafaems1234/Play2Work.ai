@@ -50,7 +50,7 @@ export const useNaoLidas = (ativo, aoChegarNova) => {
     return () => clearInterval(id);
   }, [ativo, atualizar]);
 
-  // "(2) Play2Work.ai" na aba do navegador, como o WhatsApp Web
+  // "(2) First2Work.ai" na aba do navegador, como o WhatsApp Web
   useEffect(() => {
     // Inativo (painel da escola, login): não mexe no título -- quem estiver na tela cuida dele
     if (!ativo) return undefined;

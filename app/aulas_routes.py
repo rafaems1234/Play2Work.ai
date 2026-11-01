@@ -18,8 +18,8 @@ from aulas import (
 # Trilha EAD. A escola (professores) cadastra módulos, aulas, materiais e a
 # fixação; o aluno assiste, a plataforma registra a frequência e a escola
 # emite o relatório de carga horária. Regras de frequência em aulas.py.
-router_admin = APIRouter(prefix="/admin", tags=["Play2Work.AI - Trilha EAD (escola)"], dependencies=[Depends(get_admin_atual)])
-router_aluno = APIRouter(tags=["Play2Work.AI - Trilha EAD (aluno)"])
+router_admin = APIRouter(prefix="/admin", tags=["First2Work.AI - Trilha EAD (escola)"], dependencies=[Depends(get_admin_atual)])
+router_aluno = APIRouter(tags=["First2Work.AI - Trilha EAD (aluno)"])
 
 TAMANHO_MAXIMO_MATERIAL = 10 * 1024 * 1024  # "áudio leve": ~20 min de MP3 a 64 kbps
 # Tipo conferido pelos primeiros bytes, não pela extensão. Slides entram como PDF.

@@ -351,7 +351,7 @@ function App() {
             style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
           >
             <Logo size={32} />
-            <span style={{ fontSize: '20px', fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: '800', color: 'var(--txt-1)' }}>Play2Work<span className="gradient-text-live">.ai</span></span>
+            <span style={{ fontSize: '20px', fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: '800', color: 'var(--txt-1)' }}>First2Work<span className="gradient-text-live">.ai</span></span>
             {DEMO_MODE && (
               <span
                 title="Todos os dados nesta tela são fictícios, gerados no navegador -- não há backend/banco de dados rodando."

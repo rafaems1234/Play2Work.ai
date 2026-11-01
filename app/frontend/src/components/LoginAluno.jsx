@@ -250,7 +250,7 @@ const LoginAluno = ({ aoEntrar, aoVoltar, aoAbrirAdmin }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center', marginBottom: titulo ? '12px' : '10px' }}>
           <Logo size={34} />
           <span style={{ fontSize: '22px', fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: '800', color: 'var(--txt-1)' }}>
-            Play2Work<span className="gradient-text-live">.ai</span>
+            First2Work<span className="gradient-text-live">.ai</span>
           </span>
         </div>
         {titulo && <h1 style={{ fontSize: '17px', fontWeight: '800', color: 'var(--txt-1)', textAlign: 'center', margin: '0 0 6px' }}>{titulo}</h1>}
@@ -328,8 +328,8 @@ const LoginAluno = ({ aoEntrar, aoVoltar, aoAbrirAdmin }) => {
           <div style={{ marginTop: '18px', fontSize: '12px', color: 'var(--aviso)', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: '12px', padding: '10px 12px', lineHeight: 1.6 }}>
             <IconMask style={{ verticalAlign: '-2px' }} /> Demonstração:{' '}
             {modo === 'entrar' ? (
-              <>usuário <strong>rafael.sozza</strong>, senha <strong>play2work123</strong>{' '}
-                <button type="button" className="login-link" style={{ color: 'var(--aviso)', textDecoration: 'underline', padding: 0 }} onClick={() => { setUsuario('rafael.sozza'); setSenha('play2work123'); }}>preencher</button>
+              <>usuário <strong>rafael.sozza</strong>, senha <strong>first2work123</strong>{' '}
+                <button type="button" className="login-link" style={{ color: 'var(--aviso)', textDecoration: 'underline', padding: 0 }} onClick={() => { setUsuario('rafael.sozza'); setSenha('first2work123'); }}>preencher</button>
               </>
             ) : (
               <>primeiro acesso da Bianca: CPF <strong>222.572.222-61</strong>, código <strong>246810</strong>{' '}

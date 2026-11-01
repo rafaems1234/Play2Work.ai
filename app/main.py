@@ -23,7 +23,7 @@ logging.basicConfig(
 )
 
 
-app = FastAPI(title="Play2Work AI API")
+app = FastAPI(title="First2Work AI API")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -70,7 +70,7 @@ app.add_middleware(MiddlewareAuditoria)
 def read_root():
     return {
         "status": "Online",
-        "projeto": "Play2Work.AI",
+        "projeto": "First2Work.AI",
         "contexto": "Inclusão produtiva de jovens com IA e gamificação"
     }
 

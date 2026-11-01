@@ -2,7 +2,7 @@
 
 > Lista de cláusulas a discutir com o advogado e com a escola. Não é minuta pronta. Ver [README](README.md).
 
-1. **Papéis:** a escola é a **controladora** dos dados dos alunos e da equipe; o Play2Work.ai é o **operador** e só trata os dados conforme as instruções da escola e este contrato.
+1. **Papéis:** a escola é a **controladora** dos dados dos alunos e da equipe; o First2Work.ai é o **operador** e só trata os dados conforme as instruções da escola e este contrato.
 2. **Objeto do tratamento:** preparação para o mundo do trabalho, acompanhamento pedagógico, indicação a vagas de Jovem Aprendiz, controle de carga horária EAD e certificados.
 3. **Suboperadores:** Google (API Gemini, para o simulador de entrevista e o gerador de currículo) e `[provedor de hospedagem]`. O operador avisa a escola antes de trocar ou incluir suboperador.
 4. **Plano da IA:** compromisso de usar plano da API que **não use o conteúdo para treinar modelos**.

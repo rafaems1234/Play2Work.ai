@@ -6,7 +6,7 @@ from database import Base
 
 class Escola(Base):
     """
-    Tabela 'escolas': cada escola (cliente) do Play2Work. Quase todas as outras
+    Tabela 'escolas': cada escola (cliente) do First2Work. Quase todas as outras
     tabelas têm escola_id (mixin EscopoEscola) e toda consulta feita por um
     aluno ou por uma conta da gestão já sai filtrada pela escola dela
     (tenancy.py) -- uma escola nunca vê dado de outra.

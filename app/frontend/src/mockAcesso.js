@@ -63,7 +63,7 @@ export const criarMockAcesso = ({ ALUNOS, TURMAS, respostaFake, erroFake, agoraI
 
   // Situação inicial da demonstração: Rafael já tem senha, Bianca vai fazer o
   // primeiro acesso, os alunos 3 a 8 já entraram e os últimos ainda não.
-  Object.assign(acessos.get(1), { senha: 'play2work123', senhaEm: diasAtras(20) });
+  Object.assign(acessos.get(1), { senha: 'first2work123', senhaEm: diasAtras(20) });
   Object.assign(acessos.get(2), { codigo: '246810', codigoExpira: emDias(CODIGO_VALIDADE_DIAS) });
   ALUNOS.filter((a) => a.id >= 3 && a.id <= 8).forEach((a) => Object.assign(acessos.get(a.id), { senha: `demo-${a.id}-senha1`, senhaEm: diasAtras(10 + a.id) }));
 

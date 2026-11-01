@@ -10,8 +10,8 @@ import { IconBriefcase, IconRobot, IconQuiz, IconGraduationCap, IconSparkle, Ico
 // antes de entrar na plataforma.
 
 const LINHAS_TITULO = [
-  { texto: 'Jogue.', destaque: false },
-  { texto: 'Aprenda.', destaque: false },
+  { texto: 'Treine.', destaque: false },
+  { texto: 'Evolua.', destaque: false },
   { texto: 'Seja contratado.', destaque: true },
 ];
 
@@ -69,7 +69,7 @@ const Terminal = () => {
         <span style={{ background: '#ff5f57' }} />
         <span style={{ background: '#febc2e' }} />
         <span style={{ background: '#28c840' }} />
-        <div className="intro-terminal-titulo">play2work · motor de IA</div>
+        <div className="intro-terminal-titulo">first2work · motor de IA</div>
       </div>
       <div className="intro-terminal-corpo">
         {LINHAS_TERMINAL.slice(0, visiveis).map((linha) => (
@@ -233,7 +233,7 @@ const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
         <header className="intro-topo">
           <div className="intro-marca">
             <Logo size={36} />
-            <span>Play2Work<span className="gradient-text-live">.ai</span></span>
+            <span>First2Work<span className="gradient-text-live">.ai</span></span>
           </div>
           <div className="intro-topo-tag">// Ensino Médio · Jovem Aprendiz</div>
         </header>
@@ -270,7 +270,7 @@ const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.7 }}
             >
-              O Play2Work conecta o <strong>itinerário que você faz na escola</strong> às empresas que
+              O First2Work conecta o <strong>itinerário que você faz na escola</strong> às empresas que
               contratam <strong>Jovem Aprendiz</strong> na sua área. E pega na sua mão no caminho:
               treino diário, entrevista simulada com IA e currículo pronto em PDF.
               Feito pra quem vai ter a <strong>primeira experiência</strong>.
@@ -354,7 +354,7 @@ const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
         </section>
 
         <footer className="intro-rodape">
-          <span>Play2Work.ai © 2026</span>
+          <span>First2Work.ai © 2026</span>
           <span>Do itinerário à primeira vaga</span>
         </footer>
       </div>

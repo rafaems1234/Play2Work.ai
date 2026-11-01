@@ -1,4 +1,4 @@
-# Política de Privacidade do Play2Work.ai — RASCUNHO
+# Política de Privacidade do First2Work.ai — RASCUNHO
 
 > Rascunho técnico para revisão jurídica. Não publicar sem revisão de advogado. Ver [README](README.md).
 
@@ -6,10 +6,10 @@
 
 ## 1. Quem somos e quem decide sobre os seus dados
 
-O Play2Work.ai é uma plataforma usada pela sua escola para preparar estudantes do Ensino Médio para vagas de Jovem Aprendiz. **A sua escola é a controladora dos dados**: é ela quem cadastra os alunos e decide como a plataforma é usada. **O Play2Work.ai é o operador**: trata os dados em nome da escola e seguindo as instruções dela.
+O First2Work.ai é uma plataforma usada pela sua escola para preparar estudantes do Ensino Médio para vagas de Jovem Aprendiz. **A sua escola é a controladora dos dados**: é ela quem cadastra os alunos e decide como a plataforma é usada. **O First2Work.ai é o operador**: trata os dados em nome da escola e seguindo as instruções dela.
 
 - Escola (controladora): `[nome, CNPJ, endereço]` — encarregado(a) de dados: `[nome e contato]`
-- Play2Work.ai (operador): `[responsável legal, CNPJ/MEI, contato]`
+- First2Work.ai (operador): `[responsável legal, CNPJ/MEI, contato]`
 
 ## 2. Quais dados usamos
 

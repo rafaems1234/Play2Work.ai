@@ -21,8 +21,8 @@ from limiter import limiter
 # Proteções (a maioria dos alunos é menor de idade): no grupo o aluno aparece
 # só pelo nome curto do ranking; nada se edita nem se apaga; a coordenação
 # pode ocultar uma mensagem imprópria e o original fica guardado.
-router_admin = APIRouter(prefix="/admin", tags=["Play2Work.AI - Mensagens (escola)"], dependencies=[Depends(get_admin_atual)])
-router_aluno = APIRouter(tags=["Play2Work.AI - Mensagens (aluno)"])
+router_admin = APIRouter(prefix="/admin", tags=["First2Work.AI - Mensagens (escola)"], dependencies=[Depends(get_admin_atual)])
+router_aluno = APIRouter(tags=["First2Work.AI - Mensagens (aluno)"])
 
 ALUNOS_ESCREVEM_NO_GERAL = False
 NOME_CANAL_GERAL = "Geral da escola"

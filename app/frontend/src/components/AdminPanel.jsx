@@ -215,7 +215,7 @@ const RelatorioAlunos = ({ alunos, descricaoFiltros }) => {
         .adm-relatorio td { padding: 3px 5px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
         .adm-relatorio tr { break-inside: avoid; }
       `}</style>
-      <h1>Relatório de alunos — Play2Work.ai</h1>
+      <h1>Relatório de alunos — First2Work.ai</h1>
       <p className="sub">
         {alunos.length} aluno{alunos.length !== 1 ? 's' : ''} · {descricaoFiltros || 'sem filtros'} · gerado em {dataHoraIsoParaBr(new Date().toISOString())}
       </p>
@@ -854,7 +854,7 @@ const AdminPanel = ({ aoSair }) => {
               <Logo size={30} />
               <div>
                 <div style={{ fontWeight: '800', color: 'var(--adm-forte)', fontSize: '18px' }}>Painel da Escola</div>
-                <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>{gestor.escola?.nome || 'Play2Work.ai'}{DEMO_MODE && <> · <IconMask style={{ verticalAlign: '-2px' }} /> demonstração</>}</div>
+                <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>{gestor.escola?.nome || 'First2Work.ai'}{DEMO_MODE && <> · <IconMask style={{ verticalAlign: '-2px' }} /> demonstração</>}</div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

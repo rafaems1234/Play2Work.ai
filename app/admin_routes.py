@@ -25,7 +25,7 @@ from fotos import FotoRequest, salvar_foto, remover_foto, resposta_da_foto, resp
 # Painel da escola: gestão de turmas/alunos/itinerários e seleção dos alunos
 # com melhor desempenho pra indicar a uma vaga de empresa parceira.
 # Login separado do app do aluno (que continua sem login).
-router = APIRouter(prefix="/admin", tags=["Play2Work.AI - Painel da Escola"])
+router = APIRouter(prefix="/admin", tags=["First2Work.AI - Painel da Escola"])
 protegido = [Depends(get_admin_atual)]
 
 # Status de contratação do aluno (fila do PAP) e status de uma candidatura
@@ -118,7 +118,7 @@ def _validar_cpf_unico(cpf_digitado: str, db: Session, ignorar_id: Optional[int]
     if existente and existente.id != ignorar_id:
         if existente.escola_id != escola_da_sessao(db):
             # Não revela o nome de aluno de outra escola
-            raise HTTPException(status_code=409, detail="Esse CPF já está cadastrado em outra escola. Se o aluno foi transferido, fale com o suporte do Play2Work.")
+            raise HTTPException(status_code=409, detail="Esse CPF já está cadastrado em outra escola. Se o aluno foi transferido, fale com o suporte do First2Work.")
         raise HTTPException(status_code=409, detail=f"Esse CPF já está cadastrado ({existente.nome})")
     return cpf
 

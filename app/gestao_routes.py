@@ -35,7 +35,7 @@ from fuso import FUSO_ESCOLA, agora_utc
 from limiter import limiter
 from models import Escola, RegistroAuditoria, UsuarioGestao
 
-router = APIRouter(prefix="/admin", tags=["Play2Work.AI - Gestão e auditoria"])
+router = APIRouter(prefix="/admin", tags=["First2Work.AI - Gestão e auditoria"])
 
 Perfil = Literal["administrador", "auditor", "alterar", "visualizar"]
 LOGIN_FALHAS_MAX = 5
