@@ -43,6 +43,39 @@
     }
   },
   "fala_volta_pergunta": "Voltando à pergunta:",
+  "sessao": {
+    "respostas_minimas": 5,
+    "respostas_maximas": 7,
+    "xp_maximo": 150,
+    "laudos_com_xp_por_dia": 3,
+    "entrevistas_por_rodada": 5,
+    "meta_da_rodada": 80
+  },
+  "despedida": "Obrigada pela conversa! Foi muito bom te conhecer melhor. Por hoje é isso: quando quiser, gere o seu laudo para ver como você foi.",
+  "pontes": [
+    "Entendi, obrigada por contar.",
+    "Legal, isso ajuda a te conhecer melhor.",
+    "Certo, anotei aqui.",
+    "Interessante, obrigada por compartilhar."
+  ],
+  "laudo_reserva": {
+    "resumo": {
+      "alto": "Respostas claras e com exemplos reais; boa postura.",
+      "medio": "Respondeu bem, mas faltaram exemplos concretos.",
+      "baixo": "Respostas curtas e genéricas; precisa treinar mais."
+    },
+    "fortes": {
+      "relevancia": "Respondeu o que foi perguntado, sem fugir do assunto.",
+      "clareza": "Se expressou com frases claras e organizadas.",
+      "exemplos": "Trouxe exemplos concretos da escola, de projetos ou da vida.",
+      "postura": "Manteve um tom respeitoso e profissional durante a conversa."
+    },
+    "parecer": {
+      "alto": "Boa entrevista: você respondeu com clareza e mostrou exemplos reais. Continue treinando para ganhar ainda mais segurança.",
+      "medio": "Você se saiu razoavelmente bem, mas pode crescer muito contando situações concretas e respondendo de forma mais direta.",
+      "baixo": "Essa entrevista mostrou que vale a pena treinar mais: respostas curtas e genéricas não deixam o recrutador te conhecer. Conte o que você fez, onde e qual foi o resultado."
+    }
+  },
   "dicas": {
     "relevancia": "Responda diretamente o que foi perguntado: comece pela resposta e depois explique.",
     "clareza_curta": "Desenvolva mais: duas ou três frases completas mostram que você sabe se comunicar.",
@@ -65,6 +98,13 @@
     "faz minha tarefa", "faca minha tarefa", "tarefa de casa", "licao de casa", "dever de casa", "receita de bolo",
     "ignore as instrucoes", "ignore suas instrucoes", "ignora as instrucoes", "esqueca as instrucoes", "esqueca suas instrucoes",
     "voce e uma ia", "voce e um robo", "voce e o chatgpt", "chatgpt", "finja que voce", "finge que voce"
+  ],
+  "padroes_fora_do_tema": [
+    "\\b(esquece|esqueca|esquecer|abandona|cancela|chega de|sai do|saia do|larga) (a |essa |de |da |o |do )?(entrevista|personagem|papel)\\b",
+    "\\b(finge|finja|faz de conta|aja como|atue como|voce agora e|a partir de agora voce|responda como|responde como)\\b",
+    "^(por favor |pfv |pf )?(me )?(ajuda|ajude|explica|explique|resolve|resolva|responde|responda|calcula|calcule)\\b",
+    "\\b(o que e|o que sao|qual e a formula|qual a formula|como se calcula|como calcula|como se resolve|como resolve|quem foi|quem descobriu|quem inventou|em que ano foi|me explica|me explique)\\b[^?]*\\?",
+    "\\b(licao|tarefa|dever|exercicio|exercicios|lista|prova|trabalho) de (quimica|fisica|matematica|biologia|historia|geografia|portugues|ingles|espanhol|filosofia|sociologia|artes|redacao)\\b.*(\\?|me ajuda|me ajude|pra mim|para mim)"
   ],
   "girias": ["mano", "vei", "kkk", "kkkk", "kkkkk", "sla", "tlgd", "mds", "slk", "pprt", "tmj"],
   "marcas_de_exemplo": [

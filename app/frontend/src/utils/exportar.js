@@ -1,5 +1,11 @@
 import { mascararCpf, mascararTelefone, dataIsoParaBr, dataHoraIsoParaBr } from './formatos';
 import FICHA from '../data/ficha_pap.json';
+import { apiFetch } from '../api';
+
+// Toda exportação do painel vira registro na auditoria (quem exportou o quê e quantos registros)
+export const registrarExportacao = (descricao, total) => {
+  apiFetch('/api/admin/auditoria/exportacao', { method: 'POST', body: JSON.stringify({ descricao: String(descricao).slice(0, 200), total }) }).catch(() => {});
+};
 
 // Exportação da lista de alunos do painel da escola. Roda no navegador, a
 // partir da mesma lista filtrada que está na tela -- então o arquivo é
@@ -57,6 +63,7 @@ const celula = (valor) => {
 
 // colunas: [título, (linha) => valor]; padrão = a lista de alunos do painel
 export const baixarCsv = (nomeArquivo, registros, colunas = COLUNAS_ALUNOS) => {
+  registrarExportacao(`${nomeArquivo.replace(/_\d.*$/, '').replace(/_/g, ' ')} (CSV, ${registros.length} registros)`, registros.length);
   const linhas = [
     colunas.map(([titulo]) => celula(titulo)).join(';'),
     ...registros.map((r) => colunas.map(([, valor]) => celula(valor(r))).join(';')),

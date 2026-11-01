@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { IconLinkedIn, IconClose, IconCheck } from './icons';
-import { apiFetch } from '../api';
+import { apiFetch, lerErro, salvarToken } from '../api';
+import { CampoSenha } from './LoginAluno';
 import TechBackground from './TechBackground';
 import { Avatar, SeletorFoto } from './FotoPerfil';
 
@@ -53,6 +54,42 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
       setErroPerfil(err.message);
     } finally {
       setSalvandoPerfil(false);
+    }
+  };
+
+  // Troca de senha sabendo a atual. A resposta traz um token novo: esta
+  // sessão continua e as outras (outro computador do laboratório) caem.
+  const [senhas, setSenhas] = useState({ atual: '', nova: '', confirmar: '' });
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
+  const [erroSenha, setErroSenha] = useState(null);
+  const [senhaTrocada, setSenhaTrocada] = useState(false);
+  const mudarSenha = (campo) => (valor) => setSenhas((s) => ({ ...s, [campo]: valor }));
+
+  const trocarSenha = async (e) => {
+    e.preventDefault();
+    setErroSenha(null);
+    setSenhaTrocada(false);
+    if (senhas.nova !== senhas.confirmar) {
+      setErroSenha('A confirmação não é igual à senha nova.');
+      return;
+    }
+    setTrocandoSenha(true);
+    try {
+      const resposta = await apiFetch('/api/auth/trocar-senha', {
+        method: 'POST',
+        body: JSON.stringify({ senha_atual: senhas.atual, nova_senha: senhas.nova }),
+      });
+      if (!resposta.ok) {
+        setErroSenha(await lerErro(resposta, 'Não foi possível trocar a senha.'));
+        return;
+      }
+      salvarToken('aluno', (await resposta.json()).token);
+      setSenhas({ atual: '', nova: '', confirmar: '' });
+      setSenhaTrocada(true);
+    } catch {
+      setErroSenha('Não foi possível conectar. Tente de novo.');
+    } finally {
+      setTrocandoSenha(false);
     }
   };
 
@@ -159,6 +196,12 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
             </div>
 
             <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
+              {estudante?.usuario && (
+                <>
+                  <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '4px' }}>Usuário (pra entrar)</div>
+                  <div style={{ fontSize: '15px', color: 'var(--accent-soft)', fontWeight: '700', marginBottom: '10px', fontFamily: 'var(--mono)' }}>{estudante.usuario}</div>
+                </>
+              )}
               <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '4px' }}>Nome</div>
               <div style={{ fontSize: '15px', color: 'var(--txt-1b)', fontWeight: '600', marginBottom: '10px' }}>{estudante?.nome}</div>
               <div style={{ fontSize: '12px', color: 'var(--txt-4)', marginBottom: '4px' }}>E-mail</div>
@@ -190,11 +233,25 @@ const AccountSettings = ({ estudante, itinerario, fotoVersao = null, aoMudarFoto
               </div>
               {erroPerfil && <div style={{ color: 'var(--erro)', fontSize: '12px', marginTop: '8px' }}>{erroPerfil}</div>}
             </form>
+
+            <form onSubmit={trocarSenha} style={{ marginBottom: '28px', paddingTop: '20px', borderTop: '1px solid rgb(var(--accent-rgb) / 0.1)' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--txt-4)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trocar senha</div>
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <CampoSenha id="conta-senha-atual" className="account-input" placeholder="Senha atual" autoComplete="current-password" valor={senhas.atual} aoMudar={mudarSenha('atual')} />
+                <CampoSenha id="conta-senha-nova" className="account-input" placeholder="Senha nova (8+ letras e números)" autoComplete="new-password" valor={senhas.nova} aoMudar={mudarSenha('nova')} />
+                <CampoSenha id="conta-senha-confirmar" className="account-input" placeholder="Repita a senha nova" autoComplete="new-password" valor={senhas.confirmar} aoMudar={mudarSenha('confirmar')} />
+              </div>
+              <button type="submit" disabled={trocandoSenha || !senhas.atual || !senhas.nova} className="account-save-btn" style={{ marginTop: '10px', width: '100%' }}>
+                {trocandoSenha ? 'Trocando...' : 'Trocar senha'}
+              </button>
+              {erroSenha && <div role="alert" style={{ color: 'var(--erro)', fontSize: '12px', marginTop: '8px' }}>{erroSenha}</div>}
+              {senhaTrocada && <div style={{ color: 'var(--ok)', fontSize: '12px', marginTop: '8px' }}>Senha trocada. Se você estava logado em outro aparelho, lá vai pedir pra entrar de novo.</div>}
+            </form>
           </>
         )}
 
         <p style={{ fontSize: '12px', color: 'var(--txt-4)', lineHeight: 1.6, marginBottom: '14px' }}>
-          Sua senha é o seu CPF. Nome, e-mail, turma e itinerário são cadastrados pela escola — se algo estiver errado, fale com a coordenação.
+          Nome, e-mail, turma e itinerário são cadastrados pela escola — se algo estiver errado, fale com a coordenação. Esqueceu a senha? Saia e use "Esqueci minha senha" na tela de entrada.
         </p>
         <button
           type="button"

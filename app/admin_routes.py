@@ -1,21 +1,22 @@
 import json
-import secrets
 from datetime import date, datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from models import Estudante, Vaga, Candidatura, Turma, Curriculo, HistoricoEntrevista, ObservacaoEstudante, MudancaStatusContratacao, EvidenciaCompetencia, RespostaSituacao, Canal, Mensagem, ContratoAprendizagem
+from models import Estudante, Vaga, Candidatura, Turma, Curriculo, HistoricoEntrevista, SessaoEntrevista, TentativaCertificacao, RodadaEntrevista, ObservacaoEstudante, MudancaStatusContratacao, EvidenciaCompetencia, RespostaSituacao, Canal, Mensagem, ContratoAprendizagem
 from database import get_db
 from services import ITINERARIOS_QUIZ, AIService, calcular_desempenho_para_vaga, taxas_de_acerto_quiz, gerar_nome_exibicao
-from auth import ADMIN_SENHA, criar_token_admin, get_admin_atual, normalizar_cpf, cpf_valido
-from limiter import limiter
+from auth import GestorAtual, get_admin_atual, normalizar_cpf, cpf_valido
 from fuso import hoje as hoje_na_escola, agora_utc, data_local
 from competencias import mapas_de_varios, nota_de_competencias, mapa_para_tela
 from atividades import SITUACOES
 from aulas import certificados_dos_alunos
+import acesso
+import certificacao
+from entrevista_routes import laudo_para_dict, rodada_para_dict
 import ficha_pap
 from fotos import FotoRequest, salvar_foto, remover_foto, resposta_da_foto, resposta_da_foto_curriculo
 
@@ -29,10 +30,6 @@ protegido = [Depends(get_admin_atual)]
 # Status do aprendiz como na planilha do PAP ("disponivel" é o "No aguardo")
 STATUS_CONTRATACAO = ficha_pap.STATUS_APRENDIZ
 STATUS_CANDIDATURA = {"enviada": "Enviada", "em_analise": "Em análise", "aprovada": "Aprovada", "recusada": "Recusada"}
-
-
-class AdminLoginRequest(BaseModel):
-    senha: str
 
 
 class TurmaRequest(BaseModel):
@@ -165,16 +162,6 @@ def _limpar_habilidades(habilidades: list[str]) -> list[str]:
     return limpas
 
 
-@router.post("/login")
-@limiter.limit("10/minute")
-def admin_login(request: Request, data: AdminLoginRequest):
-    if not ADMIN_SENHA:
-        raise HTTPException(status_code=503, detail="Painel da escola desativado: defina ADMIN_SENHA no .env do backend.")
-    if not secrets.compare_digest(data.senha.encode("utf-8"), ADMIN_SENHA.encode("utf-8")):
-        raise HTTPException(status_code=401, detail="Senha incorreta")
-    return {"token": criar_token_admin()}
-
-
 @router.get("/resumo", dependencies=protegido)
 def resumo(db: Session = Depends(get_db)):
     por_itinerario = dict(
@@ -189,6 +176,8 @@ def resumo(db: Session = Depends(get_db)):
         "mensagens_nao_lidas": db.query(Mensagem).join(Canal, Canal.id == Mensagem.canal_id).filter(
             Mensagem.autor_tipo == "aluno", or_(Canal.escola_leu_em.is_(None), Mensagem.enviada_em > Canal.escola_leu_em),
         ).count(),
+        # Alunos pedindo senha nova (aba Acessos)
+        "pedidos_senha_pendentes": acesso.contar_pedidos_pendentes(db),
         "total_vagas": db.query(Vaga).count(),
         "total_indicacoes": db.query(Candidatura).filter(Candidatura.indicada_pela_escola.is_(True)).count(),
         "alunos_por_itinerario": [
@@ -229,6 +218,11 @@ def _estudante_para_dict(est: Estudante, taxa_acerto: float | None, total_candid
         "nome": est.nome,
         "nome_exibicao": est.nome_exibicao or est.nome,
         "cpf": est.cpf,
+        # Acesso ao app (acesso.py): o código em si nunca sai daqui, só na hora em que é gerado
+        "usuario": est.usuario,
+        "status_acesso": acesso.status_acesso(est, agora_utc()),
+        "codigo_acesso_expira_em": _iso(est.codigo_acesso_expira_em) if acesso.codigo_valido(est, agora_utc()) else None,
+        "senha_definida_em": _iso(est.senha_definida_em),
         "data_nascimento": est.data_nascimento.isoformat() if est.data_nascimento else None,
         "email": est.email,
         "linkedin": est.linkedin,
@@ -285,7 +279,7 @@ def listar_estudantes(
         consulta = consulta.filter(Estudante.itinerario == itinerario)
     if busca:
         termo = f"%{busca.strip().lower()}%"
-        filtro = func.lower(Estudante.nome).like(termo) | func.lower(Estudante.email).like(termo)
+        filtro = func.lower(Estudante.nome).like(termo) | func.lower(Estudante.email).like(termo) | Estudante.usuario.like(termo)
         cpf_busca = normalizar_cpf(busca)
         if cpf_busca:
             filtro = filtro | Estudante.cpf.like(f"%{cpf_busca}%")
@@ -314,10 +308,29 @@ def listar_estudantes(
                      .order_by(ContratoAprendizagem.data_inicial.desc(), ContratoAprendizagem.id.desc()).all() if ids else []):
         contratos_atuais.setdefault(contrato.estudante_id, contrato)
 
-    return [
-        _estudante_para_dict(e, taxas[e.id], candidaturas.get(e.id, 0), indicacoes.get(e.id, 0), curriculos.get(e.id), certificados[e.id], contratos_atuais.get(e.id))
-        for e in estudantes
-    ]
+    # Simulado de certificação: a aprovação no curso atual do aluno e quantas tentativas ele fez
+    certificacoes: dict[int, dict] = {}
+    for t in (db.query(TentativaCertificacao).filter(TentativaCertificacao.estudante_id.in_(ids), TentativaCertificacao.status != "em_andamento")
+              .order_by(TentativaCertificacao.id).all() if ids else []):
+        info = certificacoes.setdefault(t.estudante_id, {"tentativas": 0, "aprovada": None})
+        info["tentativas"] += 1
+        if t.status == "aprovada":
+            info["aprovada"] = {"itinerario": t.itinerario, "percentual": t.percentual, "em": _iso(t.concluida_em)}
+
+    # Meta de Entrevista: rodada que bateu a média (pendente até a coordenação confirmar)
+    metas: dict[int, dict] = {}
+    for r in (db.query(RodadaEntrevista).filter(RodadaEntrevista.estudante_id.in_(ids), RodadaEntrevista.status == "meta_atingida").all() if ids else []):
+        metas[r.estudante_id] = {"rodada_id": r.id, "rodada": r.numero, "media": r.media, "confirmada": r.confirmada_em is not None}
+
+    resultado = []
+    for e in estudantes:
+        dados = _estudante_para_dict(e, taxas[e.id], candidaturas.get(e.id, 0), indicacoes.get(e.id, 0), curriculos.get(e.id), certificados[e.id], contratos_atuais.get(e.id))
+        info = certificacoes.get(e.id, {"tentativas": 0, "aprovada": None})
+        aprovada = info["aprovada"] if info["aprovada"] and info["aprovada"]["itinerario"] == e.itinerario else None
+        dados["certificacao"] = {"tentativas": info["tentativas"], "aprovada": aprovada}
+        dados["meta_entrevista"] = metas.get(e.id)
+        resultado.append(dados)
+    return resultado
 
 
 @router.post("/estudantes", status_code=status.HTTP_201_CREATED, dependencies=protegido)
@@ -331,6 +344,7 @@ def cadastrar_estudante(data: NovoEstudanteRequest, db: Session = Depends(get_db
     estudante = Estudante(
         nome=nome,
         nome_exibicao=gerar_nome_exibicao(db, nome),
+        usuario=acesso.gerar_usuario(db, nome),
         cpf=cpf,
         data_nascimento=data.data_nascimento,
         email=data.email,
@@ -601,9 +615,15 @@ def historico_do_aluno(estudante_id: int, db: Session = Depends(get_db)):
     empresas, mudanças de status e observações da coordenação.
     """
     estudante = _buscar_estudante(estudante_id, db)
+    # Formato antigo do simulador (nota por resposta, sem sessão)
     mensagens = (
-        db.query(HistoricoEntrevista).filter(HistoricoEntrevista.estudante_id == estudante.id)
+        db.query(HistoricoEntrevista).filter(HistoricoEntrevista.estudante_id == estudante.id, HistoricoEntrevista.sessao_id.is_(None))
         .order_by(HistoricoEntrevista.enviado_em.desc(), HistoricoEntrevista.id.desc()).limit(400).all()
+    )
+    # Entrevistas contínuas com laudo final, a mais recente primeiro
+    sessoes = (
+        db.query(SessaoEntrevista).filter(SessaoEntrevista.estudante_id == estudante.id, SessaoEntrevista.status == "concluida")
+        .order_by(SessaoEntrevista.laudo_em.desc(), SessaoEntrevista.id.desc()).limit(30).all()
     )
     candidaturas = (
         db.query(Candidatura).filter(Candidatura.estudante_id == estudante.id)
@@ -612,6 +632,19 @@ def historico_do_aluno(estudante_id: int, db: Session = Depends(get_db)):
     return {
         "experiencia": {"ja_trabalhou": estudante.ja_trabalhou, "experiencia_previa": estudante.experiencia_previa},
         "entrevistas": _entrevistas_por_dia(list(reversed(mensagens))),
+        "certificacao": [certificacao.resultado(t) for t in certificacao.tentativas_do_aluno(db, estudante.id) if t.status != "em_andamento"],
+        # Rodadas de 5 entrevistas, a mais recente primeiro (o feed compacto agrupa os laudos por elas)
+        "rodadas": [
+            rodada_para_dict(r, [s.nota_geral for s in sessoes if s.rodada_id == r.id and s.nota_geral is not None])
+            for r in db.query(RodadaEntrevista).filter(RodadaEntrevista.estudante_id == estudante.id).order_by(RodadaEntrevista.numero.desc()).all()
+        ],
+        "laudos": [
+            {
+                **laudo_para_dict(s),
+                "conversa": [{"remetente": m.remetente, "mensagem": m.mensagem, "categoria": m.categoria} for m in s.mensagens],
+            }
+            for s in sessoes
+        ],
         "candidaturas": [
             {
                 "id": c.id,
@@ -639,7 +672,7 @@ def historico_do_aluno(estudante_id: int, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------- mapa de competências
-ORIGENS_EVIDENCIA = {"quiz": "Quiz do dia", "entrevista": "Simulador de entrevista", "situacao": "O que você faria?", "aula": "Aula EAD (fixação)"}
+ORIGENS_EVIDENCIA = {"quiz": "Quiz do dia", "entrevista": "Simulador de entrevista", "situacao": "O que você faria?", "aula": "Aula EAD (fixação)", "certificacao": "Simulado de certificação"}
 
 
 @router.get("/estudantes/{estudante_id}/competencias", dependencies=protegido)
@@ -677,12 +710,12 @@ def competencias_do_aluno(estudante_id: int, db: Session = Depends(get_db)):
 
 # ---------------------------------------------------------------- observações internas
 @router.post("/estudantes/{estudante_id}/observacoes", status_code=status.HTTP_201_CREATED, dependencies=protegido)
-def adicionar_observacao(estudante_id: int, data: ObservacaoRequest, db: Session = Depends(get_db)):
+def adicionar_observacao(estudante_id: int, data: ObservacaoRequest, gestor: GestorAtual = Depends(get_admin_atual), db: Session = Depends(get_db)):
     estudante = _buscar_estudante(estudante_id, db)
     texto = data.texto.strip()
     if not texto:
         raise HTTPException(status_code=400, detail="Escreva a observação")
-    observacao = ObservacaoEstudante(estudante_id=estudante.id, texto=texto, autor="Coordenação")
+    observacao = ObservacaoEstudante(estudante_id=estudante.id, texto=texto, autor=gestor.nome[:60])  # quem anotou, pela conta da gestão
     db.add(observacao)
     db.commit()
     db.refresh(observacao)
@@ -865,3 +898,31 @@ def indicar_para_vaga(vaga_id: int, data: IndicarRequest, db: Session = Depends(
         "novas_indicacoes": novas,
         "mensagem": f"{len(estudantes)} aluno(s) indicado(s) para {vaga.titulo_vaga} — {vaga.empresa}.",
     }
+
+
+def _rodada(rodada_id: int, db: Session) -> RodadaEntrevista:
+    rodada = db.query(RodadaEntrevista).filter(RodadaEntrevista.id == rodada_id).first()
+    if not rodada:
+        raise HTTPException(status_code=404, detail="Rodada não encontrada")
+    if rodada.status != "meta_atingida":
+        raise HTTPException(status_code=409, detail="Essa rodada não atingiu a meta.")
+    return rodada
+
+
+@router.post("/rodadas-entrevista/{rodada_id}/confirmar", dependencies=protegido)
+def confirmar_meta(rodada_id: int, db: Session = Depends(get_db)):
+    """A coordenação confirma a "Meta de Entrevista Atingida" (a média da IA sozinha não carimba o aluno)."""
+    rodada = _rodada(rodada_id, db)
+    rodada.confirmada_em = rodada.confirmada_em or agora_utc()
+    db.commit()
+    return {"confirmada_em": _iso(rodada.confirmada_em)}
+
+
+@router.post("/rodadas-entrevista/{rodada_id}/nao-confirmar", dependencies=protegido)
+def nao_confirmar_meta(rodada_id: int, db: Session = Depends(get_db)):
+    """A coordenação discorda: a rodada vira 'não atingida' e a próxima entrevista abre uma rodada nova."""
+    rodada = _rodada(rodada_id, db)
+    rodada.status = "nao_atingida"
+    rodada.confirmada_em = None
+    db.commit()
+    return {"status": rodada.status}

@@ -8,6 +8,8 @@ import ChatAluno, { SinoNotificacoes, ContadorBolinha, useNaoLidas, avisarMensag
 import ResumeBuilder from './components/ResumeBuilder';
 import WeeklyLeaderboard from './components/WeeklyLeaderboard';
 import DailyQuiz from './components/DailyQuiz';
+import SimuladoCertificacao from './components/SimuladoCertificacao';
+import AreaProva from './components/AreaProva';
 import StreakCalendar from './components/StreakCalendar';
 import AccountSettings from './components/AccountSettings';
 import TechBackground from './components/TechBackground';
@@ -164,6 +166,7 @@ function App() {
         categoria_status: dados.categoria_status,
         ofensiva_dias: dados.ofensiva_dias,
         ofensiva_em_risco: dados.ofensiva_em_risco,
+        missoes_diarias: dados.missoes_diarias,
         itinerario: dados.itinerario,
         liga: dados.liga,
       }));
@@ -201,7 +204,7 @@ function App() {
         const response = await apiFetch('/api/auth/me');
         if (response.ok) {
           const dados = await response.json();
-          setContaInfo({ nome: dados.nome, email: dados.email, linkedin: dados.linkedin });
+          setContaInfo({ nome: dados.nome, usuario: dados.usuario, email: dados.email, linkedin: dados.linkedin });
         }
       } catch (err) {
         console.error(err);
@@ -683,12 +686,17 @@ function App() {
             {abaAtiva === 'competencias' && <Competencias aoGanharXp={atualizarDadosUsuario} />}
             {abaAtiva === 'aulas' && <Trilha aoGanharXp={atualizarDadosUsuario} />}
             {abaAtiva === 'chat' && <ChatAluno canalInicial={canalChat} aoMudou={atualizarNaoLidas} />}
-            {abaAtiva === 'simulador' && <InterviewSimulator aoGanharXp={atualizarDadosUsuario} />}
+            {abaAtiva === 'simulador' && <InterviewSimulator status={estudanteStatus} aoGanharXp={atualizarDadosUsuario} />}
             {abaAtiva === 'quiz' && (
-              <DailyQuiz
-                aoGanharXp={atualizarDadosUsuario}
-                aoVoltarInicio={() => setAbaAtiva('competencias')}
-              />
+              <>
+                <SimuladoCertificacao />
+                <AreaProva>
+                  <DailyQuiz
+                    aoGanharXp={atualizarDadosUsuario}
+                    aoVoltarInicio={() => setAbaAtiva('competencias')}
+                  />
+                </AreaProva>
+              </>
             )}
             {abaAtiva === 'curriculo' && <ResumeBuilder aoGerar={() => setPerfilAluno((p) => ({ ...p, tem_curriculo: true }))} aoGanharXp={atualizarDadosUsuario} />}
             {abaAtiva === 'ranking' && <WeeklyLeaderboard />}

@@ -36,10 +36,18 @@ class Estudante(Base):
     telefone = Column(String(11), nullable=True)             # Celular do aluno, só dígitos com DDD (cadastrado pela escola)
     responsavel_nome = Column(String(100), nullable=True)    # Responsável legal -- a maioria dos alunos é menor de idade
     responsavel_telefone = Column(String(11), nullable=True)
-    senha_hash = Column(String(255), nullable=True)          # Hash bcrypt da senha (nulo = conta antiga sem login)
-    precisa_trocar_senha = Column(Boolean, default=False)    # True = está numa senha temporária de reset, força troca no próximo passo
-    pergunta_seguranca = Column(String(200), nullable=True)  # Pergunta definida no cadastro, exigida pra resetar a senha
-    resposta_seguranca_hash = Column(String(255), nullable=True)  # Hash bcrypt da resposta -- sem isso, e-mail sozinho não é suficiente pra derrubar a senha de qualquer um
+    # 🔑 Acesso (regras em acesso.py). O aluno entra com usuário + senha. O
+    # primeiro acesso, e cada senha nova aprovada pela escola, é feito com CPF
+    # + código de acesso que a coordenação gera no painel e entrega em mãos.
+    usuario = Column(String(40), unique=True, nullable=True, index=True)  # "rafael.sozza" -- gerado no cadastro, minúsculo e sem acento
+    senha_hash = Column(String(255), nullable=True)          # Hash bcrypt da senha (nulo = ainda não fez o primeiro acesso)
+    senha_definida_em = Column(DateTime, nullable=True)
+    codigo_acesso_hash = Column(String(255), nullable=True)  # Hash bcrypt do código de 6 dígitos (nulo = sem código válido)
+    codigo_acesso_expira_em = Column(DateTime, nullable=True)
+    codigo_acesso_tentativas = Column(Integer, nullable=False, default=0, server_default="0")  # Erros com o código atual; no limite o código é anulado
+    login_falhas = Column(Integer, nullable=False, default=0, server_default="0")  # Senhas erradas seguidas (zera no login certo)
+    login_bloqueado_ate = Column(DateTime, nullable=True)
+    sessao_versao = Column(Integer, nullable=False, default=0, server_default="0")  # Vai no token: senha nova soma 1 e derruba as sessões abertas
     nivel_gamificacao = Column(Integer, default=1)
     
     # 🌟 CORRIGIDO: Alterado de 'pontos' para 'xp_total' para bater com as rotas e o React
@@ -137,6 +145,78 @@ class FotoCurriculo(Base):
     atualizada_em = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
+class UsuarioGestao(Base):
+    """
+    Tabela 'usuarios_gestao': uma conta por pessoa da coordenação/secretaria
+    (substitui a senha única do painel). Perfis (auth.PERFIS_GESTAO):
+      administrador -- o "admin do admin": tudo, cria as contas e escolhe os perfis;
+      auditor       -- vê tudo e a auditoria, mas não altera;
+      alterar       -- vê e altera o dia a dia, sem auditoria;
+      visualizar    -- só vê.
+    """
+    __tablename__ = 'usuarios_gestao'
+
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String(100), nullable=False)
+    usuario = Column(String(40), unique=True, nullable=False, index=True)  # minúsculo
+    senha_hash = Column(String(255), nullable=False)
+    papel = Column(String(15), nullable=False, default="visualizar", server_default="visualizar")  # administrador | auditor | alterar | visualizar
+    ativo = Column(Boolean, nullable=False, default=True, server_default="true")
+    deve_trocar_senha = Column(Boolean, nullable=False, default=True, server_default="true")  # Senha temporária (criação/reset)
+    login_falhas = Column(Integer, nullable=False, default=0, server_default="0")
+    login_bloqueado_ate = Column(DateTime, nullable=True)
+    sessao_versao = Column(Integer, nullable=False, default=0, server_default="0")  # Desativar/trocar senha/papel derruba as sessões
+    ultimo_acesso_em = Column(DateTime, nullable=True)
+    criado_em = Column(DateTime, server_default=func.now())
+
+
+class RegistroAuditoria(Base):
+    """
+    Tabela 'auditoria': o que cada pessoa da gestão fez no painel -- incluiu,
+    alterou, excluiu, exportou, entrou. Só cresce: nenhuma rota edita ou apaga;
+    registros com mais de 2 anos são removidos automaticamente (auditoria.py).
+    O nome e o papel ficam copiados aqui pra o registro valer mesmo se a conta
+    mudar depois.
+    """
+    __tablename__ = 'auditoria'
+
+    id = Column(Integer, primary_key=True, index=True)
+    criado_em = Column(DateTime, server_default=func.now(), index=True)
+    usuario_gestao_id = Column(Integer, ForeignKey('usuarios_gestao.id', ondelete="SET NULL"), nullable=True, index=True)
+    usuario_nome = Column(String(100), nullable=False)
+    papel = Column(String(15), nullable=True)
+    acao = Column(String(15), nullable=False, index=True)       # incluiu | alterou | excluiu | exportou | entrou | falhou_login | negado
+    entidade = Column(String(40), nullable=True, index=True)    # aluno, turma, vaga, contrato, aula...
+    entidade_id = Column(String(40), nullable=True)
+    descricao = Column(String(255), nullable=False)
+    metodo = Column(String(7), nullable=True)
+    caminho = Column(String(255), nullable=True)
+    status_http = Column(Integer, nullable=True)
+    dados = Column(JSON, nullable=True)                          # O que foi enviado (sem senhas, códigos nem arquivos)
+    antes = Column(JSON, nullable=True)                          # Como era antes (exclusões e alterações sensíveis)
+    ip = Column(String(45), nullable=True)
+
+
+class PedidoNovaSenha(Base):
+    """
+    Tabela 'pedidos_nova_senha': o aluno que esqueceu a senha pede uma nova
+    na tela de login, e a coordenação aprova ou recusa no painel. Aprovar
+    gera um código de acesso que a escola entrega em mãos -- quem pediu no
+    lugar de outro aluno não recebe nada. O histórico fica (auditoria).
+    """
+    __tablename__ = 'pedidos_nova_senha'
+
+    id = Column(Integer, primary_key=True, index=True)
+    estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(12), nullable=False, default="pendente", server_default="pendente", index=True)  # pendente | aprovado | recusado | concluido
+    criado_em = Column(DateTime, server_default=func.now())
+    decidido_em = Column(DateTime, nullable=True)
+    motivo_recusa = Column(String(200), nullable=True)
+    concluido_em = Column(DateTime, nullable=True)            # Quando o aluno usou o código e criou a senha nova
+
+    estudante = relationship("Estudante")
+
+
 class ObservacaoEstudante(Base):
     """
     Modelo que representa a tabela 'observacoes_estudantes'.
@@ -150,7 +230,7 @@ class ObservacaoEstudante(Base):
     id = Column(Integer, primary_key=True, index=True)
     estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False, index=True)
     texto = Column(Text, nullable=False)
-    autor = Column(String(60), nullable=False, default="Coordenação")  # Enquanto o painel tem uma senha só, não dá pra saber quem foi
+    autor = Column(String(60), nullable=False, default="Coordenação")  # Nome de quem anotou (conta da gestão)
     criada_em = Column(DateTime, server_default=func.now())
 
     estudante = relationship("Estudante", back_populates="observacoes")
@@ -205,13 +285,88 @@ class HistoricoEntrevista(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False)
+    sessao_id = Column(Integer, ForeignKey('sessoes_entrevista.id', ondelete="CASCADE"), nullable=True, index=True)  # Nulo = mensagem do formato antigo (nota por resposta)
     remetente = Column(String(10), nullable=False) # 'user' ou 'ai'
     mensagem = Column(Text, nullable=False)
-    feedback_ia = Column(Text, nullable=True) # Feedback em tempo real que a IA gerou
-    xp_concedido = Column(Integer, nullable=True)  # Nota da resposta (0-50), só nas mensagens do aluno -- é o histórico de pontuação do simulador
+    categoria = Column(String(20), nullable=True)  # Só nas do aluno: 'resposta' (contou) ou o motivo de não contar (fora_do_tema, inadequada...)
+    feedback_ia = Column(Text, nullable=True)      # Formato antigo: feedback por resposta
+    xp_concedido = Column(Integer, nullable=True)  # Formato antigo: nota da resposta (0-50)
     enviado_em = Column(DateTime, server_default=func.now())
 
     estudante = relationship("Estudante", back_populates="historico_entrevistas")
+
+
+class TentativaCertificacao(Base):
+    """
+    Tabela 'tentativas_certificacao': cada Simulado de Certificação (20
+    questões, tentativa única por ciclo -- regras em certificacao.py). A
+    aprovada é a certificação do aluno; as reprovadas ficam só no histórico.
+    O gabarito fica aqui e nunca vai pro navegador.
+    """
+    __tablename__ = 'tentativas_certificacao'
+
+    id = Column(Integer, primary_key=True, index=True)
+    estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False, index=True)
+    itinerario = Column(String(60), nullable=False)     # A certificação vale pro curso em que foi feita
+    status = Column(String(15), nullable=False, default="em_andamento", server_default="em_andamento", index=True)  # em_andamento | aprovada | reprovada
+    iniciada_em = Column(DateTime, nullable=False)
+    expira_em = Column(DateTime, nullable=False)
+    concluida_em = Column(DateTime, nullable=True)
+    gabarito = Column(JSON, nullable=False)              # [{pergunta, opcoes, resposta_correta_index, explicacao}]
+    respostas = Column(JSON, nullable=False, default=list)  # [{indice, opcao, correta}]
+    acertos = Column(Integer, nullable=True)
+    total = Column(Integer, nullable=True)
+    percentual = Column(Integer, nullable=True)
+    saidas_de_tela = Column(Integer, nullable=False, default=0, server_default="0")  # Trocou de aba/minimizou durante a prova
+
+
+class RodadaEntrevista(Base):
+    """
+    Tabela 'rodadas_entrevista': blocos de 5 entrevistas do simulador. Média
+    >= 80 marca 'meta_atingida', mas quem confirma a "Meta de Entrevista
+    Atingida" é a coordenação (confirmada_em). Abaixo disso, abre a próxima
+    rodada; o número de cada uma fica pra escola ver a evolução.
+    """
+    __tablename__ = 'rodadas_entrevista'
+
+    id = Column(Integer, primary_key=True, index=True)
+    estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False, index=True)
+    numero = Column(Integer, nullable=False)          # 1ª, 2ª, 3ª rodada...
+    status = Column(String(15), nullable=False, default="em_andamento", server_default="em_andamento")  # em_andamento | meta_atingida | nao_atingida
+    media = Column(Integer, nullable=True)
+    iniciada_em = Column(DateTime, server_default=func.now())
+    concluida_em = Column(DateTime, nullable=True)
+    confirmada_em = Column(DateTime, nullable=True)   # Coordenação confirmou a meta
+
+    __table_args__ = (UniqueConstraint('estudante_id', 'numero', name='uq_rodada_estudante_numero'),)
+
+
+class SessaoEntrevista(Base):
+    """
+    Tabela 'sessoes_entrevista': uma entrevista contínua do simulador (5 a 7
+    respostas) e o laudo final de desempenho, que fica na ficha do aluno.
+    Regras em entrevista.py.
+    """
+    __tablename__ = 'sessoes_entrevista'
+
+    id = Column(Integer, primary_key=True, index=True)
+    estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="em_andamento", server_default="em_andamento", index=True)  # em_andamento | aguardando_laudo | concluida | abandonada
+    respostas = Column(Integer, nullable=False, default=0, server_default="0")  # Respostas que contaram (fora do tema não conta)
+    iniciada_em = Column(DateTime, server_default=func.now())
+    encerrada_em = Column(DateTime, nullable=True)   # Quando a entrevistadora se despediu
+    laudo_em = Column(DateTime, nullable=True)
+    nota_geral = Column(Integer, nullable=True)      # 0-100, calculada no servidor a partir das notas
+    notas = Column(JSON, nullable=True)              # {relevancia, clareza, exemplos, postura} de 0 a 10
+    pontos_fortes = Column(JSON, nullable=True)      # lista de frases
+    pontos_melhoria = Column(JSON, nullable=True)
+    parecer_recrutador = Column(Text, nullable=True)
+    xp_concedido = Column(Integer, nullable=True)
+    laudo_por_ia = Column(Boolean, nullable=True)    # False = laudo de reserva (sem IA ou ela falhou)
+    resumo = Column(String(160), nullable=True)      # Síntese de uma frase pro feed compacto da escola
+    rodada_id = Column(Integer, ForeignKey('rodadas_entrevista.id', ondelete="SET NULL"), nullable=True, index=True)  # Nulo = treino livre (depois da meta)
+
+    mensagens = relationship("HistoricoEntrevista", order_by="HistoricoEntrevista.id", passive_deletes=True)
 
 
 class AtividadeDiaria(Base):
