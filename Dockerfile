@@ -5,7 +5,7 @@
 #
 # Na subida, prepara o banco (cria as tabelas num banco vazio ou aplica as
 # migrações que faltam, e garante uma escola) e inicia o servidor.
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
