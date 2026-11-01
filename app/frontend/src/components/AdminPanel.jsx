@@ -1090,6 +1090,10 @@ const ESTILOS = `
         .amsg-badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; background: #16a34a; color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
   .adm-folha-wrap .cv-folha { box-shadow: 0 8px 24px rgb(var(--adm-tinta) / 0.15); padding: 28px 26px; }
   .adm-grade-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+  .adm-gaveta { scrollbar-width: thin; scrollbar-color: rgb(var(--adm-tinta) / 0.25) transparent; overscroll-behavior: contain; }
+  .adm-gaveta::-webkit-scrollbar { width: 8px; }
+  .adm-gaveta::-webkit-scrollbar-track { background: transparent; }
+  .adm-gaveta::-webkit-scrollbar-thumb { background: rgb(var(--adm-tinta) / 0.25); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
   .adm-fundo { position: fixed; inset: 0; background: rgba(15,30,61,0.3); z-index: 80; display: flex; justify-content: flex-end; }
   .adm-gaveta { width: 100%; max-width: 480px; height: 100%; overflow-y: auto; background: rgb(var(--surface-rgb)); border-left: 1px solid rgb(var(--accent-rgb) / 0.35); padding: 22px 18px; }
   .adm-form-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

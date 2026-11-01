@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import AreaProva from './AreaProva';
+import useTravarRolagem from '../hooks/useTravarRolagem';
 import { IconGraduationCap, IconTimer, IconWarning, IconCheckCircle, IconLock, IconBook } from './icons';
 import { apiFetch, lerErro } from '../api';
 import { dataHoraIsoParaBr, dataIsoParaBr } from '../utils/formatos';
@@ -20,6 +21,7 @@ const relogio = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(
 
 // ------------------------------------------------------------------ prova em tela cheia
 const Prova = ({ prova, aoTerminar }) => {
+  useTravarRolagem();
   const [atual, setAtual] = useState(prova.respondidas);
   const [escolha, setEscolha] = useState(null);
   const [enviando, setEnviando] = useState(false);

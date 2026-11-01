@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import useTravarRolagem from '../hooks/useTravarRolagem';
 import { motion } from 'framer-motion';
 import { IconSparkle, IconCheck } from './icons';
 import { apiFetch } from '../api';
@@ -16,6 +17,7 @@ const AccentBtn = ({ children, ...props }) => (
 );
 
 const PrimeiroAcesso = ({ nome, fotoVersao, aoMudarFoto, aoConcluir }) => {
+  useTravarRolagem();
   const [passo, setPasso] = useState(0);
   const [erro, setErro] = useState(null);
   const [enviando, setEnviando] = useState(false);
