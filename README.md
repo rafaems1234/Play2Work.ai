@@ -332,11 +332,11 @@ O "dia" do aluno (ofensiva, quiz do dia, liga semanal, data de contratação, ag
 
 ## 📋 Antes da homologação na escola
 
-Situação em 01/11/2026. Já resolvido nesta rodada: login do aluno por usuário + senha (primeiro acesso com código da escola), contas da gestão com perfis e auditoria de 2 anos, entrevista contínua com laudo, rodadas e simulado de certificação.
+Situação em 01/11/2026. Já resolvido nesta rodada: troca completa do nome pra First2Work (repositório, site, chaves e banco), login do aluno por usuário + senha (primeiro acesso com código da escola), contas da gestão com perfis e auditoria de 2 anos, entrevista contínua com laudo, rodadas e simulado de certificação.
 
 **Precisa de decisão ou de gente da escola (o código não resolve sozinho):**
 
-- **Marca First2Work:** pesquisar e registrar no INPI (classes 41 e 42) e reservar `first2work.com.br` / `first2work.ai` e o @ nas redes. Se o nome estiver ocupado, a troca no código é rápida (só texto e logo). Depois do domínio, dá pra renomear o repositório (o link antigo do demo deixa de funcionar).
+- **Marca First2Work:** pesquisar e registrar no INPI (classes 41 e 42) e reservar `first2work.com.br` / `first2work.ai` e o @ nas redes. O repositório, o site do demo, as chaves do navegador e os nomes do banco/Docker já foram trocados pra First2Work em 01/11/2026; se o nome estiver ocupado no INPI, vai ser preciso trocar tudo de novo.
 - **Proposta comercial:** levantamento pra diretora feito fora do repositório (implantação R$ 6.000; mensalidade de escola piloto R$ 2.000, tabela R$ 2.800, até 600 alunos; hospedagem na Azure, região Brasil). Falta virar proposta oficial e contrato com revisão jurídica.
 - **Conteúdo do banco de questões:** as 630 perguntas precisam de revisão dos professores — agora com mais urgência, porque o **simulado de certificação** sorteia delas e uma resposta errada no banco pode reprovar um aluno. Atenção principal às que citam números de lei (CLT, FGTS do aprendiz, prazos do CPC, cotas).
 - **LGPD** (rascunhos prontos em [`docs/lgpd`](docs/lgpd/README.md), com o mapa dos dados que o sistema guarda — **precisam de revisão de advogado**): política de privacidade, termos de uso, consentimento do responsável (a maioria é menor) e contrato com a escola dizendo que ela é a controladora dos dados e o First2Work o operador. **Gemini:** no plano gratuito o Google pode usar o conteúdo enviado pra melhorar os produtos; com texto de aluno menor de idade, usar o plano pago antes do piloto.
@@ -354,6 +354,6 @@ Situação em 01/11/2026. Já resolvido nesta rodada: login do aluno por usuári
 
 **Verificado e o que falta verificar:**
 
-- **Migrações conferidas num Postgres 16 de verdade (31/10/2026):** numa cópia do banco de dev, todas as revisões de `c4e8a1b2d3f5` até `f2b8d4a6c1e3` (versão do cadastro) subiram sem erro, os downgrades/upgrades das novas também, e o `alembic check` não acusou diferença entre o banco e o `models.py`. Na migração dos cursos, quem estava em Ciências da Natureza fica sem curso, pra escola reclassificar.
+- **Migrações conferidas num Postgres 16 de verdade (31/10/2026):** numa cópia do banco de dev, todas as revisões de `c4e8a1b2d3f5` até `f2b8d4a6c1e3` (versão do cadastro) subiram sem erro, os downgrades/upgrades das novas também, e o `alembic check` não acusou diferença entre o banco e o `models.py`. Em 01/11/2026 a `a3c5e7f9b1d2` (e-mail do responsável) subiu no banco de dev e o `alembic check` continuou limpo; a suíte de testes passou (271 ok, 5 pulados). Na migração dos cursos, quem estava em Ciências da Natureza fica sem curso, pra escola reclassificar.
 - **Testado no navegador com o backend real e o Gemini de verdade:** login e primeiro acesso do aluno, pedido de senha e aprovação, códigos da turma, gerador de currículo, entrevista contínua com laudo, simulado de certificação (reprovação, bloqueio do ciclo, anti-cópia, saída de tela), contas da gestão e auditoria.
 - **Não verificado ainda:** uma impressão real do PDF e dos bilhetes de código de acesso pela janela do navegador; as rodadas de 5 entrevistas de ponta a ponta no navegador (cobertas pelos testes automatizados, mas exigiriam ~35 chamadas ao Gemini); as telas novas no **modo demonstração** (o build passa, mas não foram clicadas).
