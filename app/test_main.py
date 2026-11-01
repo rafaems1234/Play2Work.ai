@@ -2502,3 +2502,12 @@ def test_aluno_editando_no_app_tambem_muda_a_versao(mock_db, mock_estudante_loga
     mock_estudante_logado.versao_cadastro = 2
     client.put("/api/estudante/me/experiencia", json={"ja_trabalhou": True, "experiencia_previa": "Ajudante na padaria"})
     assert mock_estudante_logado.versao_cadastro == 3 and "pelo app" in mock_estudante_logado.cadastro_alterado_por
+
+
+def test_laudo_sem_ia_nao_se_contradiz():
+    # Um critério não pode ser ponto forte e ponto a melhorar ao mesmo tempo (achado na revisão do demo)
+    from entrevista import laudo_sem_ia
+    for respostas in (["Sou o Rafael, do 3º ano de Ciência de Dados, e fiz um projeto na escola com Python e a turma."] * 5, ["sei la mano kkk"] * 5):
+        laudo = laudo_sem_ia(respostas)
+        assert laudo["pontos_fortes"] and laudo["pontos_melhoria"]
+        assert not set(laudo["pontos_fortes"]) & set(laudo["pontos_melhoria"])

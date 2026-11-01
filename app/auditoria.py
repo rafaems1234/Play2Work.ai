@@ -78,8 +78,8 @@ ROTAS = [
     ("POST", r"/mensagens/(\d+)/ocultar", "alterou", "mensagem", "Ocultou a mensagem #{id}", None),
     ("POST", r"/estudantes/(\d+)/codigo-acesso", "incluiu", "codigo_acesso", "Gerou código de acesso para {aluno}", None),
     ("POST", r"/turmas/(\d+)/codigos-acesso", "incluiu", "codigo_acesso", "Gerou códigos de acesso da turma #{id}", Turma),
-    ("POST", r"/pedidos-senha/(\d+)/aprovar", "alterou", "pedido_senha", "Aprovou o pedido de senha nova #{id}", PedidoNovaSenha),
-    ("POST", r"/pedidos-senha/(\d+)/recusar", "alterou", "pedido_senha", "Recusou o pedido de senha nova #{id}", PedidoNovaSenha),
+    ("POST", r"/pedidos-senha/(\d+)/aprovar", "alterou", "pedido_senha", "Aprovou o pedido de senha nova de {aluno_do_pedido}", PedidoNovaSenha),
+    ("POST", r"/pedidos-senha/(\d+)/recusar", "alterou", "pedido_senha", "Recusou o pedido de senha nova de {aluno_do_pedido}", PedidoNovaSenha),
     ("POST", r"/gestao/usuarios", "incluiu", "usuario_gestao", "Criou a conta de {nome} ({papel})", None),
     ("PUT", r"/gestao/usuarios/(\d+)", "alterou", "usuario_gestao", "Alterou a conta da gestão #{id}", UsuarioGestao),
     ("POST", r"/gestao/usuarios/(\d+)/resetar-senha", "alterou", "usuario_gestao", "Gerou senha temporária para a conta #{id}", None),
@@ -135,8 +135,9 @@ def foto_do_registro(objeto) -> dict:
     return dados
 
 
-def _descrever(modelo_descricao: str, ids: tuple, dados: dict, nome_aluno: Optional[str]) -> str:
+def _descrever(modelo_descricao: str, ids: tuple, dados: dict, nome_aluno: Optional[str], extra: Optional[dict] = None) -> str:
     valores = {k: v for k, v in (dados or {}).items() if isinstance(v, (str, int, float))}
+    valores.update(extra or {})
     valores["id"] = ids[0] if ids else "?"
     valores["aluno"] = f"{nome_aluno} (#{ids[0]})" if nome_aluno else (f"aluno #{ids[0]}" if ids else "aluno")
     try:
@@ -179,12 +180,18 @@ def gravar(registro: dict) -> None:
             # Login errado: se o usuário existe, o registro vai pra escola dele
             conta = db.query(UsuarioGestao).filter(UsuarioGestao.usuario == tentado.strip().lower()).first()
             registro["escola_id"] = conta.escola_id if conta else None
+        extra = {}
+        if registro.get("entidade") == "pedido_senha" and registro.get("ids"):
+            # Pedido de senha: a descrição leva o nome do aluno, não o número do pedido
+            pedido = db.get(PedidoNovaSenha, int(registro["ids"][0]))
+            aluno_pedido = db.get(Estudante, pedido.estudante_id) if pedido else None
+            extra["aluno_do_pedido"] = f"{aluno_pedido.nome} (pedido #{pedido.id})" if aluno_pedido else f"pedido #{registro['ids'][0]}"
         if registro.get("entidade_aluno_id"):
             aluno = db.get(Estudante, int(registro.pop("entidade_aluno_id")))
             registro["descricao"] = _descrever(registro.pop("modelo_descricao"), registro.pop("ids"), registro.get("dados") or {}, aluno.nome if aluno else None)
         else:
             registro.pop("entidade_aluno_id", None)
-            registro["descricao"] = _descrever(registro.pop("modelo_descricao"), registro.pop("ids"), registro.get("dados") or {}, None)
+            registro["descricao"] = _descrever(registro.pop("modelo_descricao"), registro.pop("ids"), registro.get("dados") or {}, None, extra)
         db.add(RegistroAuditoria(**registro))
         db.commit()
     except Exception:

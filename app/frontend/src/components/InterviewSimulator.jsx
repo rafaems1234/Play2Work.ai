@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { IconRobot, IconFire, IconTarget, IconSparkle, IconTrophy, IconClose, IconCheckCircle, IconLightbulb, IconWarning } from './icons';
-import { apiFetch, lerErro } from '../api';
+import { apiFetch, lerErro, DEMO_MODE } from '../api';
 import { useCountUp } from '../hooks/useCountUp';
 import Typewriter from './Typewriter';
 import { tocarSomAcerto, tocarSomErro } from '../utils/sound';
@@ -59,7 +59,9 @@ const ModalLaudo = ({ laudo, aoFechar, aoNovaEntrevista }) => {
               {laudo.limite_diario
                 ? 'Você já ganhou XP com 3 entrevistas hoje. O laudo vale do mesmo jeito; o XP volta amanhã.'
                 : `${laudo.respostas} respostas avaliadas na entrevista inteira.`}
-              {!laudo.por_ia && ' Laudo gerado pelas regras do sistema (a IA não estava disponível).'}
+              {!laudo.por_ia && (DEMO_MODE
+                ? ' Na demonstração, o laudo sai pelas regras do sistema; com a IA ligada, ele cita o que você disse.'
+                : ' Laudo gerado pelas regras do sistema (a IA não respondeu agora).')}
             </div>
           </div>
         </div>
