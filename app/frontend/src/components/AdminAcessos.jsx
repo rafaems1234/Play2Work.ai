@@ -208,7 +208,7 @@ const AbaAcessos = ({ alunos, turmas, recarregar }) => {
                     <button type="button" className="adm-btn pequeno" disabled={ocupado === `aprovar-${p.id}`} onClick={() => aprovar(p)}>
                       {ocupado === `aprovar-${p.id}` ? 'Gerando...' : 'Aprovar e gerar código'}
                     </button>
-                    <button type="button" className="adm-btn secundario pequeno" onClick={() => setRecusando({ id: p.id, motivo: '' })}>Recusar</button>
+                    <button type="button" className="adm-btn secundario pequeno so-quem-altera" onClick={() => setRecusando({ id: p.id, motivo: '' })}>Recusar</button>
                   </div>
                 )
               )}
@@ -281,7 +281,7 @@ const AbaAcessos = ({ alunos, turmas, recarregar }) => {
                     ) : (
                       <button
                         type="button"
-                        className="adm-btn secundario pequeno"
+                        className="adm-btn secundario pequeno so-quem-altera"
                         disabled={!a.cpf || ocupado === `aluno-${a.id}`}
                         title={a.cpf ? undefined : 'Cadastre o CPF do aluno primeiro'}
                         onClick={() => (a.status_acesso === 'ativo' ? setConfirmarAluno(a) : gerarDoAluno(a))}

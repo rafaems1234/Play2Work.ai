@@ -1,4 +1,5 @@
 import logging
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
@@ -35,6 +36,8 @@ origins = [
     "http://localhost:3000",    # Caso mude de porta futuramente
     "http://127.0.0.1:3000",
 ]
+# Endereço do front publicado (ex.: https://rafaems1234.github.io), separado por vírgula se houver mais de um
+origins += [o.strip().rstrip("/") for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import InterviewSimulator from './components/InterviewSimulator';
+import { limparCacheFotos } from './components/FotoPerfil';
 import Competencias from './components/Competencias';
 import Trilha from './components/Trilha';
 import ChatAluno, { SinoNotificacoes, ContadorBolinha, useNaoLidas, avisarMensagemNova } from './components/Mensagens';
@@ -184,6 +185,7 @@ function App() {
 
   const sair = () => {
     limparToken('aluno');
+    limparCacheFotos();
     setLogado(false);
     setContaAberta(false);
     setPerfilAluno(PERFIL_VAZIO);

@@ -2,7 +2,7 @@ import json
 import logging
 import random
 from datetime import date, datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -10,6 +10,7 @@ from typing import Optional
 # Importações do ecossistema do projeto
 from models import Estudante, Vaga, Curriculo, Candidatura, QuizSessao
 from database import get_db
+from limiter import limiter
 from services import (
     AIService,
     ITINERARIOS_QUIZ,
@@ -554,7 +555,8 @@ def get_minha_foto(estudante: Estudante = Depends(get_estudante_atual)):
 
 
 @router.put("/estudante/me/foto")
-def enviar_minha_foto(data: FotoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def enviar_minha_foto(request: Request, data: FotoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     salvar_foto(db, estudante, data.imagem_base64, enviada_por="aluno")
     db.commit()
     return {"sucesso": True, "foto_atualizada_em": estudante.foto_atualizada_em.isoformat()}
@@ -645,7 +647,8 @@ def get_minha_foto_curriculo(estudante: Estudante = Depends(get_estudante_atual)
 
 
 @router.put("/estudante/me/foto-curriculo")
-def enviar_minha_foto_curriculo(data: FotoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def enviar_minha_foto_curriculo(request: Request, data: FotoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     """A foto do currículo é outra, separada da de identificação. Enviar já marca o currículo como "com foto"."""
     salvar_foto_curriculo(db, estudante, data.imagem_base64)
     estudante.foto_no_curriculo = True

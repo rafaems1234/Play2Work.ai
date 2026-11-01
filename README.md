@@ -325,9 +325,10 @@ Situação em 31/10/2026. Já resolvido nesta rodada: login do aluno por usuári
 
 - **Escala:** a lista e a exportação de alunos carregam tudo no navegador — ótimo pra ~600, inviável pra 50 mil. Pra rede estadual, filtros e exportação passam pro servidor com paginação, e as fotos vão pra um armazenamento de arquivos (ex.: Blob Storage).
 - **Painel da plataforma:** o multi-escola está pronto, mas criar/desativar escolas ainda é pelo `criar_escola.py` e pelo banco; falta uma tela pra equipe do Play2Work gerenciar as escolas (e, depois, cobrança por escola).
-- **Perfis mais finos:** os perfis da gestão valem pro painel inteiro; dá pra evoluir pra permissões por aba (ex.: alguém que só mexe na Trilha EAD). Hoje os botões de alterar ainda aparecem pros perfis Visualizar e Auditor — o servidor recusa, mas a tela poderia esconder.
+- **Perfis mais finos:** os perfis da gestão valem pro painel inteiro; dá pra evoluir pra permissões por aba (ex.: alguém que só mexe na Trilha EAD). Pros perfis Visualizar e Auditor, os botões de alterar já ficam escondidos (e o servidor recusa de qualquer jeito).
 - **Auditoria na mesma transação:** o registro é gravado logo depois da alteração, numa conexão própria; pra rede estadual, mover pra mesma transação da alteração (como no Sozza Command).
-- **Foto em cache depois de "Sair" do painel**, **foto HEIC enviada pelo computador** (recusada; no iPhone o Safari converte), **sem limite de envios de foto por minuto**, **busca por telefone com poucos dígitos** ("679" casa com quase todo celular de DDD 67) e **duas pessoas editando o mesmo aluno** (quem salva por último sobrescreve).
+- **Duas pessoas editando o mesmo aluno:** quem salva por último sobrescreve a outra. Proposta: conferir a versão do registro antes de salvar e avisar o conflito.
+- **Resolvido em 31/10/2026:** fotos saem da memória da página ao sair (painel e app); foto HEIC/qualquer imagem que o navegador abra é convertida em JPEG antes de subir; limite de 10 envios de foto por minuto (30 no painel); busca por telefone só a partir de 5 dígitos.
 - **Safari/iOS às vezes não dispara `afterprint`:** depois de baixar o PDF o título da aba pode ficar "Curriculo - Fulano" até recarregar.
 
 **Verificado e o que falta verificar:**

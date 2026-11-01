@@ -10,7 +10,7 @@ import AbaAcessos from './AdminAcessos';
 import AbaEquipe from './AdminEquipe';
 import AbaAuditoria from './AdminAuditoria';
 import { somEstaAtivado, tocarSomMensagem } from '../utils/sound';
-import { Avatar } from './FotoPerfil';
+import { Avatar, limparCacheFotos } from './FotoPerfil';
 import { Imprimir } from './FolhaCurriculo';
 import { IconWarning, IconTrophy, IconBriefcase, IconGraduationCap, IconMask, IconCheckCircle, IconMedal, IconBook, IconTarget, IconHandshake, IconCsv, IconPdf, IconChat, IconLock, IconUser, IconHistory } from './icons';
 import { apiFetch, lerErro, salvarToken, limparToken, obterToken, aoExpirarSessao, DEMO_MODE } from '../api';
@@ -266,7 +266,8 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
         || normalizarBusca(a.nome_exibicao).includes(termo)
         || normalizarBusca(a.email).includes(termo)
         || normalizarBusca(a.responsavel_nome).includes(termo)
-        || (digitos.length >= 3 && ((a.cpf || '').includes(digitos) || (a.telefone || '').includes(digitos) || (a.responsavel_telefone || '').includes(digitos)));
+        || (digitos.length >= 3 && (a.cpf || '').includes(digitos))
+        || (digitos.length >= 5 && ((a.telefone || '').includes(digitos) || (a.responsavel_telefone || '').includes(digitos)));
     };
     const candidatos = alunos.filter(passaOutrosFiltros);
     if (!filtraIdade) return { semStatus: candidatos, semNascimento: [] };
@@ -650,7 +651,7 @@ const AbaVagas = ({ vagas, turmas, itinerarios, recarregar }) => {
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <span style={{ fontSize: '12px', color: 'var(--adm-texto)' }}>Top</span>
             <input type="number" min={1} max={50} className="adm-input" value={quantidadeTop} onChange={(e) => setQuantidadeTop(Math.max(1, Number(e.target.value) || 1))} style={{ width: '64px' }} aria-label="Quantidade" />
-            <button className="adm-btn secundario" onClick={selecionarTop}>Selecionar</button>
+            <button className="adm-btn secundario so-quem-altera" onClick={selecionarTop}>Selecionar</button>
           </div>
         </div>
 
@@ -823,6 +824,7 @@ const AdminPanel = ({ aoSair }) => {
 
   const sair = () => {
     limparToken('admin');
+    limparCacheFotos();
     setLogado(false);
     setGestor(null);
   };
@@ -839,7 +841,7 @@ const AdminPanel = ({ aoSair }) => {
       ) : gestor.deve_trocar_senha ? (
         <TrocaSenhaObrigatoria gestor={gestor} aoTrocar={carregarGestor} aoSair={sair} />
       ) : (
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: '1320px', margin: '0 auto', padding: '20px 16px 100px' }}>
+        <div className={gestor.permissoes.alterar ? '' : 'adm-somente-leitura'} style={{ position: 'relative', zIndex: 1, maxWidth: '1320px', margin: '0 auto', padding: '20px 16px 100px' }}>
           <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Logo size={30} />
@@ -911,6 +913,11 @@ const AdminPanel = ({ aoSair }) => {
 };
 
 const ESTILOS = `
+  /* Perfis Visualizar e Auditor: os botões de alterar somem (o servidor recusa de qualquer jeito).
+     Botão principal (adm-btn sem "secundario") é sempre de alteração; os secundários que alteram
+     levam a classe so-quem-altera; os principais que só leem (ex.: Baixar PDF) levam leitura-ok. */
+  .adm-somente-leitura .adm-btn:not(.secundario):not(.leitura-ok),
+  .adm-somente-leitura .so-quem-altera { display: none !important; }
   /* Painel em tema claro (azul-gelo), diferente do app escuro do aluno.
      --adm-tinta é a cor das películas/bordas neutras, que no app eram branco translúcido. */
   .adm-raiz {

@@ -195,7 +195,7 @@ const CabecalhoFicha = ({ aluno, aoAtualizar }) => {
         </div>
         <div style={{ fontSize: '12px', color: 'var(--adm-suave)', marginBottom: '8px' }}>{aluno.itinerario || 'Itinerário não definido'}</div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <SeletorFoto className="adm-btn secundario pequeno" rotulo={enviando ? 'Enviando...' : aluno.tem_foto ? 'Trocar foto' : 'Enviar foto'} disabled={enviando} aoEscolher={enviarFoto} aoErro={setErro} />
+          <SeletorFoto className="adm-btn secundario pequeno so-quem-altera" rotulo={enviando ? 'Enviando...' : aluno.tem_foto ? 'Trocar foto' : 'Enviar foto'} disabled={enviando} aoEscolher={enviarFoto} aoErro={setErro} />
           {aluno.tem_foto && <button type="button" className="adm-link" onClick={removerFoto}>Remover</button>}
         </div>
       </div>
@@ -356,7 +356,7 @@ const AbaDados = ({ aluno, turmas, itinerarios, empresas, aoSalvar, aoAtualizar 
       <p style={{ fontSize: '12px', color: 'var(--adm-suave)', margin: '14px 0' }}>
         A senha do aluno é o CPF acima. Se ele não conseguir entrar, confira o CPF cadastrado.
       </p>
-      <button className="adm-btn secundario" onClick={() => setEditando(true)}><IconLock style={{ verticalAlign: '-2px' }} /> Habilitar edição</button>
+      <button className="adm-btn secundario so-quem-altera" onClick={() => setEditando(true)}><IconLock style={{ verticalAlign: '-2px' }} /> Habilitar edição</button>
     </div>
   );
 };
@@ -416,7 +416,7 @@ const AbaCurriculo = ({ aluno }) => {
             </option>
           ))}
         </select>
-        <button className="adm-btn" onClick={() => setImprimindo(true)}><IconPdf style={{ verticalAlign: '-2px' }} /> Baixar PDF</button>
+        <button className="adm-btn leitura-ok" onClick={() => setImprimindo(true)}><IconPdf style={{ verticalAlign: '-2px' }} /> Baixar PDF</button>
       </div>
       {dados.atual.texto_original && (
         <details className="adm-detalhes">
@@ -697,7 +697,7 @@ const FeedEntrevistas = ({ rodadas, laudos, aoMudar }) => {
                 <IconWarning /> A média passou da meta. A decisão é da coordenação: confirme a "Meta de Entrevista Atingida" ou mande o aluno para uma nova rodada.
                 <span style={{ display: 'inline-flex', gap: '6px', marginLeft: 'auto' }}>
                   <button type="button" className="adm-btn pequeno" onClick={() => decidir(r, 'confirmar')}>Confirmar meta</button>
-                  <button type="button" className="adm-btn secundario pequeno" onClick={() => decidir(r, 'nao-confirmar')}>Nova rodada</button>
+                  <button type="button" className="adm-btn secundario pequeno so-quem-altera" onClick={() => decidir(r, 'nao-confirmar')}>Nova rodada</button>
                 </span>
               </div>
             )}

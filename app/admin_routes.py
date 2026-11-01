@@ -1,13 +1,14 @@
 import json
 from datetime import date, datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from models import Estudante, Vaga, Candidatura, Turma, Curriculo, HistoricoEntrevista, SessaoEntrevista, TentativaCertificacao, RodadaEntrevista, ObservacaoEstudante, MudancaStatusContratacao, EvidenciaCompetencia, RespostaSituacao, Canal, Mensagem, ContratoAprendizagem
 from database import get_db
+from limiter import limiter
 from services import ITINERARIOS_QUIZ, AIService, calcular_desempenho_para_vaga, taxas_de_acerto_quiz, gerar_nome_exibicao
 from auth import GestorAtual, get_admin_atual, normalizar_cpf, cpf_valido
 from fuso import hoje as hoje_na_escola, agora_utc, data_local
@@ -532,7 +533,8 @@ def foto_do_curriculo_do_aluno(estudante_id: int, db: Session = Depends(get_db))
 
 
 @router.put("/estudantes/{estudante_id}/foto", dependencies=protegido)
-def enviar_foto_do_aluno(estudante_id: int, data: FotoRequest, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+def enviar_foto_do_aluno(request: Request, estudante_id: int, data: FotoRequest, db: Session = Depends(get_db)):
     """A coordenação também pode cadastrar a foto (ex: tirada na secretaria)."""
     estudante = _buscar_estudante(estudante_id, db)
     salvar_foto(db, estudante, data.imagem_base64, enviada_por="escola")

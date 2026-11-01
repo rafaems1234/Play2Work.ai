@@ -8,11 +8,13 @@ import { apiFetch } from '../api';
 // (como a localização GPS de onde a foto foi tirada).
 
 const LADO_FOTO = 400;
-const TIPOS_ACEITOS = ['image/jpeg', 'image/png', 'image/webp'];
+// Qualquer imagem que o navegador consiga abrir (inclui HEIC do iPhone no Safari);
+// ela é sempre convertida em JPEG 400x400 aqui, antes de subir.
+const EH_IMAGEM = (arquivo) => Boolean(arquivo) && (arquivo.type.startsWith('image/') || /\.(heic|heif)$/i.test(arquivo.name || ''));
 
 export const prepararFoto = (arquivo) => new Promise((resolve, reject) => {
-  if (!arquivo || !TIPOS_ACEITOS.includes(arquivo.type)) {
-    reject(new Error('Escolha uma foto JPG, PNG ou WebP.'));
+  if (!EH_IMAGEM(arquivo)) {
+    reject(new Error('Escolha um arquivo de foto (JPG, PNG, WebP ou HEIC).'));
     return;
   }
   if (arquivo.size > 15 * 1024 * 1024) {
@@ -36,7 +38,9 @@ export const prepararFoto = (arquivo) => new Promise((resolve, reject) => {
   };
   img.onerror = () => {
     URL.revokeObjectURL(url);
-    reject(new Error('Não deu pra abrir essa imagem.'));
+    reject(new Error(/\.(heic|heif)$/i.test(arquivo.name || '')
+      ? 'Este navegador não abre fotos HEIC do iPhone. Envie pelo próprio iPhone (Safari) ou salve a foto como JPG.'
+      : 'Não deu pra abrir essa imagem.'));
   };
   img.src = url;
 });
@@ -45,6 +49,13 @@ export const prepararFoto = (arquivo) => new Promise((resolve, reject) => {
 // usar <img src> direto: baixa com apiFetch e guarda um object URL por
 // (caminho, versão) -- trocar a foto muda a versão e invalida o cache.
 const cacheFotos = new Map();
+
+// Ao sair (painel ou app), as fotos já baixadas saem da memória da página:
+// o próximo a usar o computador não vê foto de aluno nenhuma
+export const limparCacheFotos = () => {
+  cacheFotos.forEach((promessa) => promessa.then((url) => url && URL.revokeObjectURL(url)));
+  cacheFotos.clear();
+};
 
 const baixarFoto = (caminho, versao) => {
   const chave = `${caminho}?v=${versao}`;
@@ -114,7 +125,7 @@ export const SeletorFoto = ({ aoEscolher, aoErro, rotulo = 'Enviar foto', classN
   };
   return (
     <>
-      <input ref={entrada} type="file" accept={TIPOS_ACEITOS.join(',')} onChange={escolher} hidden />
+      <input ref={entrada} type="file" accept="image/*,.heic,.heif" onChange={escolher} hidden />
       <button type="button" className={className} style={style} disabled={disabled} onClick={() => entrada.current?.click()}>
         <IconCamera style={{ verticalAlign: '-2px' }} /> {rotulo}
       </button>
