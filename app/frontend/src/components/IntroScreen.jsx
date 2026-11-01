@@ -246,7 +246,7 @@ const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5 }}
             >
-              // O jogo da primeira vaga
+              // A plataforma do primeiro emprego
             </motion.div>
 
             <h1 className="intro-titulo">
