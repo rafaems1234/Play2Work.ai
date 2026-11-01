@@ -40,7 +40,7 @@ const TABS = [
 ];
 
 
-const CHAVE_BANNER_OFENSIVA = 'play2work_banner_ofensiva_dispensado_em';
+const CHAVE_BANNER_OFENSIVA = 'first2work_banner_ofensiva_dispensado_em';
 const PERFIL_VAZIO = { carregado: false, foto_atualizada_em: null, tem_curriculo: false, onboarding_concluido: true };
 const hojeISO = () => hojeLocalIso();
 

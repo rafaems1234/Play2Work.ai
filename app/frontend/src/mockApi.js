@@ -202,7 +202,7 @@ const fotos = new Map();                  // alunoId -> { dataUrl, em } (identif
 const fotosCurriculo = new Map();         // alunoId -> { dataUrl, em } (outra, opcional, só no currículo)
 // O aluno da demo passa pelo primeiro acesso uma vez; concluído, fica guardado
 // no navegador pra não perguntar de novo a cada recarga da página
-const CHAVE_ONBOARDING_DEMO = 'play2work_demo_onboarding_concluido';
+const CHAVE_ONBOARDING_DEMO = 'first2work_demo_onboarding_concluido';
 const onboardingConcluido = new Set(ALUNOS.map((a) => a.id).filter((id) => id !== 1));
 try {
   if (localStorage.getItem(CHAVE_ONBOARDING_DEMO) === '1') onboardingConcluido.add(1);
