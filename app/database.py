@@ -8,11 +8,23 @@ from sqlalchemy.orm import sessionmaker
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 # URL de conexão com o PostgreSQL, configurada via variável de ambiente
-SQLALCHEMY_DATABASE_URL = os.environ["DATABASE_URL"]
+def _com_driver(url: str) -> str:
+    """
+    O SQLAlchemy 2.1 passou a usar o psycopg 3 pra "postgresql://". O projeto usa o
+    psycopg2 (requirements.txt), então o driver vai explícito -- assim o .env pode
+    continuar com o endereço comum. Endereço que já diz o driver fica como está.
+    """
+    for prefixo in ("postgresql://", "postgres://"):
+        if url.startswith(prefixo):
+            return "postgresql+psycopg2://" + url[len(prefixo):]
+    return url
+
+
+SQLALCHEMY_DATABASE_URL = _com_driver(os.environ["DATABASE_URL"])
 # Em produção a API entra com um usuário que só lê e grava dados (sem criar nem
 # apagar tabela); as migrações rodam com o dono do banco. Ver docs/deploy/banco.md.
 # Sem esta variável, as migrações usam a mesma DATABASE_URL (desenvolvimento).
-MIGRACAO_DATABASE_URL = os.environ.get("MIGRACAO_DATABASE_URL") or SQLALCHEMY_DATABASE_URL
+MIGRACAO_DATABASE_URL = _com_driver(os.environ.get("MIGRACAO_DATABASE_URL") or SQLALCHEMY_DATABASE_URL)
 
 # Aqui criamos o engine diretamente
 # Sessão sempre em UTC: o now() das colunas com server_default grava no mesmo

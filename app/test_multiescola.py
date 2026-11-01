@@ -42,6 +42,11 @@ def ambiente():
     token = cliente.post("/api/admin/login", json={"usuario": "gestor.isolamento", "senha": senha}).json()["token"]
     token = cliente.post("/api/admin/gestao/minha-senha", json={"senha_atual": senha, "nova_senha": "Isolamento2026x"},
                          headers={"Authorization": f"Bearer {token}"}).json()["token"]
+    # Verificação em duas etapas obrigatória: ativa como a pessoa faria, lendo o "QR Code"
+    import pyotp
+    gerado = cliente.post("/api/admin/gestao/2fa/iniciar", headers={"Authorization": f"Bearer {token}"}).json()
+    token = cliente.post("/api/admin/gestao/2fa/ativar", json={"codigo": pyotp.TOTP(gerado["segredo"]).now()},
+                         headers={"Authorization": f"Bearer {token}"}).json()["token"]
     yield cliente, {"Authorization": f"Bearer {token}"}
     escola = db.query(models.Escola).filter(models.Escola.slug == "teste-isolamento").first()
     if escola:

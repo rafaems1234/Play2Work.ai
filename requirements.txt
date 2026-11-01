@@ -1,20 +1,20 @@
-fastapi==0.138.1
-uvicorn==0.28.0
-sqlalchemy==2.0.28
-alembic==1.19.1
+fastapi==0.162.0
+uvicorn==0.54.0
+sqlalchemy==2.1.6
+alembic==1.20.1
 bcrypt==5.0.0
-pyjwt==2.15.0
-psycopg2-binary==2.9.9
-pydantic==2.13.4
+pyjwt==2.15.1
+psycopg2-binary==2.9.13
+pydantic==2.14.2
 email-validator==2.3.0
 slowapi==0.1.10
-google-genai==2.10.0
-python-dotenv==1.2.2
+google-genai==2.34.0
+python-dotenv==1.2.4
 requests==2.34.2
 httpx==0.28.1
-pytest==9.1.1
-tzdata==2026.3
+pytest==9.2.0
+tzdata==2026.6
 python-multipart==0.0.32
-pyotp==2.9.0
+pyotp==2.10.0
 segno==1.6.6
-dnspython==2.9.0; python_version >= "3.11"  # vem pelo email-validator; a 2.8.0 tem falha conhecida e a 2.9.0 exige Python 3.11+ (o servidor e o CI usam 3.12)
+dnspython==2.9.1; python_version >= "3.11"  # vem pelo email-validator; a 2.8.0 tem falha conhecida e a 2.9.0 exige Python 3.11+ (o servidor e o CI usam 3.12)

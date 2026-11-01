@@ -2791,3 +2791,13 @@ def test_filtro_atua_no_registro_do_uvicorn():
 def test_filtro_esta_ligado_no_logger_de_acesso():
     import main  # noqa: F401
     assert any(isinstance(f, FiltroUrlSemDados) for f in _logging.getLogger("uvicorn.access").filters)
+
+def test_escola_sem_administrador_nao_tranca_o_login_das_outras(mock_db):
+    # A 1ª escola ainda sem Administrador e sem ADMIN_SENHA: só a instalação (usuário em branco) é barrada
+    conta = UsuarioGestao(id=7, nome="Maria", usuario="maria", senha_hash=hash_senha("Senha2026forte"), papel="alterar", ativo=True,
+                          deve_trocar_senha=False, sessao_versao=0, login_falhas=0, escola_id=None)
+    mock_db.query().filter().first.return_value = conta
+    with patch("gestao_routes.ADMIN_SENHA", None), patch("gestao_routes.existe_administrador", return_value=False), \
+         patch("gestao_routes.escola_de_instalacao", return_value=MagicMock(id=1, nome="Escola piloto")):
+        assert client.post("/api/admin/login", json={"usuario": "", "senha": "qualquer"}).status_code == 503
+        assert client.post("/api/admin/login", json={"usuario": "maria", "senha": "Senha2026forte"}).status_code == 200

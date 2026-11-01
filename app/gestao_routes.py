@@ -124,10 +124,11 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
     usuario = data.usuario.strip().lower()
     escola_inst = escola_de_instalacao(db)
     if escola_inst is not None and not existe_administrador(db, escola_inst.id):
-        # Instalação: escola sem nenhum Administrador -> entra-se com a ADMIN_SENHA pra criar o primeiro
-        if not ADMIN_SENHA:
+        # Instalação: escola sem nenhum Administrador -> entra-se com a ADMIN_SENHA pra criar o primeiro.
+        # Só barra quem tenta a instalação (usuário em branco): as contas de outras escolas entram normal.
+        if not ADMIN_SENHA and not usuario:
             raise HTTPException(status_code=503, detail="Painel ainda não configurado: defina ADMIN_SENHA no .env para criar o primeiro Administrador.")
-        if secrets.compare_digest(data.senha.encode("utf-8"), ADMIN_SENHA.encode("utf-8")):
+        if ADMIN_SENHA and secrets.compare_digest(data.senha.encode("utf-8"), ADMIN_SENHA.encode("utf-8")):
             gestor = GestorAtual(id=None, nome="Instalação", usuario="instalacao", papel="administrador", instalacao=True,
                                  escola_id=escola_inst.id, escola_nome=escola_inst.nome)
             request.state.gestor = gestor
