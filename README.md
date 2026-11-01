@@ -1,5 +1,7 @@
 # First2Work.AI 🚀 
-> Inclusão Produtiva de Jovens com IA e Gamificação
+> A plataforma do primeiro emprego · Treine. Evolua. Seja contratado.
+
+> **Marca:** o projeto se chamava *Play2Work.ai* e virou **First2Work.ai** em 01/11/2026 (logo F2W). O repositório e o endereço do site de demonstração continuam com o nome antigo, assim como as chaves internas do navegador e os nomes do banco/Docker, pra não quebrar logins salvos nem o deploy.
 
 O **First2Work.AI** é um ecossistema tecnológico completo projetado para democratizar o acesso à orientação profissional e impulsionar a empregabilidade de jovens estudantes em busca do primeiro emprego e vagas de Jovem Aprendiz.
 
@@ -59,7 +61,7 @@ Através de uma abordagem de **gamificação comportamental** (inspirada em mec�
 14. **Feedback sonoro e animado.** Sons curtos sintetizados via Web Audio API (sem arquivos de áudio) para acerto/erro no quiz, level-up e mudança de liga, com confete e toasts no level-up/promoção. Um botão no cabeçalho liga/desliga o som (preferência salva no navegador).
 14b. **Tema claro e escuro.** O app do aluno tem os dois temas: escuro (padrão, a identidade tech) e claro (fundo azul-gelo, texto escuro). O botão de sol/lua fica no topo, ao lado do som (no celular, ao lado do sino), e a escolha fica salva no navegador. As cores saem de variáveis em `index.css` (`--txt-*`, `--tinta-rgb`, `--campo-rgb`, tons de status), com os valores do claro em `:root[data-tema="claro"]` — componente novo usa essas variáveis, nunca cor fixa. O tema é aplicado antes da primeira renderização (`hooks/useTema.js`), sem piscar escuro. O Painel da Escola segue com o tema claro próprio.
 15. **Tela de abertura.** Landing em estilo tech (grade, terminal de IA "digitando", números animados e a jornada em 6 passos) que apresenta a proposta antes de entrar na plataforma — `Enter` ou o botão entram, e clicar no logo volta pra ela.
-16. **Ficha completa do aluno no Painel da Escola.** Cada ficha tem foto, **contato** (CPF, e-mail, celular do aluno, nome e celular do responsável, com atalho pro WhatsApp) e quatro abas: **Dados**, **Currículo** (a versão mais recente que o aluno gerou, as anteriores pra consulta e o botão Baixar PDF), **Histórico** (experiência anterior, mudanças de status, indicações e candidaturas com o retorno da empresa registrado pela escola, e as respostas do simulador de entrevista agrupadas por dia, com feedback e nota) e **Observações** internas da coordenação, que o aluno nunca vê.
+16. **Ficha completa do aluno no Painel da Escola.** Cada ficha tem foto, **contato** clicável (CPF; e-mail do aluno e do responsável abrem o programa de e-mail; o celular do aluno e o do responsável abrem a conversa no WhatsApp, com "ligar" ao lado; o LinkedIn do aluno abre o perfil) e quatro abas: **Dados**, **Currículo** (a versão mais recente que o aluno gerou, as anteriores pra consulta e o botão Baixar PDF), **Histórico** (experiência anterior, mudanças de status, indicações e candidaturas com o retorno da empresa registrado pela escola, e as respostas do simulador de entrevista agrupadas por dia, com feedback e nota) e **Observações** internas da coordenação, que o aluno nunca vê.
 17. **Status de contratação, filtros e exportação.** Cada aluno tem um dos 4 status da planilha do PAP: **No aguardo** (na fila de espera), **Contratado** (com empresa e data), **Desistência** ou **Expirado**, e toda mudança fica registrada. A lista tem filtros rápidos Todos / No aguardo / Contratados / Desistência / Expirados, com a contagem de cada um, e filtros combinados por nome, CPF, telefone, turma, itinerário, idade e "só sem foto". **Exportar CSV** (ponto e vírgula + BOM, abre direto no Excel em português, protegido contra injeção de fórmula) e **Exportar PDF** (relatório em A4 deitado, com os filtros aplicados no cabeçalho) exportam exatamente a lista filtrada que está na tela.
 17b. **Ficha do PAP e contratos (as colunas da planilha de controle da escola).** Na ficha do aluno, a aba **PAP** tem os dados da planilha: nº de cadastro (Planilha SED), sexo, perfil de desenvolvimento (Típico/Atípico — dado sensível, só a escola vê), ano escolar inicial e atual, turno escolar, data da formação para o mundo do trabalho, status do estudante (Habilitado/Não habilitado), endereço, documentos e a data da última atualização. Logo abaixo, os **contratos de aprendizagem** com histórico: empresa, CNPJ, local de atuação, turno de trabalho, contratação Direta/Alternativa, vigência, aditivo, carga horária semanal (teoria e prática), status (Ativo/Finalizado), motivo do encerramento e efetivação. Contrato ativo marca o aluno como contratado. O **status do aprendiz** segue a planilha: No aguardo, Contratado, Desistência e Expirado. O **CSV** exporta todas essas colunas. Campos, rótulos e opções ficam em `frontend/src/data/ficha_pap.json` (backend valida em `ficha_pap.py`; o modo demo usa o mesmo arquivo).
 18. **Primeiro acesso do aluno.** No primeiro login o aluno passa por 3 passos: foto (opcional: dá pra pular e adicionar depois em "Minha conta"; o navegador recorta e reduz a foto pra 400px, o que também descarta os metadados EXIF, e só a escola vê), experiência de trabalho e currículo. O primeiro acesso aparece **uma vez só** (`onboarding_concluido_em`): depois dele o app não volta a perguntar se o aluno já trabalhou nem a cobrar foto ou currículo. Essa é a **foto de identificação**, pra escola reconhecer o aluno no painel (a coordenação também pode cadastrar); fica no Postgres (`fotos_estudantes`), é validada pelo tipo real dos bytes (JPG/PNG/WebP, até 1 MB) e só é servida com token. **A foto do currículo é outra e é opcional:** na tela do currículo o aluno marca **Sem foto** (padrão, evita discriminação por aparência) ou **Com foto** e envia ali a foto que quer no currículo (`fotos_curriculo`, rotas `/estudante/me/foto-curriculo`). Ela não troca a foto de identificação; o painel e o PDF da escola mostram o currículo como o aluno escolheu, e a escola só vê essa foto, não altera.
@@ -177,7 +179,7 @@ Play2Work.ai/
             │   ├── AdminMensagens.jsx   # Chat e sininho do painel
             │   ├── AdminAcessos.jsx     # Aba Acessos: pedidos de senha nova, códigos de acesso e bilhetes
             │   ├── Gaveta.jsx           # Painel lateral do admin
-            │   ├── AccountSettings.jsx  # "Minha conta": foto, itinerário, LinkedIn, sair
+            │   ├── AccountSettings.jsx  # "Minha conta" (duas colunas): foto, dados, LinkedIn, trocar senha, sair
             │   ├── LoginAluno.jsx, IntroScreen.jsx, DailyQuiz.jsx, QuizResultado.jsx,
             │   ├── InterviewSimulator.jsx, ResumeBuilder.jsx, WeeklyLeaderboard.jsx, ...
             ├── App.jsx          # Hub central: sessão, navegação, estado global do estudante
@@ -287,10 +289,10 @@ O front-end sobe em `http://localhost:5173` e já aponta para o back-end em `htt
 | Quem | Onde | Como entra |
 |---|---|---|
 | Rafael (primeiro acesso no app, integração por fazer) | tela inicial → Entrar | usuário `rafael.sozza`, senha `first2work123` |
-| Bianca (contratada, integração concluída e certificado retirado, grupo da empresa) | Entrar → "Tenho um código da escola" | CPF `222.572.222-61` + código `246810`, e cria a senha |
+| Bianca (contratada, integração concluída e certificado retirado, grupo da empresa; no painel, duas rodadas de entrevista — 69% → 82% — com a meta esperando a coordenação confirmar) | Entrar → "Tenho um código da escola" | CPF `222.572.222-61` + código `246810`, e cria a senha |
 | Painel da Escola | `#admin` na URL | `coordenacao` (Administrador), `auditoria` (Auditor), `secretaria` (Alterar) ou `professor` (Visualizar), senha `escola123` |
 
-Tudo o que se faz no modo demonstração fica só na memória da aba: recarregar a página volta ao estado inicial.
+Tudo o que se faz no modo demonstração fica só na memória da aba: recarregar a página volta ao estado inicial (é assim que se refaz o simulado de certificação depois de reprovar, que fica travado pelo resto do ciclo).
 
 ### 3. Rodando os testes
 
@@ -330,10 +332,12 @@ O "dia" do aluno (ofensiva, quiz do dia, liga semanal, data de contratação, ag
 
 ## 📋 Antes da homologação na escola
 
-Situação em 31/10/2026. Já resolvido nesta rodada: login do aluno por usuário + senha (primeiro acesso com código da escola), contas da gestão com perfis e auditoria de 2 anos, entrevista contínua com laudo, rodadas e simulado de certificação.
+Situação em 01/11/2026. Já resolvido nesta rodada: login do aluno por usuário + senha (primeiro acesso com código da escola), contas da gestão com perfis e auditoria de 2 anos, entrevista contínua com laudo, rodadas e simulado de certificação.
 
 **Precisa de decisão ou de gente da escola (o código não resolve sozinho):**
 
+- **Marca First2Work:** pesquisar e registrar no INPI (classes 41 e 42) e reservar `first2work.com.br` / `first2work.ai` e o @ nas redes. Se o nome estiver ocupado, a troca no código é rápida (só texto e logo). Depois do domínio, dá pra renomear o repositório (o link antigo do demo deixa de funcionar).
+- **Proposta comercial:** levantamento pra diretora feito fora do repositório (implantação R$ 6.000; mensalidade de escola piloto R$ 2.000, tabela R$ 2.800, até 600 alunos; hospedagem na Azure, região Brasil). Falta virar proposta oficial e contrato com revisão jurídica.
 - **Conteúdo do banco de questões:** as 630 perguntas precisam de revisão dos professores — agora com mais urgência, porque o **simulado de certificação** sorteia delas e uma resposta errada no banco pode reprovar um aluno. Atenção principal às que citam números de lei (CLT, FGTS do aprendiz, prazos do CPC, cotas).
 - **LGPD** (rascunhos prontos em [`docs/lgpd`](docs/lgpd/README.md), com o mapa dos dados que o sistema guarda — **precisam de revisão de advogado**): política de privacidade, termos de uso, consentimento do responsável (a maioria é menor) e contrato com a escola dizendo que ela é a controladora dos dados e o First2Work o operador. **Gemini:** no plano gratuito o Google pode usar o conteúdo enviado pra melhorar os produtos; com texto de aluno menor de idade, usar o plano pago antes do piloto.
 - **Quem atende o painel:** combinar com a coordenação quem cuida da aba Acessos (pedidos de senha — sem alguém atendendo, o aluno que esqueceu a senha fica sem entrar, inclusive nas férias) e quem confirma as Metas de Entrevista.
