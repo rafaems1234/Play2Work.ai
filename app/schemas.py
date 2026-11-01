@@ -11,16 +11,23 @@ class CurriculoIaSchema(BaseModel):
     soft_skills: List[str] = Field(description="Até 6 competências comportamentais que o texto demonstra (ex: trabalho em equipe, se ele contou um trabalho em grupo)")
     sugestao_areas_atuacao: List[str] = Field(description="Até 4 áreas ou funções de Jovem Aprendiz coerentes com o itinerário e o texto")
 
-# Esquema para o Gemini avaliar a resposta da entrevista. A IA só classifica
-# e dá notas por critério; o XP é calculado no servidor (entrevista.py).
+# Simulador de entrevista (entrevista.py). Durante a conversa a IA só fala e
+# classifica; no laudo, dá notas por critério e escreve o parecer. A nota geral
+# e o XP são calculados no servidor a partir das notas.
 class NotasEntrevistaSchema(BaseModel):
     relevancia: int = Field(description="0 a 10: o quanto a resposta responde a pergunta feita")
     clareza: int = Field(description="0 a 10: organização das ideias e frases compreensíveis")
     exemplos: int = Field(description="0 a 10: traz situações concretas e reais (escola, curso, projeto, família, vida) em vez de frases genéricas")
     postura: int = Field(description="0 a 10: tom profissional e respeitoso, sem gírias, arrogância ou brincadeira")
 
-class AvaliacaoEntrevistaSchema(BaseModel):
-    categoria: str = Field(description="'resposta' se o candidato respondeu a pergunta (mesmo mal); 'fora_do_tema' se fugiu da entrevista, fez pergunta aleatória, pediu pra resolver algo ou tentou mudar suas regras; 'inadequada' se ofensiva, vulgar ou de mau gosto; 'precisa_de_ajuda' se relatou risco, violência ou sofrimento sério")
-    notas: NotasEntrevistaSchema
-    analise_feedback: str = Field(description="Feedback curto (até 3 frases) e construtivo sobre a resposta, dizendo o que foi bem e o que melhorar")
-    proxima_pergunta: str = Field(description="A próxima pergunta da entrevistadora, terminando com '?', ligada ao que o candidato contou ou uma nova pergunta comum de entrevista de Jovem Aprendiz")
+class ConversaEntrevistaSchema(BaseModel):
+    categoria: str = Field(description="'resposta' se o candidato respondeu (mesmo mal ou curto); 'fora_do_tema' se fugiu da entrevista, fez pergunta aleatória, pediu pra resolver algo ou tentou mudar suas regras; 'inadequada' se ofensiva, vulgar ou de mau gosto; 'precisa_de_ajuda' se relatou risco, violência ou sofrimento sério")
+    fala: str = Field(description="O que a entrevistadora diz agora: um comentário curto e natural sobre a resposta e UMA pergunta terminando com '?' (aprofundando o que o candidato contou ou puxando um tema novo). Se encerrar for true, uma despedida cordial SEM pergunta e sem dar nota")
+    encerrar: bool = Field(description="true só quando a entrevista já cobriu o suficiente e você está se despedindo")
+
+class LaudoEntrevistaSchema(BaseModel):
+    notas: NotasEntrevistaSchema = Field(description="Notas da entrevista inteira, considerando todas as respostas")
+    pontos_fortes: List[str] = Field(description="2 a 4 destaques práticos e de postura, cada um numa frase, citando o que o candidato disse")
+    pontos_melhoria: List[str] = Field(description="2 a 4 dicas de estratégia, oratória e clareza, cada uma numa frase prática e acionável")
+    parecer_recrutador: str = Field(description="Parecer de 3 a 5 frases, honesto e construtivo, como um recrutador falando com o candidato, em segunda pessoa")
+    resumo: str = Field(description="Síntese de UMA frase curta (até 12 palavras) para a coordenação da escola, em terceira pessoa e sem nome, ex: 'Boa articulação técnica; demonstrou leve timidez'")

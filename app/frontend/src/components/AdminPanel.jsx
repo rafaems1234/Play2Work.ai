@@ -6,13 +6,16 @@ import FichaAluno, { FormAluno, ChipStatus, fotoDoAluno } from './FichaAluno';
 import Gaveta from './Gaveta';
 import AbaTrilha from './AdminTrilha';
 import AbaMensagens, { SinoEscola } from './AdminMensagens';
+import AbaAcessos from './AdminAcessos';
+import AbaEquipe from './AdminEquipe';
+import AbaAuditoria from './AdminAuditoria';
 import { somEstaAtivado, tocarSomMensagem } from '../utils/sound';
-import { Avatar } from './FotoPerfil';
+import { Avatar, limparCacheFotos } from './FotoPerfil';
 import { Imprimir } from './FolhaCurriculo';
-import { IconWarning, IconTrophy, IconBriefcase, IconGraduationCap, IconMask, IconCheckCircle, IconMedal, IconBook, IconTarget, IconHandshake, IconCsv, IconPdf, IconChat } from './icons';
+import { IconWarning, IconTrophy, IconBriefcase, IconGraduationCap, IconMask, IconCheckCircle, IconMedal, IconBook, IconTarget, IconHandshake, IconCsv, IconPdf, IconChat, IconLock, IconUser, IconHistory } from './icons';
 import { apiFetch, lerErro, salvarToken, limparToken, obterToken, aoExpirarSessao, DEMO_MODE } from '../api';
 import { mascararCpf, dataHoraIsoParaBr, normalizarBusca, somenteDigitos } from '../utils/formatos';
-import { COLUNAS_ALUNOS, baixarCsv, carimboArquivo } from '../utils/exportar';
+import { COLUNAS_ALUNOS, baixarCsv, carimboArquivo, registrarExportacao } from '../utils/exportar';
 
 // Painel da escola: cadastro e gestão dos alunos (CPF, nascimento, e-mail,
 // turma, itinerário), turmas, vagas das empresas parceiras e a seleção dos
@@ -32,8 +35,9 @@ const corDaNota = (nota) => {
   return '#dc2626';
 };
 
-// ------------------------------------------------------------------ login
+// ------------------------------------------------------------------ login (uma conta por pessoa da gestão)
 const LoginAdmin = ({ aoEntrar, aoSair }) => {
+  const [usuario, setUsuario] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState(null);
   const [enviando, setEnviando] = useState(false);
@@ -43,13 +47,14 @@ const LoginAdmin = ({ aoEntrar, aoSair }) => {
     try {
       setEnviando(true);
       setErro(null);
-      const resposta = await apiFetch('/api/admin/login', { method: 'POST', body: JSON.stringify({ senha }) });
+      const resposta = await apiFetch('/api/admin/login', { method: 'POST', body: JSON.stringify({ usuario: usuario.trim(), senha }) });
       if (!resposta.ok) {
         setErro(await lerErro(resposta, 'Não foi possível entrar.'));
         return;
       }
-      salvarToken('admin', (await resposta.json()).token);
-      aoEntrar();
+      const dados = await resposta.json();
+      salvarToken('admin', dados.token);
+      aoEntrar(dados.gestor);
     } catch (err) {
       console.error(err);
       setErro('Não foi possível conectar.');
@@ -65,19 +70,54 @@ const LoginAdmin = ({ aoEntrar, aoSair }) => {
           <Logo size={30} />
           <div>
             <div style={{ fontWeight: '800', color: 'var(--adm-forte)', fontSize: '17px' }}>Painel da Escola</div>
-            <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>Acesso da coordenação</div>
+            <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>Acesso da gestão</div>
           </div>
         </div>
-        <label className="adm-rotulo" htmlFor="adm-senha">Senha do painel</label>
-        <input id="adm-senha" type="password" className="adm-input" value={senha} onChange={(e) => setSenha(e.target.value)} autoFocus />
+        <label className="adm-rotulo" htmlFor="adm-usuario">Usuário</label>
+        <input id="adm-usuario" className="adm-input" autoComplete="username" autoCapitalize="none" value={usuario} onChange={(e) => setUsuario(e.target.value)} autoFocus />
+        <label className="adm-rotulo" htmlFor="adm-senha" style={{ marginTop: '10px' }}>Senha</label>
+        <input id="adm-senha" type="password" autoComplete="current-password" className="adm-input" value={senha} onChange={(e) => setSenha(e.target.value)} />
         {erro && <div className="adm-erro"><IconWarning /> {erro}</div>}
         <button type="submit" className="adm-btn" disabled={enviando || !senha} style={{ width: '100%', marginTop: '16px' }}>
           {enviando ? 'Entrando...' : 'Entrar'}
         </button>
+        <p style={{ fontSize: '11px', color: 'var(--adm-suave)', margin: '10px 0 0', lineHeight: 1.5 }}>
+          Primeira vez? Deixe o usuário em branco e entre com a senha de instalação para criar a conta do Administrador.
+        </p>
         {DEMO_MODE && (
-          <div style={{ marginTop: '14px', fontSize: '12px', color: '#c98a04', display: 'flex', alignItems: 'center', gap: '6px' }}><IconMask /> Demonstração: a senha é <strong>escola123</strong></div>
+          <div style={{ marginTop: '12px', fontSize: '12px', color: '#c98a04', lineHeight: 1.6 }}>
+            <IconMask style={{ verticalAlign: '-2px' }} /> Demonstração: <strong>coordenacao</strong> (Administrador), <strong>auditoria</strong> (Auditor), <strong>secretaria</strong> (Alterar) ou <strong>professor</strong> (Visualizar), todos com a senha <strong>escola123</strong>
+          </div>
         )}
         <button type="button" className="adm-link" onClick={aoSair} style={{ marginTop: '14px' }}>← Voltar</button>
+      </form>
+    </div>
+  );
+};
+
+// Senha temporária (conta nova ou senha resetada): o servidor só libera o painel depois da troca
+const TrocaSenhaObrigatoria = ({ gestor, aoTrocar, aoSair }) => {
+  const [campos, setCampos] = useState({ atual: '', nova: '', confirmar: '' });
+  const [erro, setErro] = useState(null);
+  const trocar = async (e) => {
+    e.preventDefault();
+    if (campos.nova !== campos.confirmar) { setErro('A confirmação não é igual à senha nova.'); return; }
+    const r = await apiFetch('/api/admin/gestao/minha-senha', { method: 'POST', body: JSON.stringify({ senha_atual: campos.atual, nova_senha: campos.nova }) });
+    if (!r.ok) { setErro(await lerErro(r, 'Não foi possível trocar a senha.')); return; }
+    salvarToken('admin', (await r.json()).token);
+    aoTrocar();
+  };
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', position: 'relative' }}>
+      <form onSubmit={trocar} className="adm-card" style={{ width: '100%', maxWidth: '380px', position: 'relative', zIndex: 1 }}>
+        <div style={{ fontWeight: 800, color: 'var(--adm-forte)', fontSize: '17px', marginBottom: '4px' }}>Olá, {gestor.nome.split(' ')[0]}!</div>
+        <p style={{ fontSize: '13px', color: 'var(--adm-texto)', margin: '0 0 12px' }}>Você entrou com uma senha temporária. Crie a sua senha para usar o painel.</p>
+        <input type="password" className="adm-input" placeholder="Senha temporária" autoComplete="current-password" value={campos.atual} onChange={(e) => setCampos({ ...campos, atual: e.target.value })} />
+        <input type="password" className="adm-input" placeholder="Senha nova (10+ caracteres, letras e números)" autoComplete="new-password" value={campos.nova} onChange={(e) => setCampos({ ...campos, nova: e.target.value })} style={{ marginTop: '8px' }} />
+        <input type="password" className="adm-input" placeholder="Repita a senha nova" autoComplete="new-password" value={campos.confirmar} onChange={(e) => setCampos({ ...campos, confirmar: e.target.value })} style={{ marginTop: '8px' }} />
+        {erro && <div className="adm-erro"><IconWarning /> {erro}</div>}
+        <button type="submit" className="adm-btn" disabled={!campos.atual || !campos.nova} style={{ width: '100%', marginTop: '14px' }}>Salvar senha e entrar</button>
+        <button type="button" className="adm-link" onClick={aoSair} style={{ marginTop: '12px' }}>Sair</button>
       </form>
     </div>
   );
@@ -226,7 +266,8 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
         || normalizarBusca(a.nome_exibicao).includes(termo)
         || normalizarBusca(a.email).includes(termo)
         || normalizarBusca(a.responsavel_nome).includes(termo)
-        || (digitos.length >= 3 && ((a.cpf || '').includes(digitos) || (a.telefone || '').includes(digitos) || (a.responsavel_telefone || '').includes(digitos)));
+        || (digitos.length >= 3 && (a.cpf || '').includes(digitos))
+        || (digitos.length >= 5 && ((a.telefone || '').includes(digitos) || (a.responsavel_telefone || '').includes(digitos)));
     };
     const candidatos = alunos.filter(passaOutrosFiltros);
     if (!filtraIdade) return { semStatus: candidatos, semNascimento: [] };
@@ -254,13 +295,20 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
     const resposta = await apiFetch('/api/admin/estudantes', { method: 'POST', body: JSON.stringify(dados) });
     if (!resposta.ok) return lerErro(resposta, 'Não foi possível cadastrar.');
     setCadastrando(false);
-    setAviso(`${dados.nome} cadastrado(a). A senha de acesso é o CPF.`);
+    setAviso(`${dados.nome} cadastrado(a). Para o primeiro acesso, gere o código na aba Acessos e entregue ao aluno.`);
     await recarregar();
     return null;
   };
 
   const atualizar = async (dados) => {
-    const resposta = await apiFetch(`/api/admin/estudantes/${selecionadoId}`, { method: 'PUT', body: JSON.stringify(dados) });
+    // Manda a versão do cadastro que a ficha carregou: se alguém salvou no meio-tempo, o servidor recusa (409)
+    const versao = alunos.find((a) => a.id === selecionadoId)?.versao_cadastro;
+    const resposta = await apiFetch(`/api/admin/estudantes/${selecionadoId}`, { method: 'PUT', body: JSON.stringify({ ...dados, versao }) });
+    if (resposta.status === 409) {
+      const motivo = await lerErro(resposta, 'Outra pessoa alterou este cadastro enquanto você editava.');
+      await recarregar(); // a ficha passa a mostrar a versão atual
+      return motivo;
+    }
     if (!resposta.ok) return lerErro(resposta, 'Não foi possível salvar.');
     setAviso(`Dados de ${dados.nome} atualizados.`);
     await recarregar();
@@ -334,7 +382,7 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
           <button className="adm-btn secundario pequeno" disabled={!filtrados.length} onClick={() => baixarCsv(`alunos_${carimboArquivo()}.csv`, filtrados)}>
             <IconCsv style={{ verticalAlign: '-2px' }} /> Exportar CSV
           </button>
-          <button className="adm-btn secundario pequeno" disabled={!filtrados.length} onClick={() => setImprimindo(true)}>
+          <button className="adm-btn secundario pequeno" disabled={!filtrados.length} onClick={() => { registrarExportacao(`relatório de alunos (PDF, ${filtrados.length} alunos)${descricaoFiltros ? ` — ${descricaoFiltros}` : ''}`, filtrados.length); setImprimindo(true); }}>
             <IconPdf style={{ verticalAlign: '-2px' }} /> Exportar PDF
           </button>
         </div>
@@ -367,7 +415,11 @@ const AbaAlunos = ({ alunos, turmas, itinerarios, filtroTurmaInicial, recarregar
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <Avatar caminho={fotoDoAluno(a.id)} versao={a.foto_atualizada_em} nome={a.nome} tamanho={34} />
                     <div>
-                      <div style={{ fontWeight: 700, color: 'var(--adm-texto-forte)' }}>{a.nome}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--adm-texto-forte)' }}>
+                        {a.nome}
+                        {a.meta_entrevista && <span className={`adm-chip pequeno ${a.meta_entrevista.confirmada ? 'verde' : 'amarelo'}`} style={{ marginLeft: '6px' }} title={`Rodada ${a.meta_entrevista.rodada} do simulador de entrevista, média ${a.meta_entrevista.media}%`}>{a.meta_entrevista.confirmada ? 'Meta de entrevista' : 'Meta: confirmar'}</span>}
+                        {a.certificacao?.aprovada && <span className="adm-chip verde pequeno" style={{ marginLeft: '6px' }} title={`Simulado de certificação: ${a.certificacao.aprovada.percentual}%`}>Certificado {a.certificacao.aprovada.percentual}%</span>}
+                      </div>
                       <div style={{ fontSize: '11px', color: 'var(--adm-suave)' }}>no ranking: <span style={{ color: 'var(--accent-soft)' }}>{a.nome_exibicao}</span> · {a.email}</div>
                     </div>
                   </div>
@@ -606,7 +658,7 @@ const AbaVagas = ({ vagas, turmas, itinerarios, recarregar }) => {
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <span style={{ fontSize: '12px', color: 'var(--adm-texto)' }}>Top</span>
             <input type="number" min={1} max={50} className="adm-input" value={quantidadeTop} onChange={(e) => setQuantidadeTop(Math.max(1, Number(e.target.value) || 1))} style={{ width: '64px' }} aria-label="Quantidade" />
-            <button className="adm-btn secundario" onClick={selecionarTop}>Selecionar</button>
+            <button className="adm-btn secundario so-quem-altera" onClick={selecionarTop}>Selecionar</button>
           </div>
         </div>
 
@@ -691,6 +743,9 @@ const ABAS = [
   { id: 'vagas', rotulo: 'Vagas e indicação', Icon: IconBriefcase },
   { id: 'trilha', rotulo: 'Trilha EAD', Icon: IconBook },
   { id: 'mensagens', rotulo: 'Chat', Icon: IconChat },
+  { id: 'acessos', rotulo: 'Acessos', Icon: IconLock },
+  { id: 'equipe', rotulo: 'Equipe', Icon: IconUser, precisa: 'contas' },
+  { id: 'auditoria', rotulo: 'Auditoria', Icon: IconHistory, precisa: 'auditar' },
 ];
 
 // Cartões do topo: tons fechados e dessaturados, pra dar identidade sem virar arco-íris
@@ -704,6 +759,7 @@ const CARTOES_RESUMO = [
 
 const AdminPanel = ({ aoSair }) => {
   const [logado, setLogado] = useState(() => Boolean(obterToken('admin')));
+  const [gestor, setGestor] = useState(null); // quem está logado e o que o perfil dele pode
   const [aba, setAba] = useState('alunos');
   // Conversa que a notificação do sininho mandou abrir na aba Chat
   const [canalChat, setCanalChat] = useState(null);
@@ -733,9 +789,23 @@ const AdminPanel = ({ aoSair }) => {
     if (rIt.ok) setItinerarios((await rIt.json()).itinerarios);
   };
 
+  const carregarGestor = useCallback(async () => {
+    const r = await apiFetch('/api/admin/gestao/eu');
+    if (r.ok) {
+      const dados = await r.json();
+      setGestor(dados);
+      if (dados.instalacao) setAba('equipe');
+    }
+  }, []);
+
   useEffect(() => {
-    if (logado) recarregar();
-  }, [logado]);
+    if (logado) carregarGestor();
+    else setGestor(null);
+  }, [logado, carregarGestor]);
+
+  useEffect(() => {
+    if (logado && gestor && !gestor.deve_trocar_senha) recarregar();
+  }, [logado, gestor]);
 
   // Só o resumo, a cada 30 s: mantém o contador de mensagens não lidas da aba Mensagens em dia
   const atualizarResumo = useCallback(async () => {
@@ -761,26 +831,37 @@ const AdminPanel = ({ aoSair }) => {
 
   const sair = () => {
     limparToken('admin');
+    limparCacheFotos();
     setLogado(false);
+    setGestor(null);
   };
+  const abasDoPerfil = ABAS.filter((a) => !a.precisa || gestor?.permissoes?.[a.precisa]);
 
   return (
     <div className="adm-raiz">
       <style>{ESTILOS}</style>
       <TechBackground />
       {!logado ? (
-        <LoginAdmin aoEntrar={() => setLogado(true)} aoSair={aoSair} />
+        <LoginAdmin aoEntrar={(g) => { setGestor(g); setLogado(true); }} aoSair={aoSair} />
+      ) : !gestor ? (
+        <p style={{ position: 'relative', zIndex: 1, textAlign: 'center', paddingTop: '40vh', color: 'var(--adm-suave)' }}>Carregando…</p>
+      ) : gestor.deve_trocar_senha ? (
+        <TrocaSenhaObrigatoria gestor={gestor} aoTrocar={carregarGestor} aoSair={sair} />
       ) : (
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: '1320px', margin: '0 auto', padding: '20px 16px 100px' }}>
+        <div className={gestor.permissoes.alterar ? '' : 'adm-somente-leitura'} style={{ position: 'relative', zIndex: 1, maxWidth: '1320px', margin: '0 auto', padding: '20px 16px 100px' }}>
           <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Logo size={30} />
               <div>
                 <div style={{ fontWeight: '800', color: 'var(--adm-forte)', fontSize: '18px' }}>Painel da Escola</div>
-                <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>Play2Work.ai{DEMO_MODE && <> · <IconMask style={{ verticalAlign: '-2px' }} /> demonstração</>}</div>
+                <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>{gestor.escola?.nome || 'Play2Work.ai'}{DEMO_MODE && <> · <IconMask style={{ verticalAlign: '-2px' }} /> demonstração</>}</div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ textAlign: 'right', fontSize: '12px', lineHeight: 1.3, marginRight: '4px' }} title="Conta da gestão em uso">
+                <div style={{ fontWeight: 700, color: 'var(--adm-forte)' }}>{gestor.nome}</div>
+                <div style={{ color: 'var(--adm-suave)' }}>{gestor.permissoes.rotulo}</div>
+              </div>
               <SinoEscola total={naoLidas} aoAbrirCanal={abrirChat} />
               <button className="adm-btn secundario" onClick={aoSair}>Voltar ao app</button>
               <button className="adm-btn secundario" onClick={sair}>Sair</button>
@@ -809,11 +890,17 @@ const AdminPanel = ({ aoSair }) => {
             </div>
           )}
 
+          {!gestor.permissoes.alterar && (
+            <div className="adm-aviso" style={{ marginBottom: '12px' }}>
+              <IconLock /> Seu perfil é <strong>{gestor.permissoes.rotulo}</strong>: você pode ver tudo, mas não alterar. Se precisar mudar algo, peça a um Administrador.
+            </div>
+          )}
           <nav className="adm-abas" role="tablist">
-            {ABAS.map(({ id, rotulo, Icon }) => (
+            {abasDoPerfil.map(({ id, rotulo, Icon }) => (
               <button key={id} role="tab" aria-selected={aba === id} className={aba === id ? 'ativa' : ''} onClick={() => { setAba(id); if (id !== 'alunos') setFiltroTurma(null); }}>
                 <Icon /> {rotulo}
                 {id === 'mensagens' && resumo?.mensagens_nao_lidas > 0 && <span className="adm-contador" style={{ background: '#16a34a', color: '#fff' }}>{resumo.mensagens_nao_lidas}</span>}
+                {id === 'acessos' && resumo?.pedidos_senha_pendentes > 0 && <span className="adm-contador" style={{ background: '#d97706', color: '#fff' }} title="Pedidos de senha nova esperando">{resumo.pedidos_senha_pendentes}</span>}
               </button>
             ))}
           </nav>
@@ -823,6 +910,9 @@ const AdminPanel = ({ aoSair }) => {
           {aba === 'vagas' && <AbaVagas vagas={vagas} turmas={turmas} itinerarios={itinerarios} recarregar={recarregar} />}
           {aba === 'trilha' && <AbaTrilha itinerarios={itinerarios} turmas={turmas} />}
           {aba === 'mensagens' && <AbaMensagens alunos={alunos} aoMudou={atualizarResumo} canalInicial={canalChat} />}
+          {aba === 'acessos' && <AbaAcessos alunos={alunos} turmas={turmas} recarregar={recarregar} />}
+          {aba === 'equipe' && gestor.permissoes.contas && <AbaEquipe gestor={gestor} />}
+          {aba === 'auditoria' && gestor.permissoes.auditar && <AbaAuditoria />}
         </div>
       )}
     </div>
@@ -830,6 +920,11 @@ const AdminPanel = ({ aoSair }) => {
 };
 
 const ESTILOS = `
+  /* Perfis Visualizar e Auditor: os botões de alterar somem (o servidor recusa de qualquer jeito).
+     Botão principal (adm-btn sem "secundario") é sempre de alteração; os secundários que alteram
+     levam a classe so-quem-altera; os principais que só leem (ex.: Baixar PDF) levam leitura-ok. */
+  .adm-somente-leitura .adm-btn:not(.secundario):not(.leitura-ok),
+  .adm-somente-leitura .so-quem-altera { display: none !important; }
   /* Painel em tema claro (azul-gelo), diferente do app escuro do aluno.
      --adm-tinta é a cor das películas/bordas neutras, que no app eram branco translúcido. */
   .adm-raiz {

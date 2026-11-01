@@ -11,9 +11,12 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 from main import app
 from database import get_db
-from auth import get_estudante_atual, hash_senha, criar_token, criar_token_admin, cpf_valido, normalizar_cpf
+from auth import get_estudante_atual, hash_senha, verificar_senha, criar_token, criar_token_admin, cpf_valido, normalizar_cpf, JWT_SECRET_KEY, GestorAtual
+from acesso import CODIGO_TENTATIVAS_MAX, LOGIN_FALHAS_MAX, ERRO_CODIGO
+from nomes import escolher_usuario
+import jwt
 from limiter import limiter
-from fuso import hoje as hoje_na_escola
+from fuso import hoje as hoje_na_escola, agora_utc
 from sqlalchemy.dialects import postgresql
 from services import (
     AIService,
@@ -44,6 +47,21 @@ def mock_db():
     app.dependency_overrides[get_db] = lambda: db
     yield db
     app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture(autouse=True)
+def _gestao_e_auditoria_sem_banco():
+    """
+    O token de criar_token_admin() (instalação) vira um Administrador sem ir ao
+    banco, e os registros de auditoria vão pra uma lista em vez do Postgres.
+    Testes de perfil trocam o gestor com patch próprio.
+    """
+    registros = []
+    gestor = GestorAtual(id=1, nome="Teste Admin", usuario="teste", papel="administrador")
+    with patch("auth.carregar_gestor", side_effect=lambda db, payload: gestor if payload.get("sub") == "instalacao" else None), \
+         patch("auditoria.gravar", side_effect=registros.append), \
+         patch("auditoria._foto_antes", return_value=None):
+        yield registros
 
 
 @pytest.fixture(autouse=True)
@@ -81,10 +99,16 @@ def criar_mock_estudante(**overrides):
         proxima_vida_em=None,
         congelamentos_disponiveis=0,
         quizzes_perfeitos_seguidos=0,
-        precisa_trocar_senha=False,
         linkedin=None,
-        pergunta_seguranca=None,
-        resposta_seguranca_hash=None,
+        usuario=None,
+        cpf=None,
+        senha_hash=None,
+        codigo_acesso_hash=None,
+        codigo_acesso_expira_em=None,
+        codigo_acesso_tentativas=0,
+        login_falhas=0,
+        login_bloqueado_ate=None,
+        sessao_versao=0,
     )
     padrao.update(overrides)
     return MagicMock(**padrao)
@@ -138,120 +162,213 @@ def mock_estudante_logado():
 
 
 # ----------------------------------------------------------------------
-# AUTENTICAÇÃO
+# ACESSO DO ALUNO (acesso.py / acesso_routes.py)
 # ----------------------------------------------------------------------
+# Login por usuário + senha; primeiro acesso e senha nova aprovada pela
+# escola com CPF + código de acesso entregue pela coordenação.
 
-def test_registrar_e_logar(mock_db):
-    mock_db.query().filter().first.return_value = None  # e-mail ainda não existe
-
-    resposta_registro = client.post("/api/auth/registrar", json={
-        "nome": "Nova Aluna",
-        "email": "nova@escola.com",
-        "senha": "senha123",
-        "pergunta_seguranca": "Qual o nome do seu primeiro professor?",
-        "resposta_seguranca": "Maria",
-    })
-    assert resposta_registro.status_code == 201
-    assert "token" in resposta_registro.json()
+CPF_TESTE = "52998224725"
 
 
-def test_registrar_sem_pergunta_seguranca_falha_validacao(mock_db):
+def _admin():
+    return {"Authorization": f"Bearer {criar_token_admin()}"}
+
+
+def _aluno_com_codigo(codigo="123456", expira_em_dias=7, tentativas=0, **extra):
+    return criar_mock_estudante(
+        cpf=CPF_TESTE,
+        usuario="gabriel.souza",
+        codigo_acesso_hash=hash_senha(codigo),
+        codigo_acesso_expira_em=agora_utc() + timedelta(days=expira_em_dias),
+        codigo_acesso_tentativas=tentativas,
+        **extra,
+    )
+
+
+def test_usuario_gerado_e_unico():
+    ocupados = set()
+    usuarios = []
+    for nome in ["Rafael Sozza", "Rafael Vieira Sozza", "Rafael Vieira Sozza", "Rafael Sozza", "José da Silva", "Ângela Müller"]:
+        escolhido = escolher_usuario(nome, ocupados)
+        ocupados.add(escolhido)
+        usuarios.append(escolhido)
+    assert usuarios == ["rafael.sozza", "rafael.v.sozza", "rafael.vieira.sozza", "rafael.sozza2", "jose.silva", "angela.muller"]
+
+
+def test_rotas_antigas_de_login_sairam(mock_db):
+    # CPF sozinho e cadastro/reset sem passar pela escola não existem mais
+    assert client.post("/api/auth/entrar", json={"cpf": CPF_TESTE}).status_code == 404
+    assert client.post("/api/auth/registrar", json={}).status_code == 404
+    assert client.post("/api/auth/resetar-senha", json={}).status_code == 404
+
+
+def test_login_com_usuario_e_senha(mock_db):
+    estudante = criar_mock_estudante(id=7, usuario="gabriel.souza", senha_hash=hash_senha("segredo123"), sessao_versao=3)
+    mock_db.query().filter().first.return_value = estudante
+
+    resposta = client.post("/api/auth/login", json={"usuario": "  Gabriel.Souza ", "senha": "segredo123"})
+    assert resposta.status_code == 200
+    token = resposta.json()["token"]
+    assert jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])["v"] == 3
+    assert estudante.login_falhas == 0
+
+
+def test_login_senha_errada_trava_a_conta(mock_db):
+    estudante = criar_mock_estudante(usuario="gabriel.souza", senha_hash=hash_senha("segredo123"))
+    mock_db.query().filter().first.return_value = estudante
+
+    for _ in range(LOGIN_FALHAS_MAX):
+        assert client.post("/api/auth/login", json={"usuario": "gabriel.souza", "senha": "errada1"}).status_code == 401
+    assert estudante.login_bloqueado_ate > agora_utc()
+    # Travada: nem a senha certa entra até passar o tempo
+    resposta = client.post("/api/auth/login", json={"usuario": "gabriel.souza", "senha": "segredo123"})
+    assert resposta.status_code == 429
+
+
+def test_login_sem_senha_ainda_nao_entra(mock_db):
+    mock_db.query().filter().first.return_value = criar_mock_estudante(usuario="gabriel.souza", senha_hash=None)
+    assert client.post("/api/auth/login", json={"usuario": "gabriel.souza", "senha": "qualquer1"}).status_code == 401
+
+
+def test_login_limite_por_ip_e_folgado_pra_turma_inteira(mock_db):
+    # A turma entra junto, pelo mesmo IP do laboratório: 60/min por IP
     mock_db.query().filter().first.return_value = None
+    respostas = [client.post("/api/auth/login", json={"usuario": "ninguem", "senha": "x"}) for _ in range(61)]
+    assert all(r.status_code == 401 for r in respostas[:60])
+    assert respostas[60].status_code == 429
 
-    resposta = client.post("/api/auth/registrar", json={
-        "nome": "Nova Aluna",
-        "email": "nova@escola.com",
-        "senha": "senha123",
-    })
+
+def test_conferir_codigo_mostra_o_usuario(mock_db):
+    mock_db.query().filter().first.return_value = _aluno_com_codigo()
+    resposta = client.post("/api/auth/primeiro-acesso/conferir", json={"cpf": "529.982.247-25", "codigo": "123456"})
+    assert resposta.status_code == 200
+    assert resposta.json()["usuario"] == "gabriel.souza"
+
+
+def test_codigo_errado_conta_tentativa(mock_db):
+    estudante = _aluno_com_codigo()
+    mock_db.query().filter().first.return_value = estudante
+    resposta = client.post("/api/auth/primeiro-acesso/conferir", json={"cpf": CPF_TESTE, "codigo": "654321"})
+    assert resposta.status_code == 401
+    assert estudante.codigo_acesso_tentativas == 1
+
+
+def test_codigo_vencido_ou_esgotado_nao_vale(mock_db):
+    mock_db.query().filter().first.return_value = _aluno_com_codigo(expira_em_dias=-1)
+    assert client.post("/api/auth/primeiro-acesso/conferir", json={"cpf": CPF_TESTE, "codigo": "123456"}).status_code == 401
+    mock_db.query().filter().first.return_value = _aluno_com_codigo(tentativas=CODIGO_TENTATIVAS_MAX)
+    assert client.post("/api/auth/primeiro-acesso/conferir", json={"cpf": CPF_TESTE, "codigo": "123456"}).status_code == 401
+
+
+def test_cpf_inexistente_da_o_mesmo_erro_do_codigo_errado(mock_db):
+    mock_db.query().filter().first.return_value = None
+    resposta = client.post("/api/auth/primeiro-acesso/conferir", json={"cpf": CPF_TESTE, "codigo": "123456"})
+    assert resposta.status_code == 401
+    assert resposta.json()["detail"] == ERRO_CODIGO
+
+
+def test_primeiro_acesso_cria_senha_e_anula_o_codigo(mock_db):
+    estudante = _aluno_com_codigo(id=7, senha_hash=None, sessao_versao=0)
+    mock_db.query().filter().first.return_value = estudante
+
+    resposta = client.post("/api/auth/primeiro-acesso", json={"cpf": CPF_TESTE, "codigo": "123456", "nova_senha": "minhaSenha1"})
+    assert resposta.status_code == 200
+    assert verificar_senha("minhaSenha1", estudante.senha_hash)
+    assert estudante.codigo_acesso_hash is None
+    assert estudante.sessao_versao == 1
+    # O token devolvido já é da versão nova da sessão
+    assert jwt.decode(resposta.json()["token"], JWT_SECRET_KEY, algorithms=["HS256"])["v"] == 1
+
+
+@pytest.mark.parametrize("senha, trecho", [
+    ("curta1", "pelo menos"),
+    ("somenteletras", "letras e números"),
+    ("a52998224725", "CPF"),
+    ("gabriel.souza1", "usuário"),
+])
+def test_senha_fraca_e_recusada(mock_db, senha, trecho):
+    estudante = _aluno_com_codigo(senha_hash=None)
+    mock_db.query().filter().first.return_value = estudante
+    resposta = client.post("/api/auth/primeiro-acesso", json={"cpf": CPF_TESTE, "codigo": "123456", "nova_senha": senha})
     assert resposta.status_code == 422
+    assert trecho in resposta.json()["detail"]
+    assert estudante.senha_hash is None
 
 
-def test_registrar_email_duplicado(mock_db):
-    mock_db.query().filter().first.return_value = criar_mock_estudante()
-
-    resposta = client.post("/api/auth/registrar", json={
-        "nome": "Duplicado",
-        "email": "gabriel@escola.com",
-        "senha": "senha123",
-        "pergunta_seguranca": "Qual o nome do seu primeiro professor?",
-        "resposta_seguranca": "Maria",
-    })
-    assert resposta.status_code == 409
+def test_token_de_antes_da_troca_de_senha_cai(mock_db):
+    mock_db.query().filter().first.return_value = criar_mock_estudante(id=7, sessao_versao=2)
+    antigo = client.get("/api/auth/me", headers={"Authorization": f"Bearer {criar_token(7, 1)}"})
+    atual = client.get("/api/auth/me", headers={"Authorization": f"Bearer {criar_token(7, 2)}"})
+    assert antigo.status_code == 401
+    assert atual.status_code == 200
 
 
-def test_login_senha_incorreta(mock_db):
-    estudante = criar_mock_estudante(senha_hash="$2b$12$hashquenaobateaproposito")
-    mock_db.query().filter().all.return_value = [estudante]
-
-    resposta = client.post("/api/auth/login", json={"nome": "Gabriel", "senha": "errada"})
-    assert resposta.status_code == 401
-
-
-def test_login_desempata_por_senha_quando_nome_repetido(mock_db):
-    conta_1 = criar_mock_estudante(id=1, senha_hash=hash_senha("senhaDaConta1"))
-    conta_2 = criar_mock_estudante(id=2, senha_hash=hash_senha("senhaDaConta2"))
-    mock_db.query().filter().all.return_value = [conta_1, conta_2]
-
-    resposta = client.post("/api/auth/login", json={"nome": "João Silva", "senha": "senhaDaConta2"})
+def test_esqueci_senha_cria_um_pedido_so(mock_db):
+    estudante = criar_mock_estudante(id=7, usuario="gabriel.souza")
+    mock_db.query().filter().first.side_effect = [estudante, None]  # acha o aluno; ainda não tem pedido pendente
+    resposta = client.post("/api/auth/esqueci-senha", json={"identificador": "gabriel.souza"})
     assert resposta.status_code == 200
-    assert resposta.json()["estudante"]["id"] == 2
+    pedido = mock_db.add.call_args[0][0]
+    assert pedido.estudante_id == 7 and pedido.status == "pendente"
+
+    mock_db.add.reset_mock()
+    mock_db.query().filter().first.side_effect = [estudante, MagicMock(status="pendente")]
+    client.post("/api/auth/esqueci-senha", json={"identificador": "gabriel.souza"})
+    mock_db.add.assert_not_called()
 
 
-def test_pergunta_seguranca_encontrada(mock_db):
-    mock_db.query().filter().first.return_value = criar_mock_estudante(pergunta_seguranca="Qual seu sobrenome?")
-
-    resposta = client.post("/api/auth/pergunta-seguranca", json={"email": "gabriel@escola.com"})
-    assert resposta.status_code == 200
-    assert resposta.json()["pergunta"] == "Qual seu sobrenome?"
-
-
-def test_pergunta_seguranca_email_inexistente(mock_db):
+def test_esqueci_senha_nao_revela_se_existe(mock_db):
     mock_db.query().filter().first.return_value = None
-
-    resposta = client.post("/api/auth/pergunta-seguranca", json={"email": "naoexiste@escola.com"})
-    assert resposta.status_code == 404
-
-
-def test_resetar_senha_gera_temporaria(mock_db):
-    mock_db.query().filter().first.return_value = criar_mock_estudante(
-        resposta_seguranca_hash=hash_senha("sozza"),
-    )
-
-    resposta = client.post("/api/auth/resetar-senha", json={"email": "gabriel@escola.com", "resposta_seguranca": "SOZZA"})
+    resposta = client.post("/api/auth/esqueci-senha", json={"identificador": "000.000.000-00"})
     assert resposta.status_code == 200
-    assert len(resposta.json()["senha_temporaria"]) >= 8
+    mock_db.add.assert_not_called()
+    assert "coordenação" in resposta.json()["mensagem"]
 
 
-def test_resetar_senha_resposta_incorreta(mock_db):
-    mock_db.query().filter().first.return_value = criar_mock_estudante(
-        resposta_seguranca_hash=hash_senha("sozza"),
-    )
+def test_trocar_senha_logado(mock_db, mock_estudante_logado):
+    mock_estudante_logado.senha_hash = hash_senha("senhaAtual1")
+    mock_estudante_logado.cpf = CPF_TESTE
+    mock_estudante_logado.usuario = "gabriel.souza"
 
-    resposta = client.post("/api/auth/resetar-senha", json={"email": "gabriel@escola.com", "resposta_seguranca": "errada"})
-    assert resposta.status_code == 401
-
-
-def test_resetar_senha_email_inexistente_nao_revela(mock_db):
-    mock_db.query().filter().first.return_value = None
-
-    resposta = client.post("/api/auth/resetar-senha", json={"email": "naoexiste@escola.com", "resposta_seguranca": "qualquer"})
+    resposta = client.post("/api/auth/trocar-senha", json={"senha_atual": "senhaAtual1", "nova_senha": "novaSenha45"})
     assert resposta.status_code == 200
-    assert "senha_temporaria" not in resposta.json()
-
-
-def test_trocar_senha(mock_db, mock_estudante_logado):
-    mock_estudante_logado.senha_hash = hash_senha("senhaAtual123")
-
-    resposta = client.post("/api/auth/trocar-senha", json={"senha_atual": "senhaAtual123", "nova_senha": "novaSenha456"})
-    assert resposta.status_code == 200
-    assert mock_estudante_logado.precisa_trocar_senha is False
+    assert verificar_senha("novaSenha45", mock_estudante_logado.senha_hash)
+    assert mock_estudante_logado.sessao_versao == 1
+    assert jwt.decode(resposta.json()["token"], JWT_SECRET_KEY, algorithms=["HS256"])["v"] == 1
 
 
 def test_trocar_senha_atual_incorreta(mock_db, mock_estudante_logado):
-    mock_estudante_logado.senha_hash = hash_senha("senhaAtual123")
+    mock_estudante_logado.senha_hash = hash_senha("senhaAtual1")
+    resposta = client.post("/api/auth/trocar-senha", json={"senha_atual": "errada", "nova_senha": "novaSenha45"})
+    assert resposta.status_code == 403
 
-    resposta = client.post("/api/auth/trocar-senha", json={"senha_atual": "errada", "nova_senha": "novaSenha456"})
-    assert resposta.status_code == 401
+
+def test_admin_gera_codigo_de_6_digitos(mock_db):
+    estudante = criar_mock_estudante(id=7, nome="Gabriel Souza", usuario="gabriel.souza", cpf=CPF_TESTE, turma=None)
+    mock_db.query().filter().first.return_value = estudante
+    resposta = client.post("/api/admin/estudantes/7/codigo-acesso", headers=_admin())
+    assert resposta.status_code == 200
+    codigo = resposta.json()["codigo"]
+    assert len(codigo) == 6 and codigo.isdigit()
+    assert verificar_senha(codigo, estudante.codigo_acesso_hash)  # no banco só fica o hash
+    assert estudante.codigo_acesso_tentativas == 0
+
+
+def test_codigo_exige_login_do_painel(mock_db):
+    assert client.post("/api/admin/estudantes/7/codigo-acesso").status_code == 401
+
+
+def test_aprovar_pedido_ja_respondido_da_409(mock_db):
+    mock_db.query().filter().first.return_value = MagicMock(status="aprovado")
+    assert client.post("/api/admin/pedidos-senha/1/aprovar", headers=_admin()).status_code == 409
+
+
+def test_recusar_pedido(mock_db):
+    pedido = MagicMock(status="pendente")
+    mock_db.query().filter().first.return_value = pedido
+    resposta = client.post("/api/admin/pedidos-senha/1/recusar", json={"motivo": "não foi ele"}, headers=_admin())
+    assert resposta.status_code == 200
+    assert pedido.status == "recusado" and pedido.motivo_recusa == "não foi ele"
 
 
 def test_rota_do_aluno_exige_token(mock_db):
@@ -269,28 +386,6 @@ def test_token_de_aluno_identifica_o_aluno(mock_db):
     response = client.get("/api/estudante/me/status", headers={"Authorization": f"Bearer {criar_token(7)}"})
     assert response.status_code == 200
     assert response.json()["nome"] == "Ana"
-
-
-def test_entrar_com_cpf_como_senha(mock_db):
-    estudante = criar_mock_estudante(cpf="52998224725")
-    mock_db.query().filter().first.return_value = estudante
-
-    # aceita CPF com pontuação
-    response = client.post("/api/auth/entrar", json={"cpf": "529.982.247-25"})
-    assert response.status_code == 200
-    assert response.json()["token"]
-
-
-def test_entrar_com_cpf_inexistente_falha(mock_db):
-    mock_db.query().filter().first.return_value = None
-    response = client.post("/api/auth/entrar", json={"cpf": "52998224725"})
-    assert response.status_code == 401
-
-
-def test_entrar_tem_rate_limit(mock_db):
-    mock_db.query().filter().first.return_value = None
-    respostas = [client.post("/api/auth/entrar", json={"cpf": "52998224725"}) for _ in range(11)]
-    assert respostas[-1].status_code == 429
 
 
 def test_nome_exibicao_nunca_repete():
@@ -326,19 +421,6 @@ def test_cpf_valido():
     assert not cpf_valido("52998224726")   # dígito verificador errado
     assert not cpf_valido("11111111111")   # sequência repetida
     assert normalizar_cpf("529.982.247-25") == "52998224725"
-
-
-def test_login_tem_rate_limit(mock_db):
-    # Limite configurado em routes.py é 15/minute -- a 16ª tentativa na
-    # mesma janela precisa ser bloqueada, senão o endpoint fica aberto
-    # pra força-bruta de senha.
-    estudante = criar_mock_estudante(senha_hash="$2b$12$hashquenaobateaproposito")
-    mock_db.query().filter().all.return_value = [estudante]
-
-    respostas = [client.post("/api/auth/login", json={"nome": "Gabriel", "senha": "errada"}) for _ in range(16)]
-
-    assert all(r.status_code == 401 for r in respostas[:15])
-    assert respostas[15].status_code == 429
 
 
 # ----------------------------------------------------------------------
@@ -379,26 +461,6 @@ def test_aplicar_para_vaga_se_a_escola_liberar(mock_db, mock_estudante_logado):
 
     assert response.status_code == 201
     assert response.json()["ja_existia"] is False
-
-
-def avaliacao_ia(categoria="resposta", relevancia=8, clareza=8, exemplos=8, postura=8, **extra):
-    return {
-        "categoria": categoria, "notas": {"relevancia": relevancia, "clareza": clareza, "exemplos": exemplos, "postura": postura},
-        "analise_feedback": "Boa resposta!", "proxima_pergunta": "Qual foi o maior desafio desse projeto?", **extra,
-    }
-
-
-@patch("routes.AIService.processar_entrevista_ia")
-def test_interagir_simulador_ia(mock_processar_ia, mock_db, mock_estudante_logado):
-    mock_db.query().filter().order_by().limit().all.return_value = []
-    mock_processar_ia.return_value = avaliacao_ia()
-
-    response = client.post("/api/chat/message", json={"mensagem_usuario": "Gosto de tecnologia e fiz um curso de Excel na escola."})
-
-    assert response.status_code == 200
-    corpo = response.json()
-    assert corpo["feedback_ia"] == "Boa resposta!" and corpo["resposta_ia"] == "Qual foi o maior desafio desse projeto?"
-    assert corpo["categoria"] == "resposta" and corpo["xp_concedido"] == 40  # 8/10 em tudo = 80% de 50
 
 
 # ----------------------------------------------------------------------
@@ -806,21 +868,29 @@ def test_token_de_aluno_nao_abre_painel_admin(mock_db):
     assert response.status_code == 401
 
 
-def test_admin_login(mock_db):
-    with patch("admin_routes.ADMIN_SENHA", "segredo-escola"):
-        assert client.post("/api/admin/login", json={"senha": "errada"}).status_code == 401
-        response = client.post("/api/admin/login", json={"senha": "segredo-escola"})
-    assert response.status_code == 200
-    token = response.json()["token"]
-
-    mock_db.query().order_by().all.return_value = []
-    mock_db.query().group_by().all.return_value = []
-    assert client.get("/api/admin/turmas", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+def test_login_de_instalacao_so_sem_administrador(mock_db):
+    with patch("gestao_routes.ADMIN_SENHA", "segredo-escola"), patch("gestao_routes.existe_administrador", return_value=False):
+        resposta = client.post("/api/admin/login", json={"usuario": "", "senha": "segredo-escola"})
+    assert resposta.status_code == 200 and resposta.json()["gestor"]["instalacao"]
+    mock_db.query().filter().first.return_value = None
+    with patch("gestao_routes.ADMIN_SENHA", "segredo-escola"), patch("gestao_routes.existe_administrador", return_value=True):
+        assert client.post("/api/admin/login", json={"usuario": "", "senha": "segredo-escola"}).status_code == 401
 
 
-def test_admin_login_desativado_sem_senha_configurada(mock_db):
-    with patch("admin_routes.ADMIN_SENHA", None):
-        assert client.post("/api/admin/login", json={"senha": "qualquer"}).status_code == 503
+def test_painel_fechado_sem_contas_e_sem_senha_de_instalacao(mock_db):
+    with patch("gestao_routes.ADMIN_SENHA", None), patch("gestao_routes.existe_administrador", return_value=False):
+        assert client.post("/api/admin/login", json={"usuario": "", "senha": "qualquer"}).status_code == 503
+
+
+def test_login_da_conta_da_gestao(mock_db):
+    conta = UsuarioGestao(id=7, nome="Maria", usuario="maria", senha_hash=hash_senha("Senha2026forte"), papel="alterar", ativo=True, deve_trocar_senha=False, sessao_versao=2, login_falhas=0)
+    mock_db.query().filter().first.return_value = conta
+    with patch("gestao_routes.existe_administrador", return_value=True):
+        assert client.post("/api/admin/login", json={"usuario": "maria", "senha": "errada"}).status_code == 401
+        resposta = client.post("/api/admin/login", json={"usuario": " Maria ", "senha": "Senha2026forte"})
+    assert resposta.status_code == 200
+    payload = jwt.decode(resposta.json()["token"], JWT_SECRET_KEY, algorithms=["HS256"])
+    assert payload["sub"] == "7" and payload["v"] == 2 and resposta.json()["gestor"]["permissoes"]["alterar"]
 
 
 ADMIN_HEADERS = lambda: {"Authorization": f"Bearer {criar_token_admin()}"}  # noqa: E731
@@ -1136,22 +1206,13 @@ def test_experiencia_previa_some_quando_aluno_diz_que_nunca_trabalhou(mock_db, m
     assert mock_estudante_logado.experiencia_previa == "Ajudante na padaria do bairro"
 
 
-def test_simulador_guarda_a_nota_na_mensagem_do_aluno(mock_db, mock_estudante_logado):
-    mock_db.query().filter().order_by().limit().all.return_value = []
-    with patch("routes.AIService.processar_entrevista_ia", return_value=avaliacao_ia(relevancia=10, clareza=10, exemplos=10, postura=10)):
-        client.post("/api/chat/message", json={"mensagem_usuario": "Organizei a feira de ciências da escola com a minha turma"})
-
-    mensagens = [c.args[0] for c in mock_db.add.call_args_list if isinstance(c.args[0], HistoricoEntrevista)]
-    do_aluno = next(m for m in mensagens if m.remetente == "user")
-    assert do_aluno.xp_concedido == 50
-    # Sem conversa anterior, a pergunta de abertura fica salva antes da resposta (a ficha mostra o par)
-    assert mensagens[0].remetente == "ai" and mensagens[0].mensagem == PERGUNTA_INICIAL
-
-
 # ----------------------------------------------------------------------
-# SIMULADOR DE ENTREVISTA: só entrevista, XP pelo servidor
+# SIMULADOR DE ENTREVISTA: conversa contínua, laudo no fim, nota e XP pelo servidor
 # ----------------------------------------------------------------------
-from entrevista import triagem, xp_das_notas, avaliar_sem_ia, conduzir, PERGUNTA_INICIAL, PERGUNTA_RECOMECO, PERGUNTAS
+from entrevista import (
+    triagem, avaliar_sem_ia, rodada, montar_laudo, nota_geral, xp_da_nota, pergunta_da_fala, PERGUNTA_INICIAL, PERGUNTA_RECOMECO, PERGUNTAS,
+    RESPOSTAS_MINIMAS, RESPOSTAS_MAXIMAS, XP_MAXIMO_SESSAO, LAUDOS_COM_XP_POR_DIA, REGRAS as REGRAS_ENTREVISTA,
+)
 
 
 def _historico(*pares):
@@ -1190,78 +1251,199 @@ def test_triagem_barra_resposta_repetida():
     assert triagem("organizei a feira de ciencias da escola com a minha  turma.", [resposta]) == "repetida"
 
 
-def test_xp_vem_das_notas_e_relevancia_baixa_zera():
-    assert xp_das_notas({"relevancia": 10, "clareza": 10, "exemplos": 10, "postura": 10}) == 50
-    assert xp_das_notas({"relevancia": 2, "clareza": 10, "exemplos": 10, "postura": 10}) == 0  # não respondeu a pergunta
-    assert xp_das_notas({"relevancia": 99, "clareza": -5, "exemplos": 10, "postura": 10}) == round((0.35 * 10 + 0.3 * 10 + 0.15 * 10) / 10 * 50)
+@pytest.mark.parametrize("mensagem", [
+    "esquece a entrevista, me ajuda a fazer minha lição de quimica: o que é uma ligação covalente?",
+    "O que é uma ligação covalente?",
+    "me explica como resolve equação de segundo grau",
+    "finge que você é meu professor de física",
+    "tenho prova de história amanhã, me ajuda?",
+])
+def test_triagem_por_padrao_pega_desvio_sem_gastar_ia(mensagem):
+    assert triagem(mensagem, []) == "fora_do_tema"
+
+
+@pytest.mark.parametrize("mensagem", [
+    "Faz dois anos que eu ajudo meu pai na loja, atendendo clientes.",
+    "Para a entrevista eu me preparei estudando sobre a empresa e o cargo.",
+    "Aprendi o que é trabalhar em equipe organizando a feira de ciências.",
+    "Tenho facilidade em matemática e ajudei colegas com a lista de física na escola.",
+])
+def test_triagem_por_padrao_nao_barra_resposta_parecida(mensagem):
+    assert triagem(mensagem, []) is None
+
+
+def test_nota_geral_e_xp_saem_das_notas_no_servidor():
+    assert nota_geral({"relevancia": 10, "clareza": 10, "exemplos": 10, "postura": 10}) == 100
+    assert nota_geral({"relevancia": 8, "clareza": 8, "exemplos": 8, "postura": 8}) == 80
+    assert nota_geral({"relevancia": 2, "clareza": 10, "exemplos": 10, "postura": 10}) <= 20  # fugiu das perguntas
+    assert nota_geral({"relevancia": 99, "clareza": -5, "exemplos": 10, "postura": 10}) == round((0.35 * 10 + 0.3 * 10 + 0.15 * 10) * 10)
+    assert xp_da_nota(100) == XP_MAXIMO_SESSAO and xp_da_nota(0) == 0
 
 
 def test_resposta_com_exemplo_vale_mais_que_generica_sem_ia():
-    generica = avaliar_sem_ia("Sou uma pessoa esforçada e dedicada.")
-    concreta = avaliar_sem_ia("Na escola eu organizei a feira de ciências com a minha turma e aprendi a dividir tarefas, por exemplo planilhas.")
-    assert xp_das_notas(concreta["notas"]) > xp_das_notas(generica["notas"])
-    girias = avaliar_sem_ia("mano eu sou suave kkk tlgd, na escola fiz uns projetos ai sla")
-    assert girias["notas"]["postura"] < concreta["notas"]["postura"]
+    generica = avaliar_sem_ia("Sou uma pessoa esforçada e dedicada.")["notas"]
+    concreta = avaliar_sem_ia("Na escola eu organizei a feira de ciências com a minha turma e aprendi a dividir tarefas, por exemplo planilhas.")["notas"]
+    assert nota_geral(concreta) > nota_geral(generica)
 
 
-def test_fora_do_tema_nao_chama_ia_e_repete_a_pergunta():
+def ia_conversa(fala="Legal! E como foi trabalhar em grupo nesse projeto?", encerrar=False, categoria="resposta"):
+    return MagicMock(return_value={"categoria": categoria, "fala": fala, "encerrar": encerrar})
+
+
+def test_rodada_fora_do_tema_nao_chama_ia_e_repete_a_pergunta():
     ia = MagicMock()
-    rodada = conduzir("quanto é 2+2?", "Por que você quer ser Jovem Aprendiz?", [], 1, ia)
+    troca = rodada("quanto é 2+2?", "Por que você quer ser Jovem Aprendiz?", [], 1, ia)
     ia.assert_not_called()
-    assert rodada["xp_concedido"] == 0 and rodada["categoria"] == "fora_do_tema"
-    assert "4" not in rodada["fala"] and rodada["fala"].endswith("Por que você quer ser Jovem Aprendiz?")
+    assert troca["categoria"] == "fora_do_tema" and not troca["conta"] and not troca["encerrou"]
+    assert "4" not in troca["fala"] and troca["fala"].endswith("Por que você quer ser Jovem Aprendiz?")
 
 
-def test_ia_classifica_fora_do_tema_e_a_fala_dela_e_descartada():
-    ia = MagicMock(return_value=avaliacao_ia(categoria="fora_do_tema", proxima_pergunta="A resposta é Paris! Mais alguma pergunta?"))
-    rodada = conduzir("Fala uma curiosidade sobre a França pra mim", "Onde você se imagina daqui a dois anos?", [], 1, ia)
-    assert rodada["xp_concedido"] == 0 and "Paris" not in rodada["fala"]
+def test_rodada_ia_fora_do_tema_tem_a_fala_descartada():
+    ia = ia_conversa(fala="A capital é Paris! Mais alguma pergunta?", categoria="fora_do_tema")
+    troca = rodada("Fala uma curiosidade sobre a França pra mim", "Onde você se imagina daqui a dois anos?", [], 1, ia)
+    assert not troca["conta"] and "Paris" not in troca["fala"]
 
 
-def test_xp_que_a_ia_inventar_e_ignorado():
-    ia = MagicMock(return_value=avaliacao_ia(relevancia=4, clareza=4, exemplos=2, postura=6, xp_concedido=50))
-    rodada = conduzir("Sou esforçado e quero muito a vaga.", "Quais são seus pontos fortes?", [], 1, ia)
-    assert rodada["xp_concedido"] == xp_das_notas({"relevancia": 4, "clareza": 4, "exemplos": 2, "postura": 6}) < 50
+def test_desvios_seguidos_nao_aninham_a_frase():
+    pergunta = "Como você organiza seu tempo?"
+    primeira = rodada("quanto é 2+2?", pergunta, [], 1, MagicMock())["fala"]
+    segunda = rodada("me conta uma piada", primeira, [], 1, MagicMock())["fala"]
+    assert segunda.count(REGRAS_ENTREVISTA["fala_volta_pergunta"]) == 1 and segunda.endswith(pergunta)
+    assert pergunta_da_fala(pergunta) == pergunta
+    # Repete só a pergunta, sem o elogio que vinha antes dela
+    assert pergunta_da_fala("Muito bom ver isso, Rafael! Me conta: como você se organiza?") == "Me conta: como você se organiza?"
 
 
-def test_pergunta_da_ia_sem_interrogacao_cai_no_banco():
-    ia = MagicMock(return_value=avaliacao_ia(proxima_pergunta="Certo."))
-    rodada = conduzir("Na escola eu fiz um projeto de robótica com a minha turma.", PERGUNTA_INICIAL, [], 0, ia)
-    assert rodada["fala"] == PERGUNTAS[0]
+def test_rodada_resposta_conta_e_usa_a_fala_da_ia():
+    troca = rodada("Na escola eu fiz um projeto de robótica com a minha turma.", PERGUNTA_INICIAL, [], 0, ia_conversa())
+    assert troca["conta"] and not troca["encerrou"] and troca["fala"] == "Legal! E como foi trabalhar em grupo nesse projeto?"
 
 
-def test_simulador_fora_do_tema_nao_da_xp_nem_conta_treino(mock_db, mock_estudante_logado):
-    mock_db.query().filter().order_by().limit().all.return_value = _historico(("ai", "Como você organiza seu tempo?"))
-    xp_antes = mock_estudante_logado.xp_total
-    with patch("routes.AIService.processar_entrevista_ia") as ia, patch("routes.AIService.processar_gamificacao_pos_atividade") as gamificacao:
-        corpo = client.post("/api/chat/message", json={"mensagem_usuario": "quanto é 2+2?"}).json()
-    ia.assert_not_called()
+def test_rodada_sem_ia_ou_fala_invalida_cai_no_banco():
+    troca = rodada("Na escola eu fiz um projeto de robótica com a minha turma.", PERGUNTA_INICIAL, [], 0, MagicMock(return_value=None))
+    assert troca["fala"].endswith(PERGUNTAS[0])
+    troca = rodada("Na escola eu fiz um projeto de robótica com a minha turma.", PERGUNTA_INICIAL, [], 0, ia_conversa(fala="Certo."))
+    assert troca["fala"].endswith(PERGUNTAS[0])
+
+
+def _anteriores(n):
+    return [f"Resposta numero {i} sobre um projeto da escola com a turma." for i in range(n)]
+
+
+def test_ia_nao_encerra_antes_do_minimo():
+    troca = rodada("Organizei a feira de ciências com a minha turma.", "P?", _anteriores(RESPOSTAS_MINIMAS - 2), 3, ia_conversa(fala="Obrigada, até logo!", encerrar=True))
+    assert not troca["encerrou"] and troca["fala"].endswith("?")
+
+
+def test_ia_pode_encerrar_depois_do_minimo():
+    troca = rodada("Organizei a feira de ciências com a minha turma.", "P?", _anteriores(RESPOSTAS_MINIMAS - 1), 5, ia_conversa(fala="Obrigada pela conversa, foi ótimo te conhecer!", encerrar=True))
+    assert troca["encerrou"] and troca["fala"] == "Obrigada pela conversa, foi ótimo te conhecer!"
+
+
+def test_no_maximo_o_servidor_encerra_mesmo_se_a_ia_perguntar_de_novo():
+    ia = ia_conversa(fala="E o que mais você faz?", encerrar=False)
+    troca = rodada("Organizei a feira de ciências com a minha turma.", "P?", _anteriores(RESPOSTAS_MAXIMAS - 1), 7, ia)
+    assert troca["encerrou"] and troca["fala"] == REGRAS_ENTREVISTA["despedida"]
+    assert ia.call_args.args[1] is True  # a IA foi avisada de que era a última
+
+
+def test_laudo_ignora_nota_inventada_e_limpa_listas():
+    da_ia = {
+        "notas": {"relevancia": 8, "clareza": 8, "exemplos": 8, "postura": 8}, "nota_geral": 100, "xp": 999,
+        "pontos_fortes": ["Exemplos reais", "Exemplos reais", "", "Boa postura"], "pontos_melhoria": ["Fale mais devagar"],
+        "parecer_recrutador": "Você foi bem.",
+    }
+    laudo = montar_laudo(["resposta"], lambda: da_ia)
+    assert laudo["nota_geral"] == 80 and laudo["xp"] == xp_da_nota(80) and laudo["por_ia"]
+    assert laudo["pontos_fortes"] == ["Exemplos reais", "Boa postura"]
+
+
+def test_laudo_sem_ia_continua_funcionando():
+    laudo = montar_laudo(["Na escola eu organizei a feira de ciências com a minha turma e aprendi muito, por exemplo a dividir tarefas."] * 5, lambda: None)
+    assert not laudo["por_ia"] and laudo["pontos_fortes"] and laudo["pontos_melhoria"] and laudo["parecer_recrutador"]
+    assert 0 < laudo["nota_geral"] <= 100
+
+
+def sessao_mock(status="em_andamento", respostas=0, **extra):
+    return MagicMock(id=5, estudante_id=1, status=status, respostas=respostas, **extra)
+
+
+def test_nova_sessao_abandona_a_aberta_e_comeca_com_a_abertura(mock_db, mock_estudante_logado):
+    antiga = sessao_mock()
+    mock_db.query().filter().all.return_value = [antiga]
+    corpo = client.post("/api/entrevista/sessoes", json={"abertura": "recomeco"}).json()
+    assert antiga.status == "abandonada"
+    assert corpo["mensagens"][0]["mensagem"] == PERGUNTA_RECOMECO and corpo["maximo"] == RESPOSTAS_MAXIMAS
+    assert client.post("/api/entrevista/sessoes", json={"abertura": "qualquer"}).status_code == 422
+
+
+def test_mensagem_conversa_com_contexto_e_sem_nota(mock_db, mock_estudante_logado):
+    sessao = sessao_mock()
+    mock_db.query().filter().with_for_update().first.return_value = sessao
+    mock_db.query().filter().order_by().all.return_value = _historico(("ai", PERGUNTA_INICIAL), ("user", "Gosto de dados e fiz curso de Excel."))
+    for m in mock_db.query().filter().order_by().all.return_value:
+        m.categoria = "resposta" if m.remetente == "user" else None
+    with patch("entrevista_routes.AIService.conversar_entrevista", return_value={"categoria": "resposta", "fala": "Bacana! Como você usa o Excel?", "encerrar": False}) as ia:
+        corpo = client.post("/api/entrevista/sessoes/5/mensagens", json={"mensagem": "No grêmio da escola eu organizei a gincana com três colegas."}).json()
+    conversa = ia.call_args.args[0]
+    assert "Candidato: Gosto de dados" in conversa and conversa.endswith("Candidato: No grêmio da escola eu organizei a gincana com três colegas.")
+    assert corpo["fala"] == "Bacana! Como você usa o Excel?" and corpo["contou"] and "nota" not in corpo and "xp_concedido" not in corpo
+    assert sessao.respostas == 1
+
+
+def test_mensagem_em_entrevista_encerrada_da_409(mock_db, mock_estudante_logado):
+    mock_db.query().filter().with_for_update().first.return_value = sessao_mock(status="aguardando_laudo")
+    assert client.post("/api/entrevista/sessoes/5/mensagens", json={"mensagem": "Mais uma resposta minha aqui."}).status_code == 409
+
+
+def test_sessao_de_outro_aluno_da_404(mock_db, mock_estudante_logado):
+    mock_db.query().filter().with_for_update().first.return_value = None
+    assert client.post("/api/entrevista/sessoes/99/mensagens", json={"mensagem": "Oi, tudo bem com você?"}).status_code == 404
+    assert client.post("/api/entrevista/sessoes/99/laudo").status_code == 404
+
+
+def test_resposta_gigante_e_recusada(mock_db, mock_estudante_logado):
+    assert client.post("/api/entrevista/sessoes/5/mensagens", json={"mensagem": "a" * 1501}).status_code == 422
+
+
+def test_laudo_so_depois_que_a_entrevista_termina(mock_db, mock_estudante_logado):
+    mock_db.query().filter().with_for_update().first.return_value = sessao_mock(status="em_andamento", respostas=2)
+    assert client.post("/api/entrevista/sessoes/5/laudo").status_code == 409
+
+
+def test_laudo_da_xp_pelo_servidor_e_guarda_na_sessao(mock_db, mock_estudante_logado):
+    sessao = sessao_mock(status="aguardando_laudo", respostas=5)
+    mock_db.query().filter().with_for_update().first.return_value = sessao
+    mock_db.query().filter().order_by().all.return_value = []
+    mock_db.query().filter().scalar.return_value = 0  # nenhum laudo com XP hoje
+    da_ia = {"notas": {"relevancia": 9, "clareza": 8, "exemplos": 7, "postura": 9}, "pontos_fortes": ["Bons exemplos"], "pontos_melhoria": ["Mais objetividade"], "parecer_recrutador": "Boa entrevista."}
+    with patch("entrevista_routes.AIService.gerar_laudo_entrevista", return_value=da_ia), \
+         patch("entrevista_routes.AIService.processar_gamificacao_pos_atividade", return_value=None) as gamificacao:
+        corpo = client.post("/api/entrevista/sessoes/5/laudo").json()
+    nota = nota_geral(da_ia["notas"])
+    assert sessao.status == "concluida" and sessao.nota_geral == nota and sessao.pontos_fortes == ["Bons exemplos"]
+    assert gamificacao.call_args.args[2] == xp_da_nota(nota) == sessao.xp_concedido
+    assert corpo["parecer_recrutador"] == "Boa entrevista." and not corpo["limite_diario"]
+
+
+def test_laudo_depois_do_limite_diario_sai_sem_xp(mock_db, mock_estudante_logado):
+    sessao = sessao_mock(status="aguardando_laudo", respostas=5)
+    mock_db.query().filter().with_for_update().first.return_value = sessao
+    mock_db.query().filter().order_by().all.return_value = []
+    mock_db.query().filter().scalar.return_value = LAUDOS_COM_XP_POR_DIA
+    with patch("entrevista_routes.AIService.gerar_laudo_entrevista", return_value=None), \
+         patch("entrevista_routes.AIService.processar_gamificacao_pos_atividade", return_value=None) as gamificacao:
+        corpo = client.post("/api/entrevista/sessoes/5/laudo").json()
+    assert corpo["limite_diario"] and corpo["xp_concedido"] == 0 and gamificacao.call_args.args[2] == 0
+
+
+def test_laudo_ja_gerado_nao_da_xp_de_novo(mock_db, mock_estudante_logado):
+    sessao = sessao_mock(status="concluida", respostas=5, nota_geral=70, notas={}, pontos_fortes=[], pontos_melhoria=[], parecer_recrutador="ok", xp_concedido=105, laudo_por_ia=True, laudo_em=None)
+    mock_db.query().filter().with_for_update().first.return_value = sessao
+    with patch("entrevista_routes.AIService.processar_gamificacao_pos_atividade") as gamificacao:
+        corpo = client.post("/api/entrevista/sessoes/5/laudo").json()
     gamificacao.assert_not_called()
-    assert corpo["xp_concedido"] == 0 and corpo["categoria"] == "fora_do_tema"
-    assert corpo["resposta_ia"].endswith("Como você organiza seu tempo?")
-    assert mock_estudante_logado.xp_total == xp_antes
-
-
-def test_simulador_avalia_a_pergunta_que_o_servidor_fez(mock_db, mock_estudante_logado):
-    mock_db.query().filter().order_by().limit().all.return_value = list(reversed(_historico(
-        ("ai", PERGUNTA_INICIAL), ("user", "Gosto de dados e fiz curso de Excel."), ("ai", "Me dê um exemplo de trabalho em equipe?"),
-    )))
-    with patch("routes.AIService.processar_entrevista_ia", return_value=avaliacao_ia()) as ia:
-        client.post("/api/chat/message", json={"mensagem_usuario": "No grêmio da escola eu e mais três colegas organizamos a gincana."})
-    assert ia.call_args.args[1] == "Me dê um exemplo de trabalho em equipe?"
-    assert "Candidato: Gosto de dados" in ia.call_args.args[2]
-
-
-def test_simulador_recomeco_usa_a_pergunta_do_servidor(mock_db, mock_estudante_logado):
-    mock_db.query().filter().order_by().limit().all.return_value = _historico(("ai", "Pergunta antiga?"))
-    with patch("routes.AIService.processar_entrevista_ia", return_value=avaliacao_ia()) as ia:
-        client.post("/api/chat/message", json={"mensagem_usuario": "Tenho orgulho do projeto de robótica da escola.", "abertura": "recomeco"})
-    assert ia.call_args.args[1] == PERGUNTA_RECOMECO
-    assert client.post("/api/chat/message", json={"mensagem_usuario": "oi tudo bem com voce", "abertura": "qualquer pergunta"}).status_code == 422
-
-
-def test_simulador_recusa_resposta_gigante(mock_db, mock_estudante_logado):
-    assert client.post("/api/chat/message", json={"mensagem_usuario": "a" * 1501}).status_code == 422
+    assert corpo["ja_gerado"] and corpo["xp_concedido"] == 105
 
 
 def test_admin_marcar_contratado_exige_empresa_e_registra_mudanca(mock_db):
@@ -1973,10 +2155,350 @@ def test_escola_marca_desistencia_e_expirado(mock_db):
 
 
 def test_editar_aluno_salva_a_ficha_e_a_data_de_atualizacao(mock_db):
-    aluno = criar_mock_estudante(id=7, sexo=None, turma=None, habilidades=[], cadastro_atualizado_em=None)
-    mock_db.query().filter().first.return_value = aluno
+    aluno = criar_mock_estudante(id=7, sexo=None, turma=None, habilidades=[], cadastro_atualizado_em=None, versao_cadastro=1)
+    mock_db.query().filter().with_for_update().first.return_value = aluno  # a edição trava a linha (conflito de edição)
     response = client.put("/api/admin/estudantes/7", headers=ADMIN_HEADERS(), json={"ficha": {"sexo": "Masculino", "turno_escolar": "Noturno"}})
     assert response.status_code == 200
     assert aluno.sexo == "Masculino" and aluno.turno_escolar == "Noturno"
     assert aluno.cadastro_atualizado_em == hoje_na_escola()
 
+
+# ----------------------------------------------------------------------
+# SIMULADO DE CERTIFICAÇÃO: 20 questões, tentativa única por ciclo, 70%
+# ----------------------------------------------------------------------
+import certificacao as cert
+from models import TentativaCertificacao
+
+
+def _tentativa(status="em_andamento", acertos=0, total=20, itinerario="Ciência de Dados", concluida_ha_dias=None, **extra):
+    agora = agora_utc()
+    gabarito = [{"pergunta": f"P{i}?", "opcoes": ["a", "b", "c", "d"], "resposta_correta_index": 0} for i in range(total)]
+    respostas = [{"indice": i, "opcao": 0 if i < acertos else 1, "correta": i < acertos} for i in range(total if status != "em_andamento" else 0)]
+    t = TentativaCertificacao(
+        id=extra.pop("id", 1), estudante_id=1, itinerario=itinerario, status=status, iniciada_em=agora - timedelta(minutes=5),
+        expira_em=agora + timedelta(minutes=35), gabarito=gabarito, respostas=respostas, saidas_de_tela=0, **extra,
+    )
+    if concluida_ha_dias is not None:
+        t.concluida_em = agora - timedelta(days=concluida_ha_dias)
+    return t
+
+
+def test_prova_tem_20_questoes_16_do_curso_e_4_gerais():
+    prova = cert.sortear_prova("Ciência de Dados", random.Random(1))
+    do_curso = {q["pergunta"] for q in BANCO_QUESTOES["Ciência de Dados"]}
+    assert len(prova) == cert.TOTAL_QUESTOES == 20
+    assert sum(1 for q in prova if q["pergunta"] in do_curso) == 16
+    assert len({q["pergunta"] for q in prova}) == 20  # sem repetir
+
+
+def test_70_por_cento_aprova_e_69_nao():
+    t = _tentativa()
+    t.respostas = [{"indice": i, "opcao": 0, "correta": i < 14} for i in range(20)]
+    cert.finalizar(t, agora_utc())
+    assert t.percentual == 70 and t.status == "aprovada"
+    t = _tentativa()
+    t.respostas = [{"indice": i, "opcao": 0, "correta": i < 13} for i in range(20)]
+    cert.finalizar(t, agora_utc())
+    assert t.percentual == 65 and t.status == "reprovada"
+
+
+def test_questao_sem_resposta_conta_como_erro():
+    t = _tentativa()
+    t.respostas = [{"indice": i, "opcao": 0, "correta": True} for i in range(10)]  # parou na metade
+    cert.finalizar(t, agora_utc())
+    assert t.acertos == 10 and t.percentual == 50 and t.status == "reprovada"
+
+
+def test_responde_na_ordem_sem_voltar():
+    t = _tentativa()
+    cert.responder(t, 0, 0, agora_utc())
+    assert t.respostas[0]["correta"] is True
+    with pytest.raises(cert.CertificacaoBloqueada):
+        cert.responder(t, 0, 1, agora_utc())  # não dá pra responder de novo
+    with pytest.raises(cert.CertificacaoBloqueada):
+        cert.responder(t, 5, 1, agora_utc())  # nem pular
+
+
+def test_tempo_esgotado_corrige_como_esta():
+    t = _tentativa()
+    t.expira_em = agora_utc() - timedelta(seconds=1)
+    assert cert.fechar_se_venceu(t, agora_utc())
+    assert t.status == "reprovada" and t.percentual == 0
+    with pytest.raises(cert.CertificacaoBloqueada):
+        cert.responder(t, 0, 0, agora_utc())
+
+
+def test_prova_para_tela_nao_leva_o_gabarito():
+    tela = cert.prova_para_tela(_tentativa())
+    assert all(set(q) == {"pergunta", "opcoes"} for q in tela["questoes"])
+
+
+def _aluno_cert(**extra):
+    return criar_mock_estudante(itinerario="Ciência de Dados", **extra)
+
+
+def test_reprovado_so_tenta_de_novo_depois_do_ciclo():
+    db = MagicMock()
+    db.query().filter().order_by().all.return_value = [_tentativa(status="reprovada", acertos=10, concluida_ha_dias=2)]
+    with pytest.raises(cert.CertificacaoBloqueada) as erro:
+        cert.iniciar(db, _aluno_cert(), agora_utc())
+    assert "Nova tentativa liberada" in erro.value.mensagem
+    db.query().filter().order_by().all.return_value = [_tentativa(status="reprovada", acertos=10, concluida_ha_dias=cert.DIAS_ENTRE_TENTATIVAS + 1)]
+    nova = cert.iniciar(db, _aluno_cert(), agora_utc())
+    assert nova.status == "em_andamento" and len(nova.gabarito) == 20
+
+
+def test_aprovado_nao_faz_de_novo_e_prova_aberta_nao_duplica():
+    db = MagicMock()
+    db.query().filter().order_by().all.return_value = [_tentativa(status="aprovada", acertos=18, concluida_ha_dias=1)]
+    with pytest.raises(cert.CertificacaoBloqueada):
+        cert.iniciar(db, _aluno_cert(), agora_utc())
+    db.query().filter().order_by().all.return_value = [_tentativa()]
+    with pytest.raises(cert.CertificacaoBloqueada):
+        cert.iniciar(db, _aluno_cert(), agora_utc())
+
+
+def test_sem_curso_definido_nao_comeca():
+    db = MagicMock()
+    db.query().filter().order_by().all.return_value = []
+    with pytest.raises(cert.CertificacaoBloqueada):
+        cert.iniciar(db, criar_mock_estudante(itinerario=None), agora_utc())
+
+
+def test_rota_finalizar_registra_aprovacao_e_devolve_so_a_nota(mock_db, mock_estudante_logado):
+    t = _tentativa()
+    t.respostas = [{"indice": i, "opcao": 0, "correta": i < 17} for i in range(20)]
+    mock_db.query().filter().with_for_update().first.return_value = t
+    with patch("certificacao_routes.registrar_evidencias") as evidencias:
+        corpo = client.post("/api/certificacao/1/finalizar").json()
+    assert corpo["status"] == "aprovada" and corpo["percentual"] == 85
+    assert "gabarito" not in corpo and "respostas" not in corpo
+    evidencias.assert_called_once()
+
+
+def test_rota_iniciar_bloqueada_devolve_409(mock_db, mock_estudante_logado):
+    mock_estudante_logado.itinerario = "Ciência de Dados"
+    mock_db.query().filter().order_by().all.return_value = [_tentativa(status="aprovada", acertos=18, concluida_ha_dias=1)]
+    assert client.post("/api/certificacao/iniciar").status_code == 409
+
+
+def test_saida_de_tela_fica_registrada(mock_db, mock_estudante_logado):
+    t = _tentativa()
+    mock_db.query().filter().with_for_update().first.return_value = t
+    client.post("/api/certificacao/1/saida-de-tela")
+    client.post("/api/certificacao/1/saida-de-tela")
+    assert t.saidas_de_tela == 2
+
+
+# ----------------------------------------------------------------------
+# RODADAS DE ENTREVISTA E RESUMO CURTO (feed compacto da escola)
+# ----------------------------------------------------------------------
+from entrevista import fechar_rodada, ENTREVISTAS_POR_RODADA, META_DA_RODADA
+from entrevista_routes import registrar_na_rodada
+from models import RodadaEntrevista, SessaoEntrevista
+
+
+def test_rodada_so_fecha_na_quinta_e_meta_e_media_80():
+    assert fechar_rodada([90, 90, 90, 90]) is None
+    assert fechar_rodada([80, 82, 78, 85, 75]) == {"media": 80, "status": "meta_atingida"}
+    assert fechar_rodada([80, 82, 78, 85, 70]) == {"media": 79, "status": "nao_atingida"}
+    assert ENTREVISTAS_POR_RODADA == 5 and META_DA_RODADA == 80
+
+
+def test_laudo_traz_resumo_curto_com_ou_sem_ia():
+    com_ia = montar_laudo(["x"], lambda: {"notas": {"relevancia": 8, "clareza": 8, "exemplos": 8, "postura": 8}, "resumo": "Boa articulação técnica; leve timidez." + " longo" * 40})
+    assert com_ia["resumo"].startswith("Boa articulação técnica") and len(com_ia["resumo"]) <= 140
+    sem_ia = montar_laudo(["Sou esforçado."], lambda: None)
+    assert sem_ia["resumo"]
+
+
+def _db_rodada(rodadas, notas_anteriores):
+    db = MagicMock()
+    db.query().filter().order_by().with_for_update().all.return_value = rodadas
+    db.query().filter().all.return_value = [(n,) for n in notas_anteriores]
+    return db
+
+
+def test_primeira_entrevista_abre_a_rodada_1():
+    db = _db_rodada([], [])
+    sessao = SessaoEntrevista(id=10, nota_geral=70)
+    rodada = registrar_na_rodada(db, 1, sessao)
+    criada = db.add.call_args[0][0]
+    assert isinstance(criada, RodadaEntrevista) and criada.numero == 1
+    assert rodada["feitas"] == 1 and rodada["status"] == "em_andamento"
+
+
+def test_quinta_entrevista_fecha_a_rodada_e_marca_a_meta():
+    aberta = RodadaEntrevista(id=3, estudante_id=1, numero=2, status="em_andamento")
+    db = _db_rodada([aberta, RodadaEntrevista(id=1, estudante_id=1, numero=1, status="nao_atingida", media=60)], [85, 80, 82, 78])
+    rodada = registrar_na_rodada(db, 1, SessaoEntrevista(id=20, nota_geral=90))
+    assert aberta.status == "meta_atingida" and aberta.media == 83 and rodada["numero"] == 2
+    assert aberta.confirmada_em is None  # quem confirma é a coordenação
+
+
+def test_abaixo_da_meta_a_proxima_abre_rodada_nova():
+    fechada = RodadaEntrevista(id=1, estudante_id=1, numero=1, status="nao_atingida", media=60)
+    db = _db_rodada([fechada], [])
+    registrar_na_rodada(db, 1, SessaoEntrevista(id=30, nota_geral=70))
+    assert db.add.call_args[0][0].numero == 2
+
+
+def test_depois_da_meta_e_treino_livre():
+    db = _db_rodada([RodadaEntrevista(id=1, estudante_id=1, numero=1, status="meta_atingida", media=85)], [])
+    sessao = SessaoEntrevista(id=40, nota_geral=70)
+    assert registrar_na_rodada(db, 1, sessao) is None and sessao.rodada_id is None
+
+
+def test_coordenacao_confirma_ou_manda_pra_nova_rodada(mock_db):
+    rodada = RodadaEntrevista(id=1, estudante_id=1, numero=1, status="meta_atingida", media=85)
+    mock_db.query().filter().first.return_value = rodada
+    cabecalho = {"Authorization": f"Bearer {criar_token_admin()}"}
+    assert client.post("/api/admin/rodadas-entrevista/1/confirmar", headers=cabecalho).status_code == 200
+    assert rodada.confirmada_em is not None
+    assert client.post("/api/admin/rodadas-entrevista/1/nao-confirmar", headers=cabecalho).status_code == 200
+    assert rodada.status == "nao_atingida" and rodada.confirmada_em is None
+    assert client.post("/api/admin/rodadas-entrevista/1/confirmar", headers=cabecalho).status_code == 409
+
+
+# ----------------------------------------------------------------------
+# CONTAS DA GESTÃO (PERFIS) E AUDITORIA
+# ----------------------------------------------------------------------
+import auditoria
+from auth import carregar_gestor as carregar_gestor_real  # importado antes da fixture trocar
+from models import UsuarioGestao
+
+
+def _como(papel, **extra):
+    gestor = GestorAtual(id=9, nome=f"Pessoa {papel}", usuario=papel, papel=papel, **extra)
+    return patch("auth.carregar_gestor", return_value=gestor)
+
+
+def test_perfis_veem_e_alteram_o_que_podem(mock_db):
+    mock_db.query().order_by().all.return_value = []
+    mock_db.query().group_by().all.return_value = []
+    cab = {"Authorization": f"Bearer {criar_token_admin()}"}
+    esperado = {
+        # perfil: (ver turmas, criar turma, ver auditoria, criar conta)
+        "visualizar": (200, 403, 403, 403),
+        "auditor": (200, 403, 200, 403),
+        "alterar": (200, None, 403, 403),
+        "administrador": (200, None, 200, None),
+    }
+    for papel, (ver, criar, auditar, contas) in esperado.items():
+        with _como(papel):
+            assert client.get("/api/admin/turmas", headers=cab).status_code == ver, papel
+            criou = client.post("/api/admin/turmas", headers=cab, json={"nome": "9º Z", "turno": "Manhã"}).status_code
+            assert (criou == 403) == (criar == 403), (papel, criou)
+            mock_db.query().filter().count.return_value = 0
+            mock_db.query().filter().order_by().offset().limit().all.return_value = []
+            mock_db.query().distinct().all.return_value = []
+            assert client.get("/api/admin/auditoria", headers=cab).status_code == auditar, papel
+            criou_conta = client.post("/api/admin/gestao/usuarios", headers=cab, json={"nome": "Fulano Tal", "usuario": "fulano", "papel": "visualizar"}).status_code
+            assert (criou_conta == 403) == (contas == 403), (papel, criou_conta)
+
+
+def test_visualizar_ainda_pode_registrar_exportacao(mock_db):
+    with _como("visualizar"):
+        r = client.post("/api/admin/auditoria/exportacao", headers={"Authorization": f"Bearer {criar_token_admin()}"}, json={"descricao": "lista de alunos (CSV)", "total": 3})
+    assert r.status_code == 200
+
+
+def test_senha_temporaria_bloqueia_o_painel_ate_trocar(mock_db):
+    with _como("alterar", deve_trocar_senha=True):
+        cab = {"Authorization": f"Bearer {criar_token_admin()}"}
+        assert client.get("/api/admin/turmas", headers=cab).status_code == 403
+        assert client.get("/api/admin/gestao/eu", headers=cab).status_code == 200
+
+
+def test_token_de_conta_desativada_ou_rebaixada_cai(mock_db):
+    carregar_original = carregar_gestor_real
+    conta = UsuarioGestao(id=3, nome="Ana", usuario="ana", papel="alterar", ativo=True, sessao_versao=1)
+    db = MagicMock()
+    db.query().filter().first.return_value = conta
+    assert carregar_original(db, {"sub": "3", "v": 1}) is not None
+    assert carregar_original(db, {"sub": "3", "v": 0}) is None  # mudou perfil/senha depois do token
+    conta.ativo = False
+    assert carregar_original(db, {"sub": "3", "v": 1}) is None
+
+
+def test_nao_pode_ficar_sem_administrador(mock_db):
+    alvo = UsuarioGestao(id=1, nome="Maria", usuario="maria", papel="administrador", ativo=True, sessao_versao=0)
+    mock_db.query().filter().first.side_effect = [alvo, None]  # a conta; nenhum outro administrador
+    r = client.put("/api/admin/gestao/usuarios/1", headers={"Authorization": f"Bearer {criar_token_admin()}"}, json={"papel": "auditor"})
+    assert r.status_code == 409 and alvo.papel == "administrador"
+
+
+def test_criar_conta_devolve_senha_temporaria_e_guarda_so_o_hash(mock_db):
+    mock_db.query().filter().first.return_value = None
+    mock_db.query().filter().execution_options().first.return_value = None  # usuário livre em todas as escolas
+    r = client.post("/api/admin/gestao/usuarios", headers={"Authorization": f"Bearer {criar_token_admin()}"}, json={"nome": "Joao Silva", "usuario": "Joao.Silva", "papel": "auditor"})
+    assert r.status_code == 201
+    conta = mock_db.add.call_args[0][0]
+    assert conta.usuario == "joao.silva" and conta.papel == "auditor" and conta.deve_trocar_senha
+    assert verificar_senha(r.json()["senha_temporaria"], conta.senha_hash)
+
+
+def test_alteracao_vira_registro_de_auditoria_sem_senha(mock_db, _gestao_e_auditoria_sem_banco):
+    mock_db.query().filter().first.return_value = None
+    mock_db.query().filter().execution_options().first.return_value = None  # usuário livre em todas as escolas
+    client.post("/api/admin/gestao/usuarios", headers={"Authorization": f"Bearer {criar_token_admin()}"}, json={"nome": "Joao Silva", "usuario": "joao", "papel": "visualizar"})
+    registro = _gestao_e_auditoria_sem_banco[-1]
+    assert registro["usuario_nome"] == "Teste Admin" and registro["acao"] == "incluiu" and registro["entidade"] == "usuario_gestao"
+    assert registro["modelo_descricao"] == "Criou a conta de {nome} ({papel})" and registro["dados"]["nome"] == "Joao Silva"
+
+
+def test_auditoria_nao_guarda_senha_codigo_nem_arquivo():
+    limpo = auditoria.limpar({"usuario": "maria", "senha": "x", "nova_senha": "y", "codigo": "123456", "imagem_base64": "AAA", "nome": "Maria"})
+    assert limpo == {"usuario": "maria", "senha": "[omitido]", "nova_senha": "[omitido]", "codigo": "[omitido]", "imagem_base64": "[omitido]", "nome": "Maria"}
+
+
+def test_auditoria_descreve_a_acao():
+    acao, entidade, ids, modelo, descricao = auditoria.identificar("DELETE", "/api/admin/observacoes/12")
+    assert acao == "excluiu" and entidade == "observacao" and ids == ("12",) and modelo is not None
+    acao, *_ = auditoria.identificar("POST", "/api/admin/rota-desconhecida")
+    assert acao == "incluiu"
+
+
+def test_recusa_por_permissao_tambem_e_registrada(mock_db, _gestao_e_auditoria_sem_banco):
+    with _como("visualizar"):
+        client.post("/api/admin/turmas", headers={"Authorization": f"Bearer {criar_token_admin()}"}, json={"nome": "9º Z", "turno": "Manhã"})
+    assert _gestao_e_auditoria_sem_banco[-1]["acao"] == "negado"
+
+
+def test_registros_com_mais_de_2_anos_saem():
+    db = MagicMock()
+    auditoria.purgar_antigos(db)
+    assert auditoria.RETENCAO_DIAS == 730
+    db.query().filter().delete.assert_called_once()
+
+
+# ----------------------------------------------------------------------
+# CONFLITO DE EDIÇÃO DO CADASTRO DO ALUNO
+# ----------------------------------------------------------------------
+def _aluno_versao(versao, **extra):
+    return criar_mock_estudante(id=5, nome="Bianca Ferreira", versao_cadastro=versao, cadastro_alterado_por="Pedro Secretaria",
+                                cadastro_alterado_em=datetime(2026, 10, 31, 18, 4), turma=None, **extra)
+
+
+def test_salvar_com_versao_velha_da_409_e_nao_grava(mock_db):
+    aluno = _aluno_versao(4, telefone="67900000000")
+    mock_db.query().filter().with_for_update().first.return_value = aluno
+    r = client.put("/api/admin/estudantes/5", headers=ADMIN_HEADERS(), json={"telefone": "67911112222", "versao": 3})
+    assert r.status_code == 409
+    assert "Pedro Secretaria" in r.json()["detail"] and "31/10 às 14:04" in r.json()["detail"]  # 18:04 UTC = 14:04 em Três Lagoas
+    assert aluno.telefone == "67900000000" and aluno.versao_cadastro == 4
+    mock_db.commit.assert_not_called()
+
+
+def test_salvar_com_versao_certa_grava_e_soma_versao(mock_db):
+    aluno = _aluno_versao(4, telefone="67900000000")
+    mock_db.query().filter().with_for_update().first.return_value = aluno
+    r = client.put("/api/admin/estudantes/5", headers=ADMIN_HEADERS(), json={"telefone": "(67) 91111-2222", "versao": 4})
+    assert r.status_code == 200
+    assert aluno.telefone == "67911112222" and aluno.versao_cadastro == 5 and aluno.cadastro_alterado_por == "Teste Admin"
+
+
+def test_aluno_editando_no_app_tambem_muda_a_versao(mock_db, mock_estudante_logado):
+    mock_estudante_logado.versao_cadastro = 2
+    client.put("/api/estudante/me/experiencia", json={"ja_trabalhou": True, "experiencia_previa": "Ajudante na padaria"})
+    assert mock_estudante_logado.versao_cadastro == 3 and "pelo app" in mock_estudante_logado.cadastro_alterado_por

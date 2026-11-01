@@ -1,14 +1,16 @@
 import os
-import secrets
 import logging
 import datetime
 import bcrypt
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from dataclasses import dataclass
+from typing import Optional
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Estudante
+from models import Escola, Estudante, UsuarioGestao
+from tenancy import definir_escola  # importar já registra o filtro automático por escola
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +30,6 @@ JWT_EXPIRA_HORAS = int(os.environ.get("JWT_EXPIRA_HORAS_ALUNO") or 4)
 # nos outros -- um jeito de mascarar em vez de resolver a configuração.
 JWT_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
 
-def gerar_senha_temporaria() -> str:
-    """Senha temporária legível pra mostrar na tela no fluxo de 'esqueci minha senha'."""
-    alfabeto = "abcdefghjkmnpqrstuvwxyz23456789"  # sem caracteres ambíguos (0/O, 1/l/I)
-    return "".join(secrets.choice(alfabeto) for _ in range(10))
-
-
 def hash_senha(senha: str) -> str:
     return bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
@@ -45,21 +41,52 @@ def verificar_senha(senha: str, senha_hash: str) -> bool:
         return False
 
 
-def criar_token(estudante_id: int) -> str:
+def criar_token(estudante_id: int, sessao_versao: int = 0) -> str:
     agora = datetime.datetime.now(datetime.timezone.utc)
     payload = {
         "sub": str(estudante_id),
         "papel": "aluno",
+        # Versão da sessão do aluno: senha nova soma 1 no banco e todo token
+        # emitido antes (outro computador do laboratório, celular perdido) cai.
+        "v": sessao_versao,
         "iat": agora,
         "exp": agora + datetime.timedelta(hours=JWT_EXPIRA_HORAS),
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
-# Senha do painel da escola (admin). Opcional: sem ela, POST /admin/login
-# responde 503 e o painel fica fechado -- melhor que subir com uma senha
-# padrão conhecida.
+# Senha de INSTALAÇÃO do painel. Só serve enquanto não existe nenhuma conta
+# de Administrador ativa: é com ela que a escola entra a primeira vez pra criar
+# o primeiro Administrador. Depois disso, cada pessoa entra com a própria conta
+# (usuarios_gestao). Sem ADMIN_SENHA e sem contas, o painel fica fechado.
 ADMIN_SENHA = os.environ.get("ADMIN_SENHA")
+INSTALACAO = "instalacao"
+
+# Perfis das contas da gestão (o que cada um pode):
+PERFIS_GESTAO = {
+    "administrador": {"rotulo": "Administrador", "alterar": True, "auditar": True, "contas": True},
+    "auditor": {"rotulo": "Auditor", "alterar": False, "auditar": True, "contas": False},
+    "alterar": {"rotulo": "Alterar", "alterar": True, "auditar": False, "contas": False},
+    "visualizar": {"rotulo": "Visualizar", "alterar": False, "auditar": False, "contas": False},
+}
+# Ações que qualquer perfil pode fazer, mesmo sem poder alterar dados
+ROTAS_LIVRES = {("POST", "/api/admin/auditoria/exportacao"), ("POST", "/api/admin/gestao/minha-senha")}
+
+
+@dataclass
+class GestorAtual:
+    id: Optional[int]
+    nome: str
+    usuario: str
+    papel: str
+    instalacao: bool = False
+    deve_trocar_senha: bool = False
+    escola_id: Optional[int] = None
+    escola_nome: Optional[str] = None
+
+    @property
+    def permissoes(self) -> dict:
+        return PERFIS_GESTAO.get(self.papel, PERFIS_GESTAO["visualizar"])
 JWT_EXPIRA_HORAS_ADMIN = 12
 
 
@@ -80,11 +107,13 @@ def cpf_valido(cpf: str) -> bool:
     return True
 
 
-def criar_token_admin() -> str:
+def criar_token_admin(gestor: Optional[UsuarioGestao] = None) -> str:
+    """Token do painel: de uma conta da gestão ou, sem conta, o da instalação."""
     agora = datetime.datetime.now(datetime.timezone.utc)
     payload = {
-        "sub": "admin",
+        "sub": str(gestor.id) if gestor else INSTALACAO,
         "papel": "admin",
+        "v": (gestor.sessao_versao or 0) if gestor else 0,
         "iat": agora,
         "exp": agora + datetime.timedelta(hours=JWT_EXPIRA_HORAS_ADMIN),
     }
@@ -100,14 +129,73 @@ def _payload_do_token(authorization: str | None) -> dict | None:
         return None
 
 
-def get_admin_atual(authorization: str | None = Header(default=None)) -> None:
+def escola_de_instalacao(db: Session) -> Optional[Escola]:
+    """A escola que a senha de instalação abre: a primeira cadastrada. As outras
+    escolas nascem com o primeiro Administrador já criado (criar_escola.py)."""
+    return db.query(Escola).order_by(Escola.id).first()
+
+
+def existe_administrador(db: Session, escola_id: Optional[int] = None) -> bool:
+    consulta = db.query(UsuarioGestao.id).filter(UsuarioGestao.papel == "administrador", UsuarioGestao.ativo.is_(True))
+    if escola_id is not None:
+        consulta = consulta.filter(UsuarioGestao.escola_id == escola_id)
+    return consulta.first() is not None
+
+
+def carregar_gestor(db: Session, payload: dict) -> Optional[GestorAtual]:
+    """Quem é o dono do token -- ou None se a conta sumiu, foi desativada ou mudou de senha/perfil."""
+    if payload.get("sub") == INSTALACAO:
+        escola = escola_de_instalacao(db)
+        if escola is None or existe_administrador(db, escola.id):
+            return None  # a senha de instalação morre quando a escola tem um Administrador
+        return GestorAtual(id=None, nome="Instalação", usuario=INSTALACAO, papel="administrador", instalacao=True, escola_id=escola.id, escola_nome=escola.nome)
+    try:
+        gestor = db.query(UsuarioGestao).filter(UsuarioGestao.id == int(payload["sub"])).first()
+    except (KeyError, ValueError):
+        return None
+    if not gestor or not gestor.ativo or payload.get("v", 0) != (gestor.sessao_versao or 0):
+        return None
+    escola = db.get(Escola, gestor.escola_id) if gestor.escola_id else None
+    if escola is not None and not escola.ativa:
+        return None  # escola desativada (contrato encerrado): ninguém entra
+    return GestorAtual(id=gestor.id, nome=gestor.nome, usuario=gestor.usuario, papel=gestor.papel, deve_trocar_senha=bool(gestor.deve_trocar_senha),
+                       escola_id=gestor.escola_id, escola_nome=getattr(escola, "nome", None))
+
+
+def get_admin_atual(request: Request, authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> GestorAtual:
     """
-    Protege as rotas /admin/*: exige 'Authorization: Bearer <token>' emitido
-    por /admin/login, com papel 'admin' (token de aluno não serve).
+    Protege as rotas /admin/*: exige o token de uma conta da gestão (ou o da
+    instalação). O servidor -- não a tela -- recusa alteração de quem não pode
+    alterar e qualquer coisa de quem ainda está com senha temporária.
+    O gestor fica em request.state pra auditoria saber quem fez.
     """
+    erro = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Acesso restrito à escola. Faça login no painel.")
     payload = _payload_do_token(authorization)
     if not payload or payload.get("papel") != "admin":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Acesso restrito à escola. Faça login no painel.")
+        raise erro
+    gestor = carregar_gestor(db, payload)
+    if gestor is None:
+        raise erro
+    request.state.gestor = gestor
+    definir_escola(db, gestor.escola_id)  # daqui pra frente, toda consulta é só desta escola
+    metodo, caminho = request.method, request.url.path
+    if gestor.deve_trocar_senha and caminho not in ("/api/admin/gestao/minha-senha", "/api/admin/gestao/eu"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Troque a senha temporária antes de continuar.")
+    if metodo not in ("GET", "HEAD", "OPTIONS") and not gestor.permissoes["alterar"] and (metodo, caminho) not in ROTAS_LIVRES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"O seu perfil ({gestor.permissoes['rotulo']}) é só de visualização.")
+    return gestor
+
+
+def exigir_auditor(gestor: GestorAtual = Depends(get_admin_atual)) -> GestorAtual:
+    if not gestor.permissoes["auditar"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Só os perfis Administrador e Auditor veem a auditoria.")
+    return gestor
+
+
+def exigir_administrador(gestor: GestorAtual = Depends(get_admin_atual)) -> GestorAtual:
+    if not gestor.permissoes["contas"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Só o perfil Administrador gerencia as contas da gestão.")
+    return gestor
 
 
 def get_estudante_atual(
@@ -115,10 +203,11 @@ def get_estudante_atual(
     db: Session = Depends(get_db),
 ) -> Estudante:
     """
-    Aluno identificado pelo token emitido em /auth/entrar (CPF como senha)
-    ou /auth/login. Token de admin não serve aqui.
+    Aluno identificado pelo token emitido em /auth/login (usuário + senha) ou
+    no fim do primeiro acesso. Token de admin não serve aqui, nem token de
+    antes da última troca de senha (ver "v" em criar_token).
     """
-    erro = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessão expirada. Entre de novo com seu CPF.")
+    erro = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessão expirada. Entre de novo com seu usuário e senha.")
     payload = _payload_do_token(authorization)
     if not payload or payload.get("papel", "aluno") != "aluno":
         raise erro
@@ -128,6 +217,10 @@ def get_estudante_atual(
         raise erro
 
     estudante = db.query(Estudante).filter(Estudante.id == estudante_id).first()
-    if not estudante:
+    if not estudante or payload.get("v", 0) != (estudante.sessao_versao or 0):
         raise erro
+    escola = db.get(Escola, estudante.escola_id) if estudante.escola_id else None
+    if escola is not None and not escola.ativa:
+        raise erro  # escola desativada (contrato encerrado)
+    definir_escola(db, estudante.escola_id)  # o aluno só enxerga a própria escola (ranking, vagas, trilha, chat...)
     return estudante

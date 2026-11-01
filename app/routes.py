@@ -3,14 +3,14 @@ import logging
 import random
 from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr, Field
-from typing import Literal, Optional
+from pydantic import BaseModel, Field
+from typing import Optional
 
 # Importações do ecossistema do projeto
-from models import Estudante, Vaga, HistoricoEntrevista, Curriculo, Candidatura, QuizSessao
+from models import Estudante, Vaga, Curriculo, Candidatura, QuizSessao
 from database import get_db
+from limiter import limiter
 from services import (
     AIService,
     ITINERARIOS_QUIZ,
@@ -27,15 +27,12 @@ from services import (
     vagas_das_zonas,
     combo_final,
     vidas_ganhas_por_combo,
-    gerar_nome_exibicao,
 )
-from auth import hash_senha, verificar_senha, criar_token, get_estudante_atual, gerar_senha_temporaria, normalizar_cpf
-from limiter import limiter
+from auth import get_estudante_atual
 from fuso import hoje as hoje_na_escola, agora_utc, inicio_do_dia_utc
 from competencias import registrar_evidencias, mapa_para_tela
 from atividades import proxima_situacao, responder_situacao
 from fotos import FotoRequest, salvar_foto, remover_foto, resposta_da_foto, salvar_foto_curriculo, remover_foto_curriculo, resposta_da_foto_curriculo
-from entrevista import conduzir, PERGUNTA_INICIAL, PERGUNTA_RECOMECO, TAMANHO_MAXIMO_RESPOSTA
 from curriculo import gerar as gerar_curriculo, dados_do_sistema, TextoRecusado
 
 logger = logging.getLogger(__name__)
@@ -47,32 +44,6 @@ router = APIRouter(
 # ----------------------------------------------------------------------
 # SCHEMAS DE VALIDAÇÃO (Pydantic)
 # ----------------------------------------------------------------------
-class RegistroRequest(BaseModel):
-    nome: str = Field(min_length=2, max_length=100)
-    email: EmailStr
-    linkedin: Optional[str] = None
-    senha: str = Field(min_length=6, max_length=100)
-    pergunta_seguranca: str = Field(min_length=4, max_length=200)
-    resposta_seguranca: str = Field(min_length=2, max_length=200)
-
-class LoginRequest(BaseModel):
-    nome: str
-    senha: str
-
-class EntrarCpfRequest(BaseModel):
-    cpf: str = Field(min_length=11, max_length=14)
-
-class PerguntaSegurancaRequest(BaseModel):
-    email: EmailStr
-
-class ResetarSenhaRequest(BaseModel):
-    email: EmailStr
-    resposta_seguranca: str
-
-class TrocarSenhaRequest(BaseModel):
-    senha_atual: str
-    nova_senha: str = Field(min_length=6, max_length=100)
-
 class AtualizarContaRequest(BaseModel):
     linkedin: Optional[str] = None
 
@@ -92,12 +63,6 @@ class ExperienciaRequest(BaseModel):
 
 XP_CURRICULO_DO_DIA = 10  # primeiro currículo gerado no dia
 
-
-class ChatMessageRequest(BaseModel):
-    mensagem_usuario: str = Field(min_length=1, max_length=TAMANHO_MAXIMO_RESPOSTA)
-    # Primeira mensagem de uma simulação: qual abertura o app mostrou. Só o
-    # nome -- o texto da pergunta vem do servidor, o aluno não escolhe a pergunta.
-    abertura: Optional[Literal["inicial", "recomeco"]] = None
 
 class LinkedInExportRequest(BaseModel):
     texto_curriculo: str
@@ -124,149 +89,18 @@ class QuizSubmitRequest(BaseModel):
 # AUTENTICAÇÃO
 # ----------------------------------------------------------------------
 
-def _normalizar_resposta(resposta: str) -> str:
-    """Uniformiza a resposta de segurança (case/espaços) pra não travar por causa de maiúscula."""
-    return resposta.strip().lower()
-
-
-@router.post("/auth/registrar", status_code=status.HTTP_201_CREATED)
-@limiter.limit("10/minute")
-def registrar(request: Request, data: RegistroRequest, db: Session = Depends(get_db)):
-    if db.query(Estudante).filter(Estudante.email == data.email).first():
-        raise HTTPException(status_code=409, detail="Já existe uma conta com esse e-mail")
-
-    # Nome de login não é único de propósito: pode existir mais de um "João Silva".
-    # O que desempata na hora de entrar é a senha (ver /auth/login).
-    novo_estudante = Estudante(
-        nome=data.nome,
-        nome_exibicao=gerar_nome_exibicao(db, data.nome),
-        email=data.email,
-        linkedin=data.linkedin,
-        senha_hash=hash_senha(data.senha),
-        pergunta_seguranca=data.pergunta_seguranca,
-        resposta_seguranca_hash=hash_senha(_normalizar_resposta(data.resposta_seguranca)),
-        habilidades=[],
-    )
-    db.add(novo_estudante)
-    db.commit()
-    db.refresh(novo_estudante)
-
-    token = criar_token(novo_estudante.id)
-    return {"token": token, "estudante": {"id": novo_estudante.id, "nome": novo_estudante.nome, "email": novo_estudante.email}}
-
-
-@router.post("/auth/login")
-@limiter.limit("15/minute")
-def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
-    # O nome de login não é único -- se houver mais de uma conta com o mesmo
-    # nome, quem desempata é a senha: testamos contra cada uma até achar a
-    # que bate. A comparação ignora maiúsculas/espaços nas pontas -- login
-    # por nome já é mais frágil que por e-mail, não faz sentido também
-    # exigir capitalização exata.
-    nome_normalizado = data.nome.strip().lower()
-    candidatos = db.query(Estudante).filter(func.lower(Estudante.nome) == nome_normalizado).all()
-    estudante = next(
-        (c for c in candidatos if c.senha_hash and verificar_senha(data.senha, c.senha_hash)),
-        None,
-    )
-    if not estudante:
-        raise HTTPException(status_code=401, detail="Nome ou senha incorretos")
-
-    token = criar_token(estudante.id)
-    return {
-        "token": token,
-        "estudante": {"id": estudante.id, "nome": estudante.nome, "email": estudante.email},
-        "deve_trocar_senha": bool(estudante.precisa_trocar_senha),
-    }
-
-
-# Login do aluno: a "senha" é o próprio CPF, cadastrado pela escola no painel
-# admin -- nada pra decorar nem resetar. Decisão de produto consciente: CPF não
-# é segredo (aparece em matrícula, boleto...), então quem souber o CPF de um
-# colega entra na conta dele. O rate limit por IP segura chute em massa.
-@router.post("/auth/entrar")
-@limiter.limit("10/minute")
-def entrar_com_cpf(request: Request, data: EntrarCpfRequest, db: Session = Depends(get_db)):
-    cpf = normalizar_cpf(data.cpf)
-    estudante = db.query(Estudante).filter(Estudante.cpf == cpf).first() if len(cpf) == 11 else None
-    if not estudante:
-        raise HTTPException(status_code=401, detail="Senha não encontrada. Confira o CPF digitado ou fale com a coordenação.")
-
-    return {
-        "token": criar_token(estudante.id),
-        "estudante": {"id": estudante.id, "nome": estudante.nome, "email": estudante.email},
-    }
-
+# Login, primeiro acesso, pedido de senha nova e troca de senha ficam em
+# acesso_routes.py (regras em acesso.py).
 
 @router.get("/auth/me")
 def me(estudante: Estudante = Depends(get_estudante_atual)):
     return {
         "id": estudante.id,
         "nome": estudante.nome,
+        "usuario": estudante.usuario,
         "email": estudante.email,
         "linkedin": estudante.linkedin,
-        "deve_trocar_senha": bool(estudante.precisa_trocar_senha),
     }
-
-
-@router.post("/auth/pergunta-seguranca")
-@limiter.limit("10/minute")
-def buscar_pergunta_seguranca(request: Request, data: PerguntaSegurancaRequest, db: Session = Depends(get_db)):
-    """
-    Primeiro passo do reset: devolve a pergunta de segurança cadastrada pra
-    esse e-mail, pra o front poder perguntar a resposta antes de liberar a
-    senha temporária. Sem isso, resetar a senha de qualquer conta bastaria
-    saber o e-mail (que não é segredo nenhum) -- essa era exatamente a
-    falha que esse fluxo corrige.
-    """
-    estudante = db.query(Estudante).filter(Estudante.email == data.email).first()
-    if not estudante or not estudante.pergunta_seguranca:
-        raise HTTPException(status_code=404, detail="E-mail não encontrado ou sem pergunta de segurança cadastrada.")
-    return {"pergunta": estudante.pergunta_seguranca}
-
-
-@router.post("/auth/resetar-senha")
-@limiter.limit("5/minute")
-def resetar_senha(request: Request, data: ResetarSenhaRequest, db: Session = Depends(get_db)):
-    """
-    Sem servidor de e-mail configurado, a senha temporária é devolvida
-    direto na resposta (mostrada uma única vez na tela) em vez de enviada
-    por e-mail. No próximo login com ela, o front força a troca por uma
-    senha definitiva antes de liberar o resto do app.
-
-    A resposta de segurança é exigida aqui porque e-mail sozinho não é
-    segredo -- sem essa checagem, qualquer pessoa que soubesse o e-mail de
-    alguém conseguiria derrubar a senha da conta na hora.
-    """
-    estudante = db.query(Estudante).filter(Estudante.email == data.email).first()
-    if not estudante or not estudante.resposta_seguranca_hash:
-        # Não revela se o e-mail existe ou não, pra não ajudar enumeração de contas
-        return {"mensagem": "Se esse e-mail existir e a resposta estiver correta, uma senha temporária foi gerada."}
-
-    if not verificar_senha(_normalizar_resposta(data.resposta_seguranca), estudante.resposta_seguranca_hash):
-        raise HTTPException(status_code=401, detail="Resposta de segurança incorreta.")
-
-    senha_temp = gerar_senha_temporaria()
-    estudante.senha_hash = hash_senha(senha_temp)
-    estudante.precisa_trocar_senha = True
-    db.commit()
-
-    return {
-        "mensagem": "Senha temporária gerada. Use-a pra entrar e depois defina uma nova.",
-        "nome_login": estudante.nome,
-        "senha_temporaria": senha_temp,
-    }
-
-
-@router.post("/auth/trocar-senha")
-def trocar_senha(data: TrocarSenhaRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
-    if not estudante.senha_hash or not verificar_senha(data.senha_atual, estudante.senha_hash):
-        raise HTTPException(status_code=401, detail="Senha atual incorreta")
-
-    estudante.senha_hash = hash_senha(data.nova_senha)
-    estudante.precisa_trocar_senha = False
-    db.commit()
-    return {"sucesso": True}
 
 
 @router.put("/auth/conta")
@@ -389,87 +223,7 @@ def generate_resume(data: ResumeRequest, estudante: Estudante = Depends(get_estu
         raise HTTPException(status_code=500, detail="Erro ao salvar currículo. Tente novamente mais tarde.")
 
 
-# --- Rota 3: Simulador de Entrevistas Inteligente ---
-@router.post("/chat/message")
-def chat_interview(data: ChatMessageRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
-    """
-    Uma rodada da entrevista: triagem local, avaliação da IA no papel de
-    entrevistadora e XP calculado aqui a partir das notas (ver entrevista.py).
-    """
-    historico = list(reversed(db.query(HistoricoEntrevista).filter(
-        HistoricoEntrevista.estudante_id == estudante.id
-    ).order_by(HistoricoEntrevista.enviado_em.desc(), HistoricoEntrevista.id.desc()).limit(20).all()))
-    respostas_anteriores = [m.mensagem for m in historico if m.remetente == "user"]
-
-    if data.abertura or not any(m.remetente == "ai" for m in historico):
-        # Começo de simulação: a pergunta é a abertura que o app mostrou, e a
-        # conversa anterior não entra no contexto da IA
-        pergunta_atual = PERGUNTA_RECOMECO if data.abertura == "recomeco" else PERGUNTA_INICIAL
-        contexto = []
-    else:
-        pergunta_atual = next(m.mensagem for m in reversed(historico) if m.remetente == "ai")
-        contexto = historico[-6:]
-    historico_texto = "\n".join(f"{'Entrevistadora' if m.remetente == 'ai' else 'Candidato'}: {m.mensagem}" for m in contexto)
-
-    rodada = conduzir(
-        data.mensagem_usuario, pergunta_atual, respostas_anteriores,
-        perguntas_ja_feitas=sum(1 for m in historico if m.remetente == "ai"),
-        avaliar_com_ia=lambda mensagem, pergunta: AIService.processar_entrevista_ia(mensagem, pergunta, historico_texto, estudante.itinerario),
-    )
-    feedback_gerado = rodada["analise_feedback"]
-    xp_concedido = rodada["xp_concedido"]
-    proxima_pergunta = rodada["fala"]
-
-    try:
-        if not contexto:
-            # Guarda a pergunta de abertura antes da resposta: a ficha do aluno mostra cada resposta com a pergunta dela
-            db.add(HistoricoEntrevista(estudante_id=estudante.id, remetente="ai", mensagem=pergunta_atual))
-
-        msg_usuario = HistoricoEntrevista(
-            estudante_id=estudante.id,
-            remetente="user",
-            mensagem=data.mensagem_usuario,
-            feedback_ia=feedback_gerado,
-            xp_concedido=xp_concedido,
-        )
-        db.add(msg_usuario)
-
-        msg_ia = HistoricoEntrevista(
-            estudante_id=estudante.id,
-            remetente="ai",
-            mensagem=proxima_pergunta
-        )
-        db.add(msg_ia)
-
-        mudanca_liga = None
-        if rodada["categoria"] == "resposta":
-            # Só resposta de entrevista conta como treino do dia e vira evidência
-            # (0-50 XP -> 0-100) nos eixos que uma entrevista exercita
-            mudanca_liga = AIService.processar_gamificacao_pos_atividade(estudante, db, xp_concedido)
-            nota_resposta = max(0, min(50, int(xp_concedido or 0))) * 2
-            registrar_evidencias(db, estudante.id, {
-                "comunicacao": nota_resposta, "trabalho_projeto_vida": nota_resposta, "autoconhecimento": nota_resposta,
-            }, origem="entrevista")
-        db.commit()
-
-        return {
-            "feedback_ia": feedback_gerado,
-            "resposta_ia": proxima_pergunta,
-            "xp_concedido": xp_concedido,
-            "categoria": rodada["categoria"],
-            "notas": rodada["notas"],
-            "novos_pontos_totais": estudante.xp_total,
-            "nivel_atual": estudante.nivel_gamificacao,
-            "ofensiva_dias": estudante.ofensiva_dias,
-            "categoria_status": estudante.categoria_status,
-            "missoes_diarias": estudante.missoes_diarias_concluidas,
-            "liga": estudante.liga,
-            "mudanca_liga": mudanca_liga,
-        }
-    except Exception:
-        db.rollback()
-        logger.exception("Erro no processamento do chat do estudante %s", estudante.id)
-        raise HTTPException(status_code=500, detail="Erro no processamento do chat. Tente novamente mais tarde.")
+# --- Rota 3: Simulador de entrevista -> entrevista_routes.py (conversa contínua + laudo) ---
 
 
 # --- Rota Nova: Leaderboard / Liga Semanal ---
@@ -760,6 +514,8 @@ def get_status_gamificacao(estudante: Estudante = Depends(get_estudante_atual), 
         "ofensiva_dias": estado_ofensiva["ofensiva_atual"],
         "treinou_hoje": estado_ofensiva["treinou_hoje"],
         "ofensiva_em_risco": estado_ofensiva["em_risco"],
+        # O contador do banco só zera na próxima atividade: sem treino hoje, são 0 missões hoje
+        "missoes_diarias": (estudante.missoes_diarias_concluidas or 0) if estado_ofensiva["treinou_hoje"] else 0,
         "itinerario": estudante.itinerario,
         "nome": estudante.nome,
         "nome_exibicao": estudante.nome_exibicao or estudante.nome,
@@ -799,7 +555,8 @@ def get_minha_foto(estudante: Estudante = Depends(get_estudante_atual)):
 
 
 @router.put("/estudante/me/foto")
-def enviar_minha_foto(data: FotoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def enviar_minha_foto(request: Request, data: FotoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     salvar_foto(db, estudante, data.imagem_base64, enviada_por="aluno")
     db.commit()
     return {"sucesso": True, "foto_atualizada_em": estudante.foto_atualizada_em.isoformat()}
@@ -817,6 +574,10 @@ def salvar_experiencia(data: ExperienciaRequest, estudante: Estudante = Depends(
     estudante.ja_trabalhou = data.ja_trabalhou
     texto = (data.experiencia_previa or "").strip()
     estudante.experiencia_previa = texto if data.ja_trabalhou and texto else None
+    # Nova versão do cadastro: a escola, se estiver com a ficha aberta, não sobrescreve isto
+    estudante.versao_cadastro = (estudante.versao_cadastro or 1) + 1
+    estudante.cadastro_alterado_por = f"{estudante.nome} (pelo app)"[:100]
+    estudante.cadastro_alterado_em = agora_utc()
     db.commit()
     return {"ja_trabalhou": estudante.ja_trabalhou, "experiencia_previa": estudante.experiencia_previa}
 
@@ -890,7 +651,8 @@ def get_minha_foto_curriculo(estudante: Estudante = Depends(get_estudante_atual)
 
 
 @router.put("/estudante/me/foto-curriculo")
-def enviar_minha_foto_curriculo(data: FotoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def enviar_minha_foto_curriculo(request: Request, data: FotoRequest, estudante: Estudante = Depends(get_estudante_atual), db: Session = Depends(get_db)):
     """A foto do currículo é outra, separada da de identificação. Enviar já marca o currículo como "com foto"."""
     salvar_foto_curriculo(db, estudante, data.imagem_base64)
     estudante.foto_no_curriculo = True

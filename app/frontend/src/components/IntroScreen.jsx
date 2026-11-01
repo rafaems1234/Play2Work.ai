@@ -93,7 +93,11 @@ const Terminal = () => {
 const IntroScreen = ({ aoEntrar, aoAbrirAdmin }) => {
   useEffect(() => {
     const aoTeclar = (e) => {
-      if (e.key === 'Enter') aoEntrar();
+      if (e.key !== 'Enter') return;
+      // Sem isso o mesmo Enter chega no campo do login (que abre já focado)
+      // e envia o formulário vazio, mostrando erro antes de o aluno digitar.
+      e.preventDefault();
+      aoEntrar();
     };
     window.addEventListener('keydown', aoTeclar);
     return () => window.removeEventListener('keydown', aoTeclar);

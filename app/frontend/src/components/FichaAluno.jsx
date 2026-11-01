@@ -195,7 +195,7 @@ const CabecalhoFicha = ({ aluno, aoAtualizar }) => {
         </div>
         <div style={{ fontSize: '12px', color: 'var(--adm-suave)', marginBottom: '8px' }}>{aluno.itinerario || 'Itinerário não definido'}</div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <SeletorFoto className="adm-btn secundario pequeno" rotulo={enviando ? 'Enviando...' : aluno.tem_foto ? 'Trocar foto' : 'Enviar foto'} disabled={enviando} aoEscolher={enviarFoto} aoErro={setErro} />
+          <SeletorFoto className="adm-btn secundario pequeno so-quem-altera" rotulo={enviando ? 'Enviando...' : aluno.tem_foto ? 'Trocar foto' : 'Enviar foto'} disabled={enviando} aoEscolher={enviarFoto} aoErro={setErro} />
           {aluno.tem_foto && <button type="button" className="adm-link" onClick={removerFoto}>Remover</button>}
         </div>
       </div>
@@ -340,6 +340,10 @@ const AbaDados = ({ aluno, turmas, itinerarios, empresas, aoSalvar, aoAtualizar 
         <div><strong>{aluno.ofensiva_dias} <IconFire style={{ color: '#f97316', verticalAlign: '-2px' }} /></strong><span>ofensiva</span></div>
         <div><strong>{aluno.liga}</strong><span>liga</span></div>
         <div><strong>{aluno.total_indicacoes}</strong><span>indicações</span></div>
+        <div>
+          <strong style={{ color: aluno.certificacao?.aprovada ? '#059669' : undefined }}>{aluno.certificacao?.aprovada ? `${aluno.certificacao.aprovada.percentual}%` : '—'}</strong>
+          <span>{aluno.certificacao?.aprovada ? 'certificado' : `certificação (${aluno.certificacao?.tentativas || 0} tentativa${aluno.certificacao?.tentativas === 1 ? '' : 's'})`}</span>
+        </div>
       </div>
       <h3 className="adm-subtitulo">Contato</h3>
       <dl className="adm-ficha">
@@ -352,7 +356,7 @@ const AbaDados = ({ aluno, turmas, itinerarios, empresas, aoSalvar, aoAtualizar 
       <p style={{ fontSize: '12px', color: 'var(--adm-suave)', margin: '14px 0' }}>
         A senha do aluno é o CPF acima. Se ele não conseguir entrar, confira o CPF cadastrado.
       </p>
-      <button className="adm-btn secundario" onClick={() => setEditando(true)}><IconLock style={{ verticalAlign: '-2px' }} /> Habilitar edição</button>
+      <button className="adm-btn secundario so-quem-altera" onClick={() => setEditando(true)}><IconLock style={{ verticalAlign: '-2px' }} /> Habilitar edição</button>
     </div>
   );
 };
@@ -412,7 +416,7 @@ const AbaCurriculo = ({ aluno }) => {
             </option>
           ))}
         </select>
-        <button className="adm-btn" onClick={() => setImprimindo(true)}><IconPdf style={{ verticalAlign: '-2px' }} /> Baixar PDF</button>
+        <button className="adm-btn leitura-ok" onClick={() => setImprimindo(true)}><IconPdf style={{ verticalAlign: '-2px' }} /> Baixar PDF</button>
       </div>
       {dados.atual.texto_original && (
         <details className="adm-detalhes">
@@ -607,9 +611,117 @@ const MensagensDoAluno = ({ aluno }) => {
   );
 };
 
-const AbaHistorico = ({ aluno, historico, recarregar }) => {
+// ------------------------------------------------------------------ simulador: feed compacto por rodada
+const corDaNotaLaudo = (n) => (n >= 75 ? '#059669' : n >= 50 ? '#c98a04' : '#dc2626');
+const SELO_RODADA = {
+  em_andamento: ['Em andamento', 'azul'],
+  meta_atingida: ['Meta atingida', 'verde'],
+  nao_atingida: ['Abaixo da meta', 'amarelo'],
+};
+
+const LinhaLaudo = ({ l }) => {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <>
+      <tr onClick={() => setAberto((v) => !v)} style={{ cursor: 'pointer' }} title="Ver o laudo completo">
+        <td className="mono">{dataIsoParaBr(l.laudo_em)}</td>
+        <td className="num"><strong style={{ color: corDaNotaLaudo(l.nota_geral) }}>{l.nota_geral}%</strong></td>
+        <td><span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: corDaNotaLaudo(l.nota_geral) }} aria-label={l.nota_geral >= 75 ? 'verde' : l.nota_geral >= 50 ? 'amarelo' : 'vermelho'} /></td>
+        <td>{l.resumo || <span className="adm-vazio">sem resumo</span>}{!l.por_ia && <span className="adm-vazio"> · sem IA</span>}</td>
+      </tr>
+      {aberto && (
+        <tr style={{ cursor: 'default' }}>
+          <td colSpan={4} style={{ background: 'rgb(var(--adm-tinta) / 0.03)' }}>
+            <div className="adm-entrevista-f"><strong>Parecer:</strong> {l.parecer_recrutador}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginTop: '8px', fontSize: '12px' }}>
+              <div><strong>Pontos fortes</strong><ul style={{ margin: '4px 0 0', paddingLeft: '18px' }}>{l.pontos_fortes.map((x) => <li key={x}>{x}</li>)}</ul></div>
+              <div><strong>O que melhorar</strong><ul style={{ margin: '4px 0 0', paddingLeft: '18px' }}>{l.pontos_melhoria.map((x) => <li key={x}>{x}</li>)}</ul></div>
+            </div>
+            {l.notas && <div style={{ fontSize: '12px', color: 'var(--adm-suave)', marginTop: '8px' }}>Respondeu {l.notas.relevancia}/10 · Clareza {l.notas.clareza}/10 · Exemplos {l.notas.exemplos}/10 · Postura {l.notas.postura}/10 · +{l.xp_concedido} XP</div>}
+            <details style={{ marginTop: '8px' }}>
+              <summary style={{ fontSize: '12px', cursor: 'pointer' }}>Ver a conversa</summary>
+              {l.conversa.map((m, i) => (
+                <div key={i} className={m.remetente === 'ai' ? 'adm-entrevista-p' : 'adm-entrevista-r'}>
+                  {m.remetente === 'ai' ? 'IA' : 'Aluno'}: {m.mensagem}
+                  {m.remetente === 'user' && m.categoria && m.categoria !== 'resposta' && <em style={{ color: '#c98a04' }}> (não contou: {m.categoria.replace(/_/g, ' ')})</em>}
+                </div>
+              ))}
+            </details>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+};
+
+const TabelaLaudos = ({ laudos }) => (
+  <div className="adm-tabela-wrap" style={{ marginTop: '8px' }}>
+    <table className="adm-tabela">
+      <thead><tr><th>Data</th><th className="num">%</th><th /><th>Síntese</th></tr></thead>
+      <tbody>{laudos.map((l) => <LinhaLaudo key={l.sessao_id} l={l} />)}</tbody>
+    </table>
+  </div>
+);
+
+const FeedEntrevistas = ({ rodadas, laudos, aoMudar }) => {
+  const [erro, setErro] = useState(null);
+  const decidir = async (rodada, acao) => {
+    setErro(null);
+    const r = await apiFetch(`/api/admin/rodadas-entrevista/${rodada.id}/${acao}`, { method: 'POST' });
+    if (!r.ok) { setErro(await lerErro(r, 'Não foi possível salvar.')); return; }
+    aoMudar();
+  };
+  const fechadas = [...rodadas].reverse().filter((r) => r.status !== 'em_andamento');
+  const livres = laudos.filter((l) => !l.rodada_id);
+  return (
+    <div>
+      {fechadas.length > 1 && (
+        <p style={{ fontSize: '12px', color: 'var(--adm-texto)', margin: '0 0 8px' }}>
+          Evolução: {fechadas.map((r, i) => <React.Fragment key={r.id}>{i > 0 && ' → '}<strong style={{ color: corDaNotaLaudo(r.media) }}>{r.numero}ª {r.media}%</strong></React.Fragment>)}
+        </p>
+      )}
+      {erro && <div className="adm-erro"><IconWarning /> {erro}</div>}
+      {rodadas.map((r) => {
+        const [rotulo, cor] = SELO_RODADA[r.status] || SELO_RODADA.em_andamento;
+        const daRodada = laudos.filter((l) => l.rodada_id === r.id);
+        return (
+          <div key={r.id} className="adm-card" style={{ padding: '12px 14px', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ fontWeight: 800, color: 'var(--adm-forte)' }}>
+                {r.numero}ª rodada <span style={{ fontWeight: 600, color: 'var(--adm-suave)', fontSize: '12px' }}>· {r.feitas}/{r.total} entrevistas{r.media != null && <> · média <strong style={{ color: corDaNotaLaudo(r.media) }}>{r.media}%</strong></>} (meta {r.meta}%)</span>
+              </div>
+              <span className={`adm-chip pequeno ${cor}`}>{r.status === 'meta_atingida' && r.confirmada_em ? `Meta de Entrevista Atingida · confirmada em ${dataIsoParaBr(r.confirmada_em)}` : rotulo}</span>
+            </div>
+            {r.status === 'meta_atingida' && !r.confirmada_em && (
+              <div className="adm-aviso" style={{ marginTop: '8px', flexWrap: 'wrap' }}>
+                <IconWarning /> A média passou da meta. A decisão é da coordenação: confirme a "Meta de Entrevista Atingida" ou mande o aluno para uma nova rodada.
+                <span style={{ display: 'inline-flex', gap: '6px', marginLeft: 'auto' }}>
+                  <button type="button" className="adm-btn pequeno" onClick={() => decidir(r, 'confirmar')}>Confirmar meta</button>
+                  <button type="button" className="adm-btn secundario pequeno so-quem-altera" onClick={() => decidir(r, 'nao-confirmar')}>Nova rodada</button>
+                </span>
+              </div>
+            )}
+            {daRodada.length > 0 && <TabelaLaudos laudos={daRodada} />}
+          </div>
+        );
+      })}
+      {livres.length > 0 && (
+        <div className="adm-card" style={{ padding: '12px 14px', marginBottom: '10px' }}>
+          <div style={{ fontWeight: 800, color: 'var(--adm-forte)' }}>
+            {rodadas.some((r) => r.status === 'meta_atingida')
+              ? <>Treino livre <span style={{ fontWeight: 600, color: 'var(--adm-suave)', fontSize: '12px' }}>· depois da meta, fora das rodadas</span></>
+              : <>Fora das rodadas <span style={{ fontWeight: 600, color: 'var(--adm-suave)', fontSize: '12px' }}>· feitas antes de as rodadas existirem</span></>}
+          </div>
+          <TabelaLaudos laudos={livres} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AbaHistorico = ({ aluno, historico, recarregar, aoAtualizar }) => {
   if (!historico) return <p className="adm-vazio">Carregando…</p>;
-  const { experiencia, entrevistas, candidaturas, mudancas_status: mudancas } = historico;
+  const { experiencia, entrevistas, candidaturas, mudancas_status: mudancas, laudos = [], certificacao = [], rodadas = [] } = historico;
   return (
     <div>
       <h3 className="adm-subtitulo">Experiência anterior</h3>
@@ -638,8 +750,25 @@ const AbaHistorico = ({ aluno, historico, recarregar }) => {
       <h3 className="adm-subtitulo">Mensagens</h3>
       <MensagensDoAluno aluno={aluno} />
 
+      <h3 className="adm-subtitulo">Simulado de certificação</h3>
+      {certificacao.length === 0 ? <p className="adm-vazio">{aluno.nome} ainda não fez o simulado.</p> : (
+        <ul className="adm-linha-tempo">
+          {certificacao.map((t) => (
+            <li key={t.id}>
+              <span className={`adm-chip ${t.status === 'aprovada' ? 'verde' : 'amarelo'}`}>{t.status === 'aprovada' ? 'Aprovado' : 'Não atingiu'} · {t.percentual}%</span>
+              {' '}{t.acertos}/{t.total} · {t.itinerario}
+              {t.saidas_de_tela > 0 && <em style={{ color: '#c98a04' }}> · saiu da tela {t.saidas_de_tela}x durante a prova</em>}
+              <span>{dataHoraIsoParaBr(t.concluida_em)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <h3 className="adm-subtitulo">Simulador de entrevista com IA</h3>
-      {entrevistas.length === 0 ? <p className="adm-vazio">{aluno.nome} ainda não treinou no simulador.</p> : entrevistas.map((dia) => (
+      {laudos.length === 0 && entrevistas.length === 0 && <p className="adm-vazio">{aluno.nome} ainda não treinou no simulador.</p>}
+      <FeedEntrevistas rodadas={rodadas} laudos={laudos} aoMudar={() => { recarregar(); aoAtualizar?.(); }} />
+      {entrevistas.length > 0 && laudos.length > 0 && <p style={{ fontSize: '12px', color: 'var(--adm-suave)', margin: '10px 0 4px' }}>Treinos no formato antigo (nota por resposta):</p>}
+      {entrevistas.map((dia) => (
         <details key={dia.data} className="adm-detalhes">
           <summary>
             {dataIsoParaBr(dia.data)} · {dia.total_respostas} resposta{dia.total_respostas !== 1 ? 's' : ''}
@@ -748,7 +877,7 @@ const FichaAluno = ({ aluno, turmas, itinerarios, empresas, aoSalvar, aoAtualiza
       {aba === 'dados' && <AbaDados aluno={aluno} turmas={turmas} itinerarios={itinerarios} empresas={empresas} aoSalvar={aoSalvar} aoAtualizar={aoAtualizar} />}
       {aba === 'competencias' && <AbaCompetencias aluno={aluno} />}
       {aba === 'curriculo' && <AbaCurriculo aluno={aluno} />}
-      {aba === 'historico' && <AbaHistorico aluno={aluno} historico={historico} recarregar={carregarHistorico} />}
+      {aba === 'historico' && <AbaHistorico aluno={aluno} historico={historico} recarregar={carregarHistorico} aoAtualizar={aoAtualizar} />}
       {aba === 'observacoes' && <AbaObservacoes aluno={aluno} historico={historico} recarregar={carregarHistorico} />}
       {aba === 'certificados' && <AbaCertificados aluno={aluno} aoAtualizar={aoAtualizar} />}
       {aba === 'pap' && <AbaPap aluno={aluno} aoAtualizar={aoAtualizar} />}

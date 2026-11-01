@@ -7,10 +7,11 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:80
 // Pra desenvolver contra a API real, defina VITE_DEMO_MODE=false no .env.
 export const DEMO_MODE = String(import.meta.env.VITE_DEMO_MODE ?? 'true') !== 'false';
 
-// Dois logins independentes: o do aluno (CPF + data de nascimento) e o do
-// painel da escola. Cada rota usa o token do seu "papel".
+// Dois logins independentes: o do aluno (usuário + senha, primeiro acesso com
+// CPF + código da escola) e o do painel da escola. Cada rota usa o token do
+// seu "papel". 401 nas rotas de entrada é "dado errado", não sessão expirada.
 const CHAVES_TOKEN = { aluno: 'play2work_token_aluno', admin: 'play2work_token_admin' };
-const ROTAS_DE_LOGIN = ['/api/auth/entrar', '/api/admin/login'];
+const ROTAS_DE_LOGIN = ['/api/auth/login', '/api/auth/primeiro-acesso/conferir', '/api/auth/primeiro-acesso', '/api/auth/esqueci-senha', '/api/admin/login'];
 
 const papelDaRota = (path) => (path.startsWith('/api/admin') ? 'admin' : 'aluno');
 

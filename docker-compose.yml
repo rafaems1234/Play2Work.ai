@@ -1,0 +1,39 @@
+# Backend + Postgres pra rodar o sistema completo numa máquina (homologação/piloto).
+#
+#   cp app/.env.example app/.env   # preencha JWT_SECRET_KEY, ADMIN_SENHA, GEMINI_API_KEY, CORS_ORIGINS
+#   docker compose up -d --build
+#
+# A API sobe em http://localhost:8000 e prepara o banco sozinha (tabelas, migrações e a primeira escola).
+# Postgres exposto só na própria máquina, na porta 5433 (não briga com um Postgres local na 5432).
+# A porta da API muda com API_PORTA (ex.: API_PORTA=8765 docker compose up -d --build).
+services:
+  banco:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: play2work
+      POSTGRES_USER: play2work
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-troque-esta-senha}
+    volumes:
+      - dados_postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U play2work -d play2work"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: app/.env
+    environment:
+      DATABASE_URL: postgresql://play2work:${POSTGRES_PASSWORD:-troque-esta-senha}@banco:5432/play2work
+    depends_on:
+      banco:
+        condition: service_healthy
+    ports:
+      - "${API_PORTA:-8000}:8000"
+
+volumes:
+  dados_postgres:

@@ -4,7 +4,10 @@ import BANCO_QUESTOES from './data/banco_questoes.json';
 import SITUACOES_LISTA from './data/situacoes.json';
 import { criarMockTrilha } from './mockTrilha';
 import { criarMockMensagens } from './mockMensagens';
-import { conduzirDemo, PERGUNTA_INICIAL, PERGUNTA_RECOMECO } from './entrevistaDemo';
+import { criarMockAcesso } from './mockAcesso';
+import { criarMockCertificacao } from './mockCertificacao';
+import { criarMockGestao } from './mockGestao';
+import { rodadaDemo, laudoDemo, RESPOSTAS_MINIMAS, RESPOSTAS_MAXIMAS, LAUDOS_COM_XP_POR_DIA, ENTREVISTAS_POR_RODADA, META_DA_RODADA, PERGUNTA_INICIAL, PERGUNTA_RECOMECO } from './entrevistaDemo';
 import { gerarCurriculoDemo } from './curriculoDemo';
 import { statusPorXp, STATUS_CONTRATADO, STATUS_INICIAL } from './statusCarreira';
 import { validarFicha, conferirContrato, STATUS_APRENDIZ } from './fichaPapDemo';
@@ -42,8 +45,6 @@ const MINUTOS_PARA_REGENERAR_VIDA = 30;
 const ACERTOS_SEGUIDOS_PARA_VIDA = 5;
 const PERGUNTAS_POR_QUIZ = 10;
 const PERGUNTAS_GERAIS_POR_QUIZ = 2;
-const SENHA_ADMIN_DEMO = 'escola123';
-const TOKEN_ADMIN_DEMO = 'demo-admin';
 const DICAS_POR_QUIZ = 2;
 const PULOS_POR_QUIZ = 2;
 const LIGAS = LIGAS_INFO.map((l) => l.nome);
@@ -66,7 +67,6 @@ const estado = {
   proxima_vida_em: null,
   congelamentos_disponiveis: 1,
   quizzes_perfeitos_seguidos: 3,
-  precisaTrocarSenha: false,
   candidaturas: new Set(),
   quizzesEnviados: 0,
   treinouHoje: false,
@@ -214,6 +214,39 @@ const curriculos = new Map([[2, [{
   },
 }]]]);
 let proximoCurriculoId = 2;
+// Simulador contínuo: alunoId -> [{ id, status, respostas, mensagens, laudo }]
+const sessoesEntrevista = new Map();
+let proximaSessaoId = 1;
+// Rodadas de 5 entrevistas (espelho de entrevista_routes.registrar_na_rodada): alunoId -> [{ id, numero, status, media, confirmada_em, ... }]
+const rodadasEntrevista = new Map();
+let proximaRodadaId = 1;
+const notasDaRodada = (alunoId, rodadaId) => (sessoesEntrevista.get(alunoId) || []).filter((x) => x.status === 'concluida' && x.laudo.rodada_id === rodadaId).map((x) => x.laudo.nota_geral);
+const rodadaParaApi = (alunoId, r) => {
+  const notas = notasDaRodada(alunoId, r.id);
+  return {
+    id: r.id, numero: r.numero, status: r.status, feitas: notas.length, total: ENTREVISTAS_POR_RODADA, meta: META_DA_RODADA,
+    media: r.media ?? (notas.length ? Math.round(notas.reduce((t, n) => t + n, 0) / notas.length) : null),
+    concluida_em: r.concluida_em ?? null, confirmada_em: r.confirmada_em ?? null,
+  };
+};
+const registrarNaRodadaDemo = (alunoId, laudo) => {
+  const rodadas = rodadasEntrevista.get(alunoId) || [];
+  rodadasEntrevista.set(alunoId, rodadas);
+  if (rodadas.some((r) => r.status === 'meta_atingida')) return null;
+  let aberta = rodadas.find((r) => r.status === 'em_andamento');
+  if (!aberta) {
+    aberta = { id: proximaRodadaId++, numero: rodadas.length + 1, status: 'em_andamento', media: null };
+    rodadas.push(aberta);
+  }
+  laudo.rodada_id = aberta.id;
+  const notas = [...notasDaRodada(alunoId, aberta.id), laudo.nota_geral];
+  if (notas.length >= ENTREVISTAS_POR_RODADA) {
+    aberta.media = Math.round(notas.reduce((t, n) => t + n, 0) / notas.length);
+    aberta.status = aberta.media >= META_DA_RODADA ? 'meta_atingida' : 'nao_atingida';
+    aberta.concluida_em = agoraIso();
+  }
+  return { ...rodadaParaApi(alunoId, aberta), feitas: notas.length, media: aberta.media ?? Math.round(notas.reduce((t, n) => t + n, 0) / notas.length) };
+};
 const entrevistas = new Map([[2, [
   { remetente: 'ai', mensagem: 'Me conta um pouco sobre você e por que quer trabalhar com dados.', em: diasAtras(5) },
   { remetente: 'user', mensagem: 'Gosto de organizar informação. Na lan house eu fazia a planilha de caixa do meu tio.', feedback: 'Ótimo exemplo prático! Mostra iniciativa.', xp: 40, em: diasAtras(5) },
@@ -259,7 +292,7 @@ const SITUACOES_POR_DIA = 5;
 const mapas = new Map();        // alunoId -> { codigo: { pontuacao, total } }
 const evidencias = new Map();   // alunoId -> [{ competencia, pontos, origem, criada_em }]
 const respostasSituacoes = new Map(); // alunoId -> [{ situacao_id, opcao_index, criada_em }]
-const ORIGENS = { quiz: 'Quiz do dia', entrevista: 'Simulador de entrevista', situacao: 'O que você faria?', aula: 'Aula EAD (fixação)' };
+const ORIGENS = { quiz: 'Quiz do dia', entrevista: 'Simulador de entrevista', situacao: 'O que você faria?', aula: 'Aula EAD (fixação)', certificacao: 'Simulado de certificação' };
 
 const registrarEvidencias = (alunoId, pontosPorEixo, origem, criadaEm = agoraIso()) => {
   const mapa = mapas.get(alunoId) || {};
@@ -341,6 +374,12 @@ const alunoParaApi = (a) => ({
   curriculo_atualizado_em: ultimoCurriculo(a.id)?.gerado_em ?? null,
   contrato_atual: contratosDoAluno(a.id)[0] ?? null,
   ...trilha.resumoCertificados(a.id),
+  ...acessoDemo.camposDoAluno(a),
+  ...certificacaoDemo.camposDoAluno(a),
+  meta_entrevista: (() => {
+    const r = (rodadasEntrevista.get(a.id) || []).find((x) => x.status === 'meta_atingida');
+    return r ? { rodada_id: r.id, rodada: r.numero, media: r.media, confirmada: Boolean(r.confirmada_em) } : null;
+  })(),
 });
 
 // Mesma validação de fotos.py (tipo pelos primeiros bytes, até 1 MB)
@@ -499,10 +538,8 @@ const entrarComo = (aluno) => {
   atualizarCategoriaStatus();
 };
 
-const alunoDoToken = (token) => {
-  const m = /^demo-aluno-(\d+)$/.exec(token || '');
-  return m ? ALUNOS.find((a) => a.id === Number(m[1])) : null;
-};
+// Token "demo-aluno-<id>-v<versão>" (ver mockAcesso.js)
+const alunoDoToken = (token) => acessoDemo.alunoDoToken(token);
 
 const clone = (valor) => JSON.parse(JSON.stringify(valor));
 
@@ -638,18 +675,48 @@ const concederXpDemo = (xp) => {
   registrarTreinoDoDia();
 };
 const mensagensDemo = criarMockMensagens({ ALUNOS, TURMAS, estado, respostaFake, erroFake, agoraIso, diasAtras });
+const acessoDemo = criarMockAcesso({ ALUNOS, TURMAS, respostaFake, erroFake, agoraIso, diasAtras });
+const certificacaoDemo = criarMockCertificacao({ respostaFake, erroFake, registrarEvidencias });
+const gestaoDemo = criarMockGestao({ ALUNOS, respostaFake, erroFake, agoraIso, diasAtras });
 const trilha = criarMockTrilha({ ALUNOS, estado, respostaFake, erroFake, registrarEvidencias, concederXp: concederXpDemo, nomeTurma, agoraIso, diasAtras });
 
+// Contas da gestão e auditoria (mockGestao.js): login por conta, travas do
+// perfil e registro de toda alteração bem-sucedida, como no backend.
+let gestorAtualDemo = null;
 const atenderAdmin = async (metodo, caminho, query, corpo, token) => {
-  if (metodo === 'POST' && caminho === '/api/admin/login') {
-    if (corpo.senha !== SENHA_ADMIN_DEMO) return erroFake('Senha incorreta', 401);
-    return respostaFake({ token: TOKEN_ADMIN_DEMO });
+  if (metodo === 'POST' && caminho === '/api/admin/login') return gestaoDemo.login(corpo);
+  const conta = gestaoDemo.contaDoToken(token);
+  if (!conta) return erroFake('Acesso restrito à escola. Faça login no painel.', 401);
+  const barrado = gestaoDemo.barrar(conta, metodo, caminho);
+  if (barrado) return barrado;
+  const daGestao = gestaoDemo.rotas(metodo, caminho, query, corpo, conta);
+  if (daGestao) {
+    const resposta = await daGestao;
+    if (resposta.ok) gestaoDemo.auditar(conta, metodo, caminho, corpo);
+    return resposta;
   }
-  if (token !== TOKEN_ADMIN_DEMO) return erroFake('Acesso restrito à escola. Faça login no painel.', 401);
+  gestorAtualDemo = conta;
+  const resposta = await atenderAdminInterno(metodo, caminho, query, corpo);
+  if (resposta.ok) gestaoDemo.auditar(conta, metodo, caminho, corpo);
+  return resposta;
+};
+
+const atenderAdminInterno = async (metodo, caminho, query, corpo) => {
   const daTrilha = await trilha.admin(metodo, caminho, query, corpo);
   if (daTrilha) return daTrilha;
   const dasMensagens = mensagensDemo.admin(metodo, caminho, query, corpo);
   if (dasMensagens) return dasMensagens;
+  const doAcesso = acessoDemo.admin(metodo, caminho, query, corpo);
+  if (doAcesso) return doAcesso;
+  const decisaoMeta = metodo === 'POST' && caminho.match(/^\/api\/admin\/rodadas-entrevista\/(\d+)\/(confirmar|nao-confirmar)$/);
+  if (decisaoMeta) {
+    const rodada = [...rodadasEntrevista.values()].flat().find((r) => r.id === Number(decisaoMeta[1]));
+    if (!rodada) return erroFake('Rodada não encontrada', 404);
+    if (rodada.status !== 'meta_atingida') return erroFake('Essa rodada não atingiu a meta.', 409);
+    if (decisaoMeta[2] === 'confirmar') rodada.confirmada_em = rodada.confirmada_em || agoraIso();
+    else Object.assign(rodada, { status: 'nao_atingida', confirmada_em: null });
+    return respostaFake({ status: rodada.status, confirmada_em: rodada.confirmada_em ?? null });
+  }
 
   const validarCpf = (cpfDigitado, ignorarId) => {
     const cpf = String(cpfDigitado || '').replace(/\D/g, '');
@@ -675,6 +742,7 @@ const atenderAdmin = async (metodo, caminho, query, corpo, token) => {
       total_indicacoes: [...indicacoes.values()].reduce((t, m) => t + m.size, 0),
       total_contratados: ALUNOS.filter((a) => a.status_contratacao === 'contratado').length,
       mensagens_nao_lidas: mensagensDemo.naoLidasDaEscola(),
+      pedidos_senha_pendentes: acessoDemo.pendentes(),
       total_sem_foto: ALUNOS.filter((a) => !fotos.has(a.id)).length,
       alunos_por_itinerario: semIt ? [...porIt, { itinerario: null, total: semIt }] : porIt,
     });
@@ -715,6 +783,11 @@ const atenderAdmin = async (metodo, caminho, query, corpo, token) => {
   if (matchAluno) {
     const aluno = ALUNOS.find((a) => a.id === Number(matchAluno[1]));
     if (!aluno) return erroFake('Aluno não encontrado', 404);
+    // Conflito de edição (espelho de admin_routes._conferir_versao)
+    if (corpo.versao != null && corpo.versao !== (aluno.versao_cadastro || 1)) {
+      return erroFake(`${aluno.cadastro_alterado_por || 'Outra pessoa'} alterou o cadastro de ${aluno.nome} enquanto você editava. Nada foi gravado: confira a versão atual e salve de novo.`, 409);
+    }
+    Object.assign(aluno, { versao_cadastro: (aluno.versao_cadastro || 1) + 1, cadastro_alterado_por: gestorAtualDemo?.nome || 'Coordenação', cadastro_alterado_em: agoraIso() });
     if (corpo.cpf) {
       const [cpf, erroCpf] = validarCpf(corpo.cpf, aluno.id);
       if (erroCpf) return erroCpf;
@@ -798,6 +871,10 @@ const atenderAdmin = async (metodo, caminho, query, corpo, token) => {
       return respostaFake({
         experiencia: { ja_trabalhou: aluno.ja_trabalhou, experiencia_previa: aluno.experiencia_previa },
         entrevistas: entrevistasPorDia(entrevistas.get(aluno.id) || []),
+        certificacao: certificacaoDemo.historico(aluno.id),
+        rodadas: [...(rodadasEntrevista.get(aluno.id) || [])].reverse().map((r) => rodadaParaApi(aluno.id, r)),
+        laudos: (sessoesEntrevista.get(aluno.id) || []).filter((x) => x.status === 'concluida').reverse()
+          .map((x) => ({ ...x.laudo, conversa: x.mensagens.map(({ remetente, mensagem, categoria }) => ({ remetente, mensagem, categoria: categoria ?? null })) })),
         candidaturas: candidaturasDoAluno(aluno),
         mudancas_status: mudancasStatus.get(aluno.id) || [],
         observacoes: observacoes.get(aluno.id) || [],
@@ -815,7 +892,7 @@ const atenderAdmin = async (metodo, caminho, query, corpo, token) => {
     if (recurso === 'observacoes' && metodo === 'POST') {
       const texto = (corpo.texto || '').trim();
       if (!texto) return erroFake('Escreva a observação', 400);
-      const nova = { id: proximaObservacaoId++, texto, autor: 'Coordenação', criada_em: agoraIso() };
+      const nova = { id: proximaObservacaoId++, texto, autor: gestorAtualDemo?.nome || 'Coordenação', criada_em: agoraIso() };
       observacoes.set(aluno.id, [nova, ...(observacoes.get(aluno.id) || [])]);
       return respostaFake(nova, 201);
     }
@@ -898,26 +975,25 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
 
   if (caminho.startsWith('/api/admin')) return atenderAdmin(metodo, caminho, query, corpo, options.token);
 
-  // POST /auth/entrar -- a senha é o CPF
-  if (metodo === 'POST' && caminho === '/api/auth/entrar') {
-    const cpf = String(corpo.cpf || '').replace(/\D/g, '');
-    const aluno = ALUNOS.find((a) => a.cpf === cpf);
-    if (!aluno) return erroFake('Senha não encontrada. Confira o CPF digitado ou fale com a coordenação.', 401);
-    entrarComo(aluno);
-    return respostaFake({ token: `demo-aluno-${aluno.id}`, estudante: { id: aluno.id, nome: aluno.nome, email: aluno.email } });
-  }
+  // Login, primeiro acesso (CPF + código) e pedido de senha nova -- em mockAcesso.js
+  const deAcesso = acessoDemo.publico(metodo, caminho, corpo);
+  if (deAcesso) return deAcesso;
 
   // Rotas do aluno exigem o token do login (itinerários é pública)
   if (caminho !== '/api/quiz/itinerarios') {
     const aluno = alunoDoToken(options.token);
-    if (!aluno) return erroFake('Sessão expirada. Entre de novo com seu CPF.', 401);
+    if (!aluno) return erroFake('Sessão expirada. Entre de novo com seu usuário e senha.', 401);
     entrarComo(aluno);
+    const doLogado = acessoDemo.logado(metodo, caminho, corpo, aluno);
+    if (doLogado) return doLogado;
+    const daCertificacao = certificacaoDemo.aluno(metodo, caminho, corpo, aluno);
+    if (daCertificacao) return daCertificacao;
   }
   regenerarVidas();
 
   // GET /auth/me
   if (metodo === 'GET' && caminho === '/api/auth/me') {
-    return respostaFake({ id: 1, nome: estado.nome, email: estado.email, linkedin: estado.linkedin, deve_trocar_senha: estado.precisaTrocarSenha });
+    return respostaFake({ id: 1, nome: estado.nome, usuario: acessoDemo.usuarioDe(estado.alunoId), email: estado.email, linkedin: estado.linkedin });
   }
 
   // PUT /auth/conta
@@ -940,6 +1016,7 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
       quizzes_perfeitos_para_bonus: 5,
       ofensiva_dias: estado.ofensiva_dias,
       treinou_hoje: ofensiva.treinou_hoje,
+      missoes_diarias: ofensiva.treinou_hoje ? 1 : 0,
       ofensiva_em_risco: ofensiva.em_risco,
       itinerario: estado.itinerario,
       nome: estado.nome,
@@ -1247,54 +1324,87 @@ export const atenderRequisicaoFake = async (path, options = {}) => {
     });
   }
 
-  // POST /chat/message
-  if (metodo === 'POST' && caminho === '/api/chat/message') {
-    const mensagem = (corpo.mensagem_usuario || '').trim();
-    if (!mensagem || mensagem.length > 1500) return erroFake('A resposta precisa ter entre 1 e 1500 caracteres.', 422);
-    if (corpo.abertura && !['inicial', 'recomeco'].includes(corpo.abertura)) return erroFake('Abertura inválida.', 422);
-    // Mesma lógica de routes.chat_interview: a pergunta vem do histórico, não do aluno
-    const historico = entrevistas.get(estado.alunoId) || [];
-    const inicio = Boolean(corpo.abertura) || !historico.some((m) => m.remetente === 'ai');
-    const perguntaAtual = inicio
-      ? (corpo.abertura === 'recomeco' ? PERGUNTA_RECOMECO : PERGUNTA_INICIAL)
-      : historico.filter((m) => m.remetente === 'ai').at(-1).mensagem;
-    const rodada = conduzirDemo(
-      mensagem, perguntaAtual,
-      historico.filter((m) => m.remetente === 'user').slice(-10).map((m) => m.mensagem),
-      historico.filter((m) => m.remetente === 'ai').length,
-    );
-    const xpConcedido = rodada.xp_concedido;
-    entrevistas.set(estado.alunoId, [
-      ...historico,
-      ...(inicio ? [{ remetente: 'ai', mensagem: perguntaAtual, em: agoraIso() }] : []),
-      { remetente: 'user', mensagem, feedback: rodada.analise_feedback, xp: xpConcedido, em: agoraIso() },
-      { remetente: 'ai', mensagem: rodada.fala, em: agoraIso() },
-    ]);
+  // ---------------------------------------------------------- simulador de entrevista (espelho de entrevista_routes.py)
+  const sessoesDoAluno = sessoesEntrevista.get(estado.alunoId) || [];
+  sessoesEntrevista.set(estado.alunoId, sessoesDoAluno);
+  const sessaoParaApi = (sessao) => ({
+    id: sessao.id, status: sessao.status, respostas: sessao.respostas, minimo: RESPOSTAS_MINIMAS, maximo: RESPOSTAS_MAXIMAS,
+    mensagens: sessao.mensagens.map(({ remetente, mensagem, categoria }) => ({ remetente, mensagem, categoria: categoria ?? null })),
+    laudo: sessao.status === 'concluida' ? sessao.laudo : null,
+  });
 
-    let mudancaLiga = null;
-    if (rodada.categoria === 'resposta') {
-      estado.xp_total += xpConcedido;
-      estado.xp_semanal += xpConcedido;
-      if (estado.xp_total >= 300 * estado.nivel_gamificacao) estado.nivel_gamificacao += 1;
-      atualizarCategoriaStatus();
-      registrarTreinoDoDia();
-      registrarEvidencias(estado.alunoId, { comunicacao: xpConcedido * 2, trabalho_projeto_vida: xpConcedido * 2, autoconhecimento: xpConcedido * 2 }, 'entrevista');
-      mudancaLiga = avaliarPromocaoDemo();
+  if (metodo === 'GET' && caminho === '/api/entrevista/sessao-atual') {
+    const aberta = [...sessoesDoAluno].reverse().find((x) => x.status === 'em_andamento' || x.status === 'aguardando_laudo');
+    return respostaFake({ sessao: aberta ? sessaoParaApi(aberta) : null });
+  }
+
+  if (metodo === 'POST' && caminho === '/api/entrevista/sessoes') {
+    if (corpo.abertura && !['inicial', 'recomeco'].includes(corpo.abertura)) return erroFake('Abertura inválida.', 422);
+    sessoesDoAluno.forEach((x) => { if (x.status === 'em_andamento' || x.status === 'aguardando_laudo') x.status = 'abandonada'; });
+    const sessao = {
+      id: proximaSessaoId++, status: 'em_andamento', respostas: 0, laudo: null,
+      mensagens: [{ remetente: 'ai', mensagem: corpo.abertura === 'recomeco' ? PERGUNTA_RECOMECO : PERGUNTA_INICIAL, em: agoraIso() }],
+    };
+    sessoesDoAluno.push(sessao);
+    return respostaFake(sessaoParaApi(sessao), 201);
+  }
+
+  const rotaSessao = caminho.match(/^\/api\/entrevista\/sessoes\/(\d+)\/(mensagens|laudo)$/);
+  if (metodo === 'POST' && rotaSessao) {
+    const sessao = sessoesDoAluno.find((x) => x.id === Number(rotaSessao[1]));
+    if (!sessao) return erroFake('Entrevista não encontrada.', 404);
+
+    if (rotaSessao[2] === 'mensagens') {
+      const mensagem = (corpo.mensagem || '').trim();
+      if (!mensagem || mensagem.length > 1500) return erroFake('A resposta precisa ter entre 1 e 1500 caracteres.', 422);
+      if (sessao.status !== 'em_andamento') return erroFake('Essa entrevista já terminou. Gere o laudo ou comece outra.', 409);
+      const ultimaFala = sessao.mensagens.filter((m) => m.remetente === 'ai').at(-1).mensagem;
+      const anteriores = sessao.mensagens.filter((m) => m.remetente === 'user' && m.categoria === 'resposta').map((m) => m.mensagem);
+      const troca = rodadaDemo(mensagem, ultimaFala, anteriores, sessao.mensagens.filter((m) => m.remetente === 'ai').length);
+      sessao.mensagens.push({ remetente: 'user', mensagem, categoria: troca.categoria, em: agoraIso() }, { remetente: 'ai', mensagem: troca.fala, em: agoraIso() });
+      if (troca.conta) sessao.respostas += 1;
+      if (troca.encerrou) sessao.status = 'aguardando_laudo';
+      return respostaFake({
+        fala: troca.fala, categoria: troca.categoria, contou: troca.conta, respostas: sessao.respostas,
+        minimo: RESPOSTAS_MINIMAS, maximo: RESPOSTAS_MAXIMAS, status: sessao.status,
+      });
     }
 
+    // laudo
+    if (sessao.status === 'concluida') return respostaFake({ ...sessao.laudo, ja_gerado: true });
+    if (sessao.status !== 'aguardando_laudo') return erroFake('A entrevista ainda não terminou.', 409);
+    const respostas = sessao.mensagens.filter((m) => m.remetente === 'user' && m.categoria === 'resposta').map((m) => m.mensagem);
+    const laudo = laudoDemo(respostas);
+    const hoje = agoraIso().slice(0, 10);
+    const comXpHoje = sessoesDoAluno.filter((x) => x.status === 'concluida' && x.laudo.xp_concedido > 0 && x.laudo.laudo_em.slice(0, 10) === hoje).length;
+    const limiteDiario = comXpHoje >= LAUDOS_COM_XP_POR_DIA;
+    const xp = limiteDiario ? 0 : laudo.xp;
+    estado.xp_total += xp;
+    estado.xp_semanal += xp;
+    if (estado.xp_total >= 300 * estado.nivel_gamificacao) estado.nivel_gamificacao += 1;
+    atualizarCategoriaStatus();
+    registrarTreinoDoDia();
+    const { notas } = laudo;
+    registrarEvidencias(estado.alunoId, {
+      comunicacao: Math.round(((notas.clareza + notas.postura) / 2) * 10), trabalho_projeto_vida: notas.relevancia * 10, autoconhecimento: notas.exemplos * 10,
+    }, 'entrevista');
+    sessao.status = 'concluida';
+    sessao.laudo = {
+      sessao_id: sessao.id, nota_geral: laudo.nota_geral, notas, pontos_fortes: laudo.pontos_fortes, pontos_melhoria: laudo.pontos_melhoria,
+      parecer_recrutador: laudo.parecer_recrutador, resumo: laudo.resumo, rodada_id: null, xp_concedido: xp, respostas: sessao.respostas, por_ia: false, laudo_em: agoraIso(),
+    };
+    const rodada = registrarNaRodadaDemo(estado.alunoId, sessao.laudo);
     return respostaFake({
-      feedback_ia: rodada.analise_feedback,
-      resposta_ia: rodada.fala,
-      xp_concedido: xpConcedido,
-      categoria: rodada.categoria,
-      notas: rodada.notas,
+      ...sessao.laudo,
+      limite_diario: limiteDiario,
+      rodada,
       novos_pontos_totais: estado.xp_total,
       nivel_atual: estado.nivel_gamificacao,
       ofensiva_dias: estado.ofensiva_dias,
       categoria_status: categoriaAtualDemo(),
       missoes_diarias: 1,
       liga: estado.liga,
-      mudanca_liga: mudancaLiga,
+      mudanca_liga: avaliarPromocaoDemo(),
     });
   }
 

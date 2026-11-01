@@ -15,16 +15,24 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 from database import SessionLocal, engine
 from auth import hash_senha
 import models
-from nomes import escolher_nome_exibicao
-from fuso import hoje as hoje_na_escola
+from nomes import escolher_nome_exibicao, escolher_usuario
+from fuso import hoje as hoje_na_escola, agora_utc
+from acesso import CODIGO_VALIDADE_DIAS
+from tenancy import definir_escola
 
-# Senha de demonstração do estudante de teste (id=1). Só pra facilitar login
+# Login do aluno demo (id=1): usuário + senha. Só pra facilitar o login
 # local -- não use isso em produção.
+USUARIO_DEMO = "rafael.sozza"
 SENHA_DEMO = "play2work123"
-RESPOSTA_SEGURANCA_DEMO = "sozza"
+# Bianca (id=2) ainda não fez o primeiro acesso: entra com o CPF dela + este
+# código, pra dar pra testar o fluxo. Em produção o código é sorteado no painel.
+CODIGO_PRIMEIRO_ACESSO_DEMO = "246810"
+# Conta de Administrador do painel pra desenvolvimento local (só é criada se não existir)
+ADMIN_DEMO_USUARIO = "coordenacao"
+ADMIN_DEMO_SENHA = "Coordena2026"
 
-# Login do aluno: a senha é o CPF. CPFs fictícios (só com os dígitos
-# verificadores certos, pra passar na validação do cadastro).
+# CPFs fictícios (só com os dígitos verificadores certos, pra passar na
+# validação do cadastro). O CPF só é usado no primeiro acesso, com o código.
 CPF_DEMO = "52998224725"
 NASCIMENTO_DEMO = date(2008, 3, 15)
 
@@ -42,6 +50,15 @@ def popular_banco():
 
     db = SessionLocal()
     try:
+        # Multi-escola: o seed é da "Escola piloto" (id 1). Com a escola na sessão,
+        # a limpeza abaixo só apaga dados dela e tudo o que for criado é dela.
+        escola = db.get(models.Escola, 1)
+        if escola is None:
+            escola = models.Escola(id=1, nome="Escola piloto", slug="piloto")
+            db.add(escola)
+            db.commit()
+        definir_escola(db, escola.id)
+
         print("🔄 Limpando registros antigos para evitar duplicidade...")
         db.query(models.QuizSessao).delete()
         db.query(models.Candidatura).delete()
@@ -74,9 +91,9 @@ def popular_banco():
             data_nascimento=NASCIMENTO_DEMO,
             email="rafael@escola.com",
             linkedin="https://linkedin.com/in/rafael-sozza",
+            usuario=USUARIO_DEMO,
             senha_hash=hash_senha(SENHA_DEMO),
-            pergunta_seguranca="Qual o seu sobrenome?",
-            resposta_seguranca_hash=hash_senha(RESPOSTA_SEGURANCA_DEMO),
+            senha_definida_em=agora_utc(),
             nivel_gamificacao=1,
             xp_total=120,
             xp_semanal=120,
@@ -110,12 +127,17 @@ def popular_banco():
         ]
         inicio_semana = hoje_na_escola() - timedelta(days=hoje_na_escola().weekday())
         nomes_usados = {"rafael s."}
+        usuarios_usados = {USUARIO_DEMO}
         for idx, (nome, turma_id, itinerario, xp, ofensiva, habilidades, taxa) in enumerate(colegas, start=2):
             nome_exibicao = escolher_nome_exibicao(nome, nomes_usados)
             nomes_usados.add(nome_exibicao.lower())
+            usuario = escolher_usuario(nome, usuarios_usados)
+            usuarios_usados.add(usuario)
+            codigo = {"codigo_acesso_hash": hash_senha(CODIGO_PRIMEIRO_ACESSO_DEMO),
+                      "codigo_acesso_expira_em": agora_utc() + timedelta(days=CODIGO_VALIDADE_DIAS)} if idx == 2 else {}
             email = nome.lower().replace(" ", ".").replace("ú", "u").replace("á", "a") + "@escola.com"
             db.add(models.Estudante(
-                id=idx, nome=nome, nome_exibicao=nome_exibicao, email=email, turma_id=turma_id, itinerario=itinerario,
+                id=idx, nome=nome, nome_exibicao=nome_exibicao, usuario=usuario, **codigo, email=email, turma_id=turma_id, itinerario=itinerario,
                 cpf=gerar_cpf_ficticio(f"{idx}{idx}{idx}{idx + 3}{idx + 5}{idx}{idx}{idx}{idx}"[-9:].rjust(9, "1")),
                 data_nascimento=date(2007 + idx % 2, 1 + idx % 12, 1 + idx * 2),
                 xp_total=xp, xp_semanal=xp // 3, semana_referencia=inicio_semana,
@@ -131,6 +153,8 @@ def popular_banco():
                 respostas=[{"pulou": False, "correta": i < acertos} for i in range(10)],
             ))
         db.flush()
+        # Um pedido de senha nova esperando a coordenação (aba Acessos do painel)
+        db.add(models.PedidoNovaSenha(estudante_id=3, status="pendente"))
 
         print("💼 Inserindo vagas (cobrindo os 5 itinerários)...")
         vagas = [
@@ -292,12 +316,19 @@ def popular_banco():
         db.add_all(vagas)
         db.commit()
 
+        if not db.query(models.UsuarioGestao).filter(models.UsuarioGestao.usuario == ADMIN_DEMO_USUARIO).first():
+            db.add(models.UsuarioGestao(nome="Coordenação (desenvolvimento)", usuario=ADMIN_DEMO_USUARIO, senha_hash=hash_senha(ADMIN_DEMO_SENHA),
+                                        papel="administrador", ativo=True, deve_trocar_senha=False))
+            db.commit()
+
         # Os registros acima usam ids fixos; sem isso, o primeiro aluno/vaga/
         # turma cadastrado pelo painel da escola tentaria reusar o id 1.
         for tabela in ("turmas", "estudantes", "vagas"):
             db.execute(text(f"SELECT setval(pg_get_serial_sequence('{tabela}', 'id'), (SELECT MAX(id) FROM {tabela}))"))
         db.commit()
-        print(f"🚀 Banco de dados populado com sucesso! Senha do aluno demo (CPF): {CPF_DEMO}")
+        print(f"🚀 Banco de dados populado com sucesso! Aluno demo: usuário {USUARIO_DEMO} / senha {SENHA_DEMO}")
+        print(f"   Primeiro acesso (Bianca): CPF {db.get(models.Estudante, 2).cpf} + código {CODIGO_PRIMEIRO_ACESSO_DEMO}")
+        print(f"   Painel da escola: usuário {ADMIN_DEMO_USUARIO} / senha {ADMIN_DEMO_SENHA} (Administrador)")
 
     except Exception as e:
         db.rollback()

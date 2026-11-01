@@ -89,8 +89,14 @@ const DadosPap = ({ aluno, aoAtualizar }) => {
     if (problema) { setErro(problema); return; }
     setSalvando(true);
     setErro(null);
-    const r = await apiFetch(`/api/admin/estudantes/${aluno.id}`, { method: 'PUT', body: JSON.stringify({ ficha }) });
+    const r = await apiFetch(`/api/admin/estudantes/${aluno.id}`, { method: 'PUT', body: JSON.stringify({ ficha, versao: aluno.versao_cadastro }) });
     setSalvando(false);
+    if (r.status === 409) {
+      // Outra pessoa salvou no meio-tempo: nada foi gravado; recarrega a ficha com a versão atual
+      setErro(await lerErro(r, 'Outra pessoa alterou este cadastro enquanto você editava.'));
+      aoAtualizar();
+      return;
+    }
     if (!r.ok) { setErro(await lerErro(r, 'Não foi possível salvar.')); return; }
     setEditando(false);
     aoAtualizar();
@@ -102,7 +108,7 @@ const DadosPap = ({ aluno, aoAtualizar }) => {
         <div style={{ fontSize: '12px', color: 'var(--adm-suave)' }}>
           {aluno.cadastro_atualizado_em ? `Atualizado em ${dataIsoParaBr(aluno.cadastro_atualizado_em)}` : 'Ainda não atualizado'}
         </div>
-        {!editando && <button type="button" className="adm-btn secundario pequeno" onClick={() => setEditando(true)}><IconPencil style={{ verticalAlign: '-2px' }} /> Habilitar edição</button>}
+        {!editando && <button type="button" className="adm-btn secundario pequeno so-quem-altera" onClick={() => setEditando(true)}><IconPencil style={{ verticalAlign: '-2px' }} /> Habilitar edição</button>}
       </div>
       <GradeCampos campos={CAMPOS_ALUNO} textos={textos} setTextos={setTextos} prefixo={`pap-${aluno.id}`} desabilitado={!editando} />
       {erro && <div className="adm-erro"><IconWarning /> {erro}</div>}

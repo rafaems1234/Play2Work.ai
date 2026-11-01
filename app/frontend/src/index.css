@@ -135,6 +135,14 @@ textarea,
   user-select: text;
   -webkit-touch-callout: default;
 }
+/* Telas de avaliação (quiz e simulado de certificação, componente AreaProva):
+   sem seleção nenhuma, nem por cima de exceções. */
+.area-prova,
+.area-prova * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
 img,
 svg {
   -webkit-user-drag: none;
