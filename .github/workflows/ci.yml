@@ -1,0 +1,66 @@
+# Confere cada PR e cada push na main antes de qualquer coisa ir pro ar:
+#   backend   testes (pytest) e falhas conhecidas nas dependências Python (pip-audit)
+#   frontend  build e falhas conhecidas nas dependências do npm (npm audit)
+#   docker    a imagem da API monta (é ela que vai pra hospedagem)
+# Ligue "Require status checks to pass" na proteção da main pra o merge esperar o CI.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"   # a mesma do Dockerfile
+          cache: pip
+      - name: Dependências
+        run: pip install -r requirements.txt
+      - name: Testes
+        working-directory: app
+        env:
+          # Os testes usam mocks e nunca abrem o banco; as variáveis só precisam existir
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          JWT_SECRET_KEY: segredo-so-do-ci-${{ github.run_id }}-0123456789abcdef
+        run: pytest -q
+      - name: Falhas conhecidas nas dependências (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --progress-spinner off
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+      - run: npm ci
+      - name: Build (modo demonstração, com a CSP)
+        run: npm run build
+      - name: Falhas conhecidas nas dependências (npm audit)
+        run: npm audit --audit-level=high
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Imagem da API monta
+        run: docker build -t first2work-api:ci .

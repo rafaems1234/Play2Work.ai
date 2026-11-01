@@ -16,11 +16,14 @@ from certificacao_routes import router_aluno as certificacao_aluno_router, route
 from gestao_routes import router as gestao_router
 from auditoria import MiddlewareAuditoria
 from limiter import limiter
+from logs import proteger_logs_de_acesso
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+# Log de acesso sem os valores da query string (buscas por nome/CPF) -- ver logs.py
+proteger_logs_de_acesso()
 
 
 # Documentação interativa (/docs, /redoc, /openapi.json) mostra todas as rotas pra

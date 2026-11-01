@@ -1,0 +1,35 @@
+# O Dependabot abre PRs quando sai correção de segurança ou versão nova de uma
+# dependência. Cada PR passa pelo CI (testes + auditoria) antes do merge.
+# Correções e versões menores vêm agrupadas num PR só por ecossistema, pra não
+# virar uma fila de dezenas de PRs.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: America/Campo_Grande
+    groups:
+      python-menores:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: "/app/frontend"
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: America/Campo_Grande
+    groups:
+      npm-menores:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly

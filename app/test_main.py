@@ -2768,3 +2768,26 @@ def test_documentacao_da_api_fechada_por_padrao():
     if _main.DOCS_ABERTAS:
         pytest.skip("DOCS_ABERTAS=true neste .env (desenvolvimento)")
     assert client.get("/docs").status_code == 404 and client.get("/openapi.json").status_code == 404
+
+# ------------------------------------------------------------------ logs sem dado pessoal
+
+import logging as _logging
+
+from logs import FiltroUrlSemDados, sem_valores
+
+
+def test_log_de_acesso_tira_os_valores_da_busca():
+    assert sem_valores("/api/admin/auditoria?busca=Maria%20Souza&pagina=2") == "/api/admin/auditoria?busca=*&pagina=*"
+    assert sem_valores("/api/admin/mensagens/canais?busca=52998224725") == "/api/admin/mensagens/canais?busca=*"
+    assert sem_valores("/api/status") == "/api/status"
+
+
+def test_filtro_atua_no_registro_do_uvicorn():
+    registro = _logging.LogRecord("uvicorn.access", _logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d', ("10.0.0.1:5000", "GET", "/api/admin/auditoria?busca=52998224725", "1.1", 200), None)
+    assert FiltroUrlSemDados().filter(registro)
+    assert "52998224725" not in registro.getMessage() and "busca=*" in registro.getMessage()
+
+
+def test_filtro_esta_ligado_no_logger_de_acesso():
+    import main  # noqa: F401
+    assert any(isinstance(f, FiltroUrlSemDados) for f in _logging.getLogger("uvicorn.access").filters)
