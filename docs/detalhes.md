@@ -318,9 +318,21 @@ Os testes usam `app.dependency_overrides` para trocar a sessão do banco e o est
 ## 🔐 Login
 
 - **Aluno:** `POST /api/auth/login` com `{usuario, senha}` (ou `POST /api/auth/primeiro-acesso` com `{cpf, codigo, nova_senha}`) → token JWT com papel `aluno`, válido por **4h** (`JWT_EXPIRA_HORAS_ALUNO`). O front guarda o token **só na aba** (`sessionStorage`) e manda em `Authorization: Bearer`; fechar o navegador encerra a sessão, pra o próximo aluno do laboratório não cair na conta do anterior. Sem token, as rotas do aluno respondem 401 e o app volta pro login.
-- **Escola:** `POST /api/admin/login` com `{usuario, senha}` → token da conta da gestão (com a versão da sessão), válido por 12h, exigido em todas as rotas `/api/admin/*`; o perfil (Administrador, Auditor, Alterar, Visualizar) decide o que a conta pode. Sem nenhum Administrador, a `ADMIN_SENHA` entra como instalação.
+- **Escola:** `POST /api/admin/login` com `{usuario, senha}` → token da conta da gestão (com a versão da sessão), válido por 12h, gravado num **cookie `httpOnly`** (não vai no JSON nem no `localStorage`) e exigido em todas as rotas `/api/admin/*` (scripts podem mandar `Authorization: Bearer`); `POST /api/admin/logout` apaga o cookie; o perfil (Administrador, Auditor, Alterar, Visualizar) decide o que a conta pode. Sem nenhum Administrador, a `ADMIN_SENHA` entra como instalação.
 - Senha esquecida: `POST /api/auth/esqueci-senha` cria um pedido; o painel aprova em `POST /api/admin/pedidos-senha/{id}/aprovar` (devolve o código, só dessa vez) ou recusa. Códigos avulsos: `POST /api/admin/estudantes/{id}/codigo-acesso` e `POST /api/admin/turmas/{id}/codigos-acesso`.
 - No **modo demonstração**, ver a tabela de logins acima; a senha do painel é `escola123`.
+
+## 🏭 Produção e escala
+
+- **Sessão do painel em cookie `httpOnly`** (`Secure`, `SameSite=Lax`, válido só em `/api`): o JavaScript da página nunca vê o token, então um script injetado não rouba a sessão. Alterações feitas pelo cookie exigem o cabeçalho `X-Requested-With: first2work` (proteção contra CSRF), e o botão Sair chama `POST /api/admin/logout`. **Requisito:** o front e a API no mesmo domínio (`first2work.com.br` + `api.first2work.com.br`). O login do aluno continua na aba (`sessionStorage`), que fecha junto com o navegador do laboratório.
+- **CORS:** os endereços `localhost` só valem com `APP_ENV=local`. Em produção são recusados mesmo que estejam no `CORS_ORIGINS`.
+- **Fotos e materiais fora do Postgres** (`armazenamento.py`): disco dedicado no piloto ou Azure Blob (contêiner privado) pra escalar. O banco guarda só a chave do arquivo, o download continua passando pela API (controle de acesso) e o arquivo some junto quando a foto é trocada ou tirada, ou quando o material, a aula ou o módulo são excluídos. Arquivo novo de uma operação que falhou é apagado; arquivo antigo só sai depois do commit.
+- **Limite de tentativas no Redis** (`REDIS_URL`): o contador por IP é o mesmo pra todas as instâncias da API. Se o Redis cair, o limite continua na memória de cada instância e o login não sai do ar. O bloqueio por conta (5 erros travam 15 minutos) já ficava no Postgres.
+
+
+**Atualizando um servidor que já tem dados:** a API aplica a migração sozinha ao subir. Depois rode uma vez `docker compose exec api python arquivos.py migrar` pra mover as fotos e os materiais que estavam dentro do banco pro armazenamento (pode repetir: só pega o que falta). `python arquivos.py orfaos` lista arquivos que nenhum registro usa; com `--apagar`, remove (fora do horário de uso).
+
+**Front no domínio oficial:** `VITE_DEMO_MODE=false VITE_API_URL=https://api.first2work.com.br VITE_BASE=/ npm run build` (o build real recusa gerar sem `VITE_API_URL`).
 
 ## 🎯 Integridade do Quiz do Dia
 

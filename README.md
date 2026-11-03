@@ -96,15 +96,7 @@ Lista completa e comentada em [`app/.env.example`](app/.env.example).
 
 Senhas com bcrypt, verificação em duas etapas na gestão, perfis checados no servidor, auditoria que nem a API consegue editar, cabeçalhos de segurança e CSP, limite de tentativas por IP (só aceito do proxy confiável) banco com privilégio mínimo em produção, logs de acesso sem os valores das buscas (nome/CPF não vão pro log) e dependências auditadas no CI. Como configurar na hospedagem: [`docs/deploy/banco.md`](docs/deploy/banco.md).
 
-**Pronto pra produção e escala:**
-- **Sessão do painel em cookie `httpOnly`** (`Secure`, `SameSite=Lax`, válido só em `/api`): o JavaScript da página nunca vê o token, então um script injetado não rouba a sessão. Alterações feitas pelo cookie exigem o cabeçalho `X-Requested-With: first2work` (proteção contra CSRF), e o botão Sair chama `POST /api/admin/logout`. **Requisito:** o front e a API no mesmo domínio (`first2work.com.br` + `api.first2work.com.br`). O login do aluno continua na aba (`sessionStorage`), que fecha junto com o navegador do laboratório.
-- **CORS:** os endereços `localhost` só valem com `APP_ENV=local`. Em produção são recusados mesmo que estejam no `CORS_ORIGINS`.
-- **Fotos e materiais fora do Postgres** (`armazenamento.py`): disco dedicado no piloto ou Azure Blob (contêiner privado) pra escalar. O banco guarda só a chave do arquivo, o download continua passando pela API (controle de acesso) e o arquivo some junto quando a foto é trocada ou tirada, ou quando o material, a aula ou o módulo são excluídos. Arquivo novo de uma operação que falhou é apagado; arquivo antigo só sai depois do commit.
-- **Limite de tentativas no Redis** (`REDIS_URL`): o contador por IP é o mesmo pra todas as instâncias da API. Se o Redis cair, o limite continua na memória de cada instância e o login não sai do ar. O bloqueio por conta (5 erros travam 15 minutos) já ficava no Postgres.
-
-**Atualizando um servidor que já tem dados:** a API aplica a migração sozinha ao subir. Depois rode uma vez `docker compose exec api python arquivos.py migrar` pra mover as fotos e os materiais que estavam dentro do banco pro armazenamento (pode repetir: só pega o que falta). `python arquivos.py orfaos` lista arquivos que nenhum registro usa; com `--apagar`, remove (fora do horário de uso).
-
-**Front no domínio oficial:** `VITE_DEMO_MODE=false VITE_API_URL=https://api.first2work.com.br VITE_BASE=/ npm run build` (o build real recusa gerar sem `VITE_API_URL`).
+**Pronto pra produção e escala:** sessão do painel em cookie `httpOnly` (com proteção contra CSRF), CORS sem localhost fora do desenvolvimento, fotos e materiais fora do banco (disco dedicado ou Azure Blob) e limite de tentativas compartilhado no Redis. Como funciona e como atualizar um servidor com dados: [`docs/detalhes.md`](docs/detalhes.md#-produção-e-escala).
 
 ## O que falta antes do piloto
 
