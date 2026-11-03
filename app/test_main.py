@@ -2824,6 +2824,7 @@ def test_escola_sem_administrador_nao_tranca_o_login_das_outras(mock_db):
 # ----------------------------------------------------------------------
 from auth import CABECALHO_CSRF, VALOR_CSRF
 from main import origens_permitidas
+from config import AMBIENTE_LOCAL
 from limiter import criar_limiter
 from models import FotoEstudante
 
@@ -2837,7 +2838,8 @@ def _set_cookie_do_painel(resposta) -> str:
 def test_login_do_painel_grava_cookie_httponly_seguro(mock_db):
     conta = UsuarioGestao(id=7, nome="Maria", usuario="maria", senha_hash=hash_senha("Senha2026forte"), papel="alterar", ativo=True, deve_trocar_senha=False, sessao_versao=2, login_falhas=0)
     mock_db.query().filter().first.return_value = conta
-    with patch("gestao_routes.existe_administrador", return_value=True):
+    # Como em produção (o app/.env de quem roda os testes pode ter APP_ENV=local)
+    with patch("gestao_routes.existe_administrador", return_value=True), patch("auth.COOKIE_SEGURO", True):
         resposta = client.post("/api/admin/login", json={"usuario": "maria", "senha": "Senha2026forte"})
     cookie = _set_cookie_do_painel(resposta).lower()
     assert "httponly" in cookie and "secure" in cookie and "samesite=lax" in cookie and "path=/api" in cookie
@@ -2877,8 +2879,9 @@ def test_cors_sem_localhost_em_producao():
     assert "https://first2work.com.br" in origens_permitidas(True, configuradas)
 
 
+@pytest.mark.skipif(AMBIENTE_LOCAL, reason="app/.env com APP_ENV=local: a API de teste libera localhost")
 def test_cors_da_api_de_teste_recusa_localhost():
-    # Os testes rodam sem APP_ENV: a API se comporta como produção
+    # Sem APP_ENV (como no CI e em produção), a API recusa localhost
     resposta = client.options("/api/status", headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "GET"})
     assert "access-control-allow-origin" not in resposta.headers
 
