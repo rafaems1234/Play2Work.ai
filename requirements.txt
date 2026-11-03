@@ -8,6 +8,8 @@ psycopg2-binary==2.9.13
 pydantic==2.14.2
 email-validator==2.3.0
 slowapi==0.1.10
+redis==8.1.0  # limite de tentativas compartilhado entre instâncias (REDIS_URL)
+azure-storage-blob==12.31.1  # fotos e materiais no Azure Blob (ARMAZENAMENTO=azure)
 google-genai==2.34.0
 python-dotenv==1.2.4
 requests==2.34.2

@@ -1,6 +1,10 @@
 import { atenderRequisicaoFake } from './mockApi';
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+// Sem VITE_API_URL: a API na porta 8000 do MESMO endereço do front (localhost
+// com localhost). Precisa ser o mesmo site pro navegador mandar o cookie do
+// painel -- localhost:5173 chamando 127.0.0.1:8000 seria outro site.
+export const API_BASE_URL = import.meta.env.VITE_API_URL
+  || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:8000` : 'http://localhost:8000');
 
 // Modo demonstração: liga por padrão (pra dar pra apresentar o produto
 // rodando só `npm run dev`, sem precisar subir o backend/banco de dados).
@@ -17,27 +21,38 @@ const papelDaRota = (path) => (path.startsWith('/api/admin') ? 'admin' : 'aluno'
 
 // O login do aluno fica só na aba (sessionStorage): no laboratório da escola o
 // computador passa de aluno pra aluno, e fechar o navegador tem que encerrar a
-// sessão. O do painel continua no localStorage (computador da coordenação).
-const armazenamento = (papel) => (papel === 'aluno' ? sessionStorage : localStorage);
+// sessão.
+// O do painel NÃO fica no navegador: a API grava o token num cookie httpOnly
+// (o JavaScript não lê, então um script injetado não rouba a sessão) e o
+// navegador o manda sozinho (credentials: 'include'). Só a demonstração, que
+// é toda simulada (mockApi), guarda o token de mentira no localStorage.
+const PAINEL_EM_COOKIE = !DEMO_MODE;
+const armazenamento = (papel) => {
+  if (papel === 'aluno') return sessionStorage;
+  return PAINEL_EM_COOKIE ? null : localStorage;
+};
 
 try {
-  // Versões antigas guardavam o token do aluno no localStorage por 7 dias
+  // Versões antigas guardavam o token do aluno no localStorage por 7 dias,
+  // e o do painel no localStorage (agora é cookie httpOnly)
   localStorage.removeItem(CHAVES_TOKEN.aluno);
+  if (PAINEL_EM_COOKIE) localStorage.removeItem(CHAVES_TOKEN.admin);
 } catch {
   // sem acesso ao storage -- nada a limpar
 }
 
 export const obterToken = (papel) => {
   try {
-    return armazenamento(papel).getItem(CHAVES_TOKEN[papel]);
+    return armazenamento(papel)?.getItem(CHAVES_TOKEN[papel]) ?? null;
   } catch {
     return null;
   }
 };
 
 export const salvarToken = (papel, token) => {
+  if (!token) return; // painel real: o token veio no cookie, não no JSON
   try {
-    armazenamento(papel).setItem(CHAVES_TOKEN[papel], token);
+    armazenamento(papel)?.setItem(CHAVES_TOKEN[papel], token);
   } catch {
     // sem storage (modo privado) -- a sessão dura só até recarregar a página
   }
@@ -46,11 +61,28 @@ export const salvarToken = (papel, token) => {
 
 export const limparToken = (papel) => {
   try {
-    armazenamento(papel).removeItem(CHAVES_TOKEN[papel]);
+    armazenamento(papel)?.removeItem(CHAVES_TOKEN[papel]);
   } catch {
     // nada a limpar
   }
   tokensEmMemoria[papel] = null;
+};
+
+// Painel real: não dá pra saber pelo JavaScript se há sessão (o cookie é
+// httpOnly) -- quem decide é a API, em /api/admin/gestao/eu. Na demonstração,
+// é ter o token de mentira guardado.
+export const painelUsaCookie = PAINEL_EM_COOKIE;
+
+// Sair do painel: só a API consegue apagar o cookie httpOnly
+export const sairDoPainel = async () => {
+  if (PAINEL_EM_COOKIE) {
+    try {
+      await apiFetch('/api/admin/logout', { method: 'POST' });
+    } catch {
+      // sem conexão: o cookie expira sozinho em 12 h
+    }
+  }
+  limparToken('admin');
 };
 
 const tokensEmMemoria = { aluno: obterToken('aluno'), admin: obterToken('admin') };
@@ -70,7 +102,11 @@ export const apiFetch = async (path, options = {}) => {
     ? await atenderRequisicaoFake(path, { ...options, token })
     : await fetch(`${API_BASE_URL}${path}`, {
       ...options,
+      // Painel: manda o cookie httpOnly da sessão (a API só aceita o front oficial no CORS)
+      credentials: papel === 'admin' ? 'include' : 'same-origin',
       headers: {
+        // Proteção contra CSRF: a API exige este cabeçalho em alterações feitas pelo cookie
+        'X-Requested-With': 'first2work',
         // FormData (upload de arquivo): o navegador monta o Content-Type com o boundary
         ...(options.body && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),

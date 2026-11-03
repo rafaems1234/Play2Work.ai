@@ -5,6 +5,7 @@
 #
 # A API sobe em http://localhost:8000 e prepara o banco sozinha (tabelas, migrações e a primeira escola).
 # Postgres exposto só na própria máquina, na porta 5433 (não briga com um Postgres local na 5432).
+# Redis (limite de tentativas compartilhado) e os arquivos (fotos/materiais) ficam em volumes próprios.
 # A porta da API muda com API_PORTA (ex.: API_PORTA=8765 docker compose up -d --build).
 services:
   banco:
@@ -23,17 +24,33 @@ services:
       interval: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Só contadores do limite de tentativas: nada a guardar em disco
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
   api:
     build: .
     restart: unless-stopped
     env_file: app/.env
     environment:
       DATABASE_URL: postgresql://first2work:${POSTGRES_PASSWORD:-troque-esta-senha}@banco:5432/first2work
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - arquivos:/srv/arquivos   # fotos e materiais (ARMAZENAMENTO=disco): entra no backup junto com o banco
     depends_on:
       banco:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - "${API_PORTA:-8000}:8000"
 
 volumes:
   dados_postgres:
+  arquivos:

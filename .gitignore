@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .env
+# Fotos e materiais quando ARMAZENAMENTO=disco sem ARMAZENAMENTO_DIR (desenvolvimento)
+app/arquivos/

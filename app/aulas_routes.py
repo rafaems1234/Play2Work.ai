@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+import armazenamento
 from models import Estudante, ModuloTrilha, Aula, PerguntaFixacao, MaterialAula, ProgressoAula, LogFrequencia, RetiradaCertificado
 from database import get_db
 from auth import get_admin_atual, get_estudante_atual
@@ -158,8 +159,12 @@ def _nome_arquivo_seguro(nome: str) -> str:
 
 def _resposta_material(material: MaterialAula) -> Response:
     disposicao = "inline" if material.tipo == "audio" else "attachment"
+    try:
+        conteudo = armazenamento.conteudo_de(material)
+    except armazenamento.ArquivoNaoEncontrado:
+        raise HTTPException(status_code=404, detail="Arquivo do material não encontrado.")
     return Response(
-        content=material.conteudo,
+        content=conteudo,
         media_type=material.tipo_mime,
         headers={
             "Content-Disposition": f'{disposicao}; filename="{_nome_arquivo_seguro(material.nome_arquivo)}"',
@@ -290,9 +295,11 @@ async def enviar_material(aula_id: int, arquivo: UploadFile = File(...), db: Ses
     tipo = next(((t, mime) for confere, t, mime in ASSINATURAS_MATERIAL if confere(conteudo[:16])), None)
     if not tipo:
         raise HTTPException(status_code=400, detail="Formato não suportado: envie áudio (MP3, M4A, OGG) ou PDF. Slides: exporte como PDF.")
+    # O binário vai pro armazenamento (disco dedicado ou Azure Blob); o banco guarda só a chave
+    chave = armazenamento.gravar(db, "materiais", aula.escola_id, conteudo, tipo[1])
     material = MaterialAula(
         aula_id=aula.id, tipo=tipo[0], tipo_mime=tipo[1], tamanho_bytes=len(conteudo),
-        nome_arquivo=_nome_arquivo_seguro(arquivo.filename), conteudo=conteudo,
+        nome_arquivo=_nome_arquivo_seguro(arquivo.filename), arquivo_chave=chave,
     )
     db.add(material)
     db.commit()

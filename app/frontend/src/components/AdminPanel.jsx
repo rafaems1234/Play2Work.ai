@@ -13,7 +13,7 @@ import { somEstaAtivado, tocarSomMensagem } from '../utils/sound';
 import { Avatar, limparCacheFotos } from './FotoPerfil';
 import { Imprimir } from './FolhaCurriculo';
 import { IconWarning, IconTrophy, IconBriefcase, IconGraduationCap, IconMask, IconCheckCircle, IconMedal, IconBook, IconTarget, IconHandshake, IconCsv, IconPdf, IconChat, IconLock, IconUser, IconHistory } from './icons';
-import { apiFetch, lerErro, salvarToken, limparToken, obterToken, aoExpirarSessao, DEMO_MODE } from '../api';
+import { apiFetch, lerErro, salvarToken, obterToken, aoExpirarSessao, DEMO_MODE, painelUsaCookie, sairDoPainel } from '../api';
 import { mascararCpf, dataHoraIsoParaBr, normalizarBusca, somenteDigitos } from '../utils/formatos';
 import { COLUNAS_ALUNOS, baixarCsv, carimboArquivo, registrarExportacao } from '../utils/exportar';
 
@@ -838,7 +838,9 @@ const CARTOES_RESUMO = [
 ];
 
 const AdminPanel = ({ aoSair }) => {
-  const [logado, setLogado] = useState(() => Boolean(obterToken('admin')));
+  // Painel real: a sessão está num cookie httpOnly que o JavaScript não vê -- começa
+  // "entrando" e quem decide é a API (/gestao/eu); se ela responder 401, volta pro login.
+  const [logado, setLogado] = useState(() => painelUsaCookie || Boolean(obterToken('admin')));
   const [gestor, setGestor] = useState(null); // quem está logado e o que o perfil dele pode
   const [aba, setAba] = useState('alunos');
   // Conversa que a notificação do sininho mandou abrir na aba Chat
@@ -910,7 +912,7 @@ const AdminPanel = ({ aoSair }) => {
   }, [naoLidas, logado]);
 
   const sair = () => {
-    limparToken('admin');
+    sairDoPainel();
     limparCacheFotos();
     setLogado(false);
     setGestor(null);

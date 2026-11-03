@@ -5,9 +5,9 @@ import react from '@vitejs/plugin-react'
 // cabeçalho, então ela vai como <meta> no index.html -- só no build (no `npm run
 // dev` ela travaria o recarregamento automático do Vite).
 //
-// É o que mais protege o token do painel: mesmo que alguém consiga injetar
-// texto na página, o navegador só roda script do próprio site (e do player do
-// YouTube) e só conversa com a API configurada.
+// Mesmo que alguém consiga injetar texto na página, o navegador só roda script
+// do próprio site (e do player do YouTube) e só conversa com a API configurada.
+// (O token do painel nem fica ao alcance do JavaScript: é cookie httpOnly.)
 //   style 'unsafe-inline': os componentes usam <style> e style={...} (sem risco de script)
 //   YouTube: script do player (iframe_api) e o iframe nocookie das aulas
 //   connect: só o próprio site e a API (VITE_API_URL); no modo demonstração, nenhuma API
@@ -38,8 +38,13 @@ const cspNoBuild = (apiUrl) => ({
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   const demo = env.VITE_DEMO_MODE !== 'false'
+  if (!demo && mode === 'production' && !env.VITE_API_URL) {
+    // Sem isso o front publicado tentaria a API na máquina de quem abre o site
+    throw new Error('Build real (VITE_DEMO_MODE=false) precisa de VITE_API_URL, ex.: https://api.first2work.com.br')
+  }
   return {
-    base: '/First2Work.ai/',
-    plugins: [react(), cspNoBuild(demo ? '' : (env.VITE_API_URL || 'http://127.0.0.1:8000'))],
+    // GitHub Pages serve em /First2Work.ai/; no domínio oficial, VITE_BASE=/
+    base: env.VITE_BASE || '/First2Work.ai/',
+    plugins: [react(), cspNoBuild(demo ? '' : env.VITE_API_URL)],
   }
 })

@@ -1,5 +1,6 @@
 import logging
 import os
+from urllib.parse import urlsplit
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
@@ -15,6 +16,7 @@ from entrevista_routes import router as entrevista_router
 from certificacao_routes import router_aluno as certificacao_aluno_router, router_admin as certificacao_admin_router
 from gestao_routes import router as gestao_router
 from auditoria import MiddlewareAuditoria
+from config import AMBIENTE_LOCAL
 from limiter import limiter
 from logs import proteger_logs_de_acesso
 
@@ -70,23 +72,47 @@ async def cabecalhos_de_seguranca(request: Request, call_next):
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Configuração CRÍTICA do CORS
-# Adicionadas variações comuns para evitar bloqueios no navegador
-origins = [
-    "http://localhost:5173",    # Origem padrão do Vite/React
+logger = logging.getLogger("first2work.cors")
+
+# CORS: quais endereços de front podem chamar a API pelo navegador.
+# Os de localhost (Vite em 5173, ou 3000) só valem em desenvolvimento
+# (APP_ENV=local ou DEBUG=true): em produção são recusados mesmo que alguém
+# os coloque no CORS_ORIGINS -- senão qualquer página servida na máquina de
+# quem usa o painel poderia falar com a API em nome dele.
+ORIGENS_LOCAIS = [
+    "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "http://localhost:3000",    # Caso mude de porta futuramente
+    "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
-# Endereço do front publicado (ex.: https://rafaems1234.github.io), separado por vírgula se houver mais de um
-origins += [o.strip().rstrip("/") for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+HOSTS_LOCAIS = ("localhost", "127.0.0.1", "::1", "0.0.0.0")
+
+
+def _e_local(origem: str) -> bool:
+    host = (urlsplit(origem).hostname or "").lower()
+    return host in HOSTS_LOCAIS or host.endswith(".localhost") or host.startswith("127.")
+
+
+def origens_permitidas(ambiente_local: bool = AMBIENTE_LOCAL, configuradas: str | None = None) -> list[str]:
+    """ORIGENS_LOCAIS (só em desenvolvimento) + o CORS_ORIGINS do .env, separado por vírgula."""
+    texto = os.environ.get("CORS_ORIGINS", "") if configuradas is None else configuradas
+    do_env = [o.strip().rstrip("/") for o in texto.split(",") if o.strip()]
+    if ambiente_local:
+        return ORIGENS_LOCAIS + [o for o in do_env if o not in ORIGENS_LOCAIS]
+    recusadas = [o for o in do_env if _e_local(o)]
+    if recusadas:
+        logger.warning("CORS: origens locais ignoradas fora do desenvolvimento (APP_ENV=local liga): %s", ", ".join(recusadas))
+    origens = [o for o in do_env if not _e_local(o)]
+    if not origens:
+        logger.warning("CORS: nenhuma origem configurada -- defina CORS_ORIGINS com o endereço do front publicado")
+    return origens
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,       # Para testes irrestritos, mude para: allow_origins=["*"]
-    allow_credentials=True,
-    allow_methods=["*"],         # Permite GET, POST, PUT, DELETE, etc.
-    allow_headers=["*"],         # Permite todos os headers customizados
+    allow_origins=origens_permitidas(),
+    allow_credentials=True,      # o painel manda o cookie de sessão
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Acoplamento de Rotas Modulares

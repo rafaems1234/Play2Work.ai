@@ -11,7 +11,8 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 from main import app
 from database import get_db
-from auth import get_estudante_atual, hash_senha, verificar_senha, criar_token, criar_token_admin, cpf_valido, normalizar_cpf, JWT_SECRET_KEY, GestorAtual
+from auth import get_estudante_atual, hash_senha, verificar_senha, criar_token, criar_token_admin, cpf_valido, normalizar_cpf, JWT_SECRET_KEY, GestorAtual, COOKIE_PAINEL
+import armazenamento
 from acesso import CODIGO_TENTATIVAS_MAX, LOGIN_FALHAS_MAX, ERRO_CODIGO
 from nomes import escolher_usuario
 import jwt
@@ -62,6 +63,14 @@ def _gestao_e_auditoria_sem_banco():
          patch("auditoria.gravar", side_effect=registros.append), \
          patch("auditoria._foto_antes", return_value=None):
         yield registros
+
+
+@pytest.fixture(autouse=True)
+def _armazenamento_temporario(tmp_path):
+    """Fotos e materiais vão pra uma pasta temporária do teste, nunca pra app/arquivos."""
+    armazenamento.usar_destino(armazenamento.Disco(tmp_path / "arquivos"))
+    yield
+    armazenamento.usar_destino(None)
 
 
 @pytest.fixture(autouse=True)
@@ -889,7 +898,9 @@ def test_login_da_conta_da_gestao(mock_db):
         assert client.post("/api/admin/login", json={"usuario": "maria", "senha": "errada"}).status_code == 401
         resposta = client.post("/api/admin/login", json={"usuario": " Maria ", "senha": "Senha2026forte"})
     assert resposta.status_code == 200
-    payload = jwt.decode(resposta.json()["token"], JWT_SECRET_KEY, algorithms=["HS256"])
+    # O token vai só no cookie httpOnly, nunca no JSON (o JavaScript do painel não o vê)
+    assert "token" not in resposta.json()
+    payload = jwt.decode(resposta.cookies[COOKIE_PAINEL], JWT_SECRET_KEY, algorithms=["HS256"])
     assert payload["sub"] == "7" and payload["v"] == 2 and resposta.json()["gestor"]["permissoes"]["alterar"]
 
 
@@ -1129,19 +1140,24 @@ def test_decodificar_foto_recusa_o_que_nao_e_imagem_e_arquivo_grande():
 def test_aluno_envia_foto(mock_db, mock_estudante_logado):
     mock_estudante_logado.foto = None
     mock_estudante_logado.foto_atualizada_em = None
+    mock_estudante_logado.escola_id = 3
+    mock_db.query().filter().scalar.return_value = None  # ainda sem foto
 
     response = client.put("/api/estudante/me/foto", json={"imagem_base64": FOTO_DATA_URL})
 
     assert response.status_code == 200
     comando = mock_db.execute.call_args.args[0]
     params = comando.compile(dialect=postgresql.dialect()).params
-    assert params["conteudo"] == JPEG_MINIMO
+    # O binário vai pro armazenamento; o banco guarda só a chave
+    assert params["conteudo"] is None and params["arquivo_chave"].startswith("fotos/3/")
+    assert armazenamento.ler(params["arquivo_chave"]) == JPEG_MINIMO
     assert params["enviada_por"] == "aluno"
     assert mock_estudante_logado.foto_atualizada_em is not None
     mock_db.commit.assert_called()
 
 
 def test_foto_do_curriculo_e_outra_e_marca_com_foto(mock_db, mock_estudante_logado):
+    mock_estudante_logado.escola_id = 3
     mock_estudante_logado.foto_no_curriculo = False
     mock_estudante_logado.foto_atualizada_em = None
     response = client.put("/api/estudante/me/foto-curriculo", json={"imagem_base64": FOTO_DATA_URL})
@@ -1173,7 +1189,7 @@ def test_escola_so_ve_a_foto_do_curriculo(mock_db):
 
 def test_foto_e_gravada_com_upsert_pra_envio_duplicado_nao_dar_500():
     from fotos import comando_upsert_foto
-    sql = str(comando_upsert_foto(7, JPEG_MINIMO, "image/jpeg", "aluno", datetime(2026, 10, 29)).compile(dialect=postgresql.dialect()))
+    sql = str(comando_upsert_foto(7, "fotos/1/" + "a" * 32 + ".jpg", "image/jpeg", "aluno", datetime(2026, 10, 29)).compile(dialect=postgresql.dialect()))
     assert "ON CONFLICT (estudante_id) DO UPDATE" in sql
 
 
@@ -2693,7 +2709,7 @@ def test_segundo_passo_com_codigo_certo_entra_e_grava_o_passo(mock_db):
     conta = _conta_2fa(login_falhas=3)
     mock_db.query().filter().first.return_value = conta
     resposta = client.post("/api/admin/login/2fa", json={"desafio": criar_desafio_2fa(conta), "codigo": _codigo()})
-    assert resposta.status_code == 200 and resposta.json()["token"]
+    assert resposta.status_code == 200 and resposta.cookies[COOKIE_PAINEL]
     assert conta.totp_ultimo_passo is not None and conta.login_falhas == 0
 
 
@@ -2801,3 +2817,159 @@ def test_escola_sem_administrador_nao_tranca_o_login_das_outras(mock_db):
          patch("gestao_routes.escola_de_instalacao", return_value=MagicMock(id=1, nome="Escola piloto")):
         assert client.post("/api/admin/login", json={"usuario": "", "senha": "qualquer"}).status_code == 503
         assert client.post("/api/admin/login", json={"usuario": "maria", "senha": "Senha2026forte"}).status_code == 200
+
+
+# ----------------------------------------------------------------------
+# PRODUÇÃO: sessão do painel em cookie, CORS, armazenamento e Redis
+# ----------------------------------------------------------------------
+from auth import CABECALHO_CSRF, VALOR_CSRF
+from main import origens_permitidas
+from limiter import criar_limiter
+from models import FotoEstudante
+
+cliente_https = TestClient(app=app, base_url="https://testserver")  # cookie Secure só trafega em HTTPS
+
+
+def _set_cookie_do_painel(resposta) -> str:
+    return next(v for k, v in resposta.headers.multi_items() if k.lower() == "set-cookie" and v.startswith(COOKIE_PAINEL + "="))
+
+
+def test_login_do_painel_grava_cookie_httponly_seguro(mock_db):
+    conta = UsuarioGestao(id=7, nome="Maria", usuario="maria", senha_hash=hash_senha("Senha2026forte"), papel="alterar", ativo=True, deve_trocar_senha=False, sessao_versao=2, login_falhas=0)
+    mock_db.query().filter().first.return_value = conta
+    with patch("gestao_routes.existe_administrador", return_value=True):
+        resposta = client.post("/api/admin/login", json={"usuario": "maria", "senha": "Senha2026forte"})
+    cookie = _set_cookie_do_painel(resposta).lower()
+    assert "httponly" in cookie and "secure" in cookie and "samesite=lax" in cookie and "path=/api" in cookie
+    assert "token" not in resposta.json()
+
+
+def _com_cookie(token: str, **extra) -> dict:
+    return {"Cookie": f"{COOKIE_PAINEL}={token}", **extra}
+
+
+def test_painel_entra_pelo_cookie(mock_db):
+    assert cliente_https.get("/api/admin/gestao/eu", headers=_com_cookie(criar_token_admin())).status_code == 200
+
+
+def test_alteracao_pelo_cookie_exige_o_cabecalho_contra_csrf(mock_db):
+    corpo = {"descricao": "lista de alunos (CSV) de teste", "total": 1}
+    sem = cliente_https.post("/api/admin/auditoria/exportacao", json=corpo, headers=_com_cookie(criar_token_admin()))
+    assert sem.status_code == 403
+    com = cliente_https.post("/api/admin/auditoria/exportacao", json=corpo, headers=_com_cookie(criar_token_admin(), **{CABECALHO_CSRF: VALOR_CSRF}))
+    assert com.status_code == 200
+
+
+def test_cookie_invalido_nao_entra(mock_db):
+    assert cliente_https.get("/api/admin/gestao/eu", headers=_com_cookie("lixo")).status_code == 401
+
+
+def test_logout_apaga_o_cookie():
+    resposta = client.post("/api/admin/logout")
+    assert resposta.status_code == 200
+    assert "max-age=0" in _set_cookie_do_painel(resposta).lower()
+
+
+def test_cors_sem_localhost_em_producao():
+    configuradas = "https://first2work.com.br, http://localhost:5173, http://127.0.0.1:3000/"
+    assert origens_permitidas(False, configuradas) == ["https://first2work.com.br"]
+    assert "http://localhost:5173" in origens_permitidas(True, configuradas)
+    assert "https://first2work.com.br" in origens_permitidas(True, configuradas)
+
+
+def test_cors_da_api_de_teste_recusa_localhost():
+    # Os testes rodam sem APP_ENV: a API se comporta como produção
+    resposta = client.options("/api/status", headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "GET"})
+    assert "access-control-allow-origin" not in resposta.headers
+
+
+def test_limiter_usa_redis_quando_configurado():
+    assert type(criar_limiter("redis://localhost:6379/0")._storage).__name__ == "RedisStorage"
+    assert type(criar_limiter(None)._storage).__name__ == "MemoryStorage"
+
+
+def test_chave_de_arquivo_nao_aceita_caminho_inventado():
+    with pytest.raises(ValueError):
+        armazenamento.ler("../../etc/passwd")
+    with pytest.raises(ValueError):
+        armazenamento.destino().salvar("fotos/1/../../x.jpg", b"x", "image/jpeg")
+
+
+def _sessao_sqlite():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    sessao = Session(create_engine("sqlite://"))
+    sessao.connection()  # abre a transação
+    return sessao
+
+
+def test_arquivo_gravado_some_se_a_transacao_nao_for_confirmada():
+    sessao = _sessao_sqlite()
+    chave = armazenamento.gravar(sessao, "fotos", 1, JPEG_MINIMO, "image/jpeg")
+    assert armazenamento.ler(chave) == JPEG_MINIMO
+    sessao.rollback()
+    with pytest.raises(armazenamento.ArquivoNaoEncontrado):
+        armazenamento.ler(chave)
+
+
+def test_arquivo_antigo_so_sai_depois_do_commit():
+    sessao = _sessao_sqlite()
+    chave = armazenamento.gravar(sessao, "materiais", 2, b"%PDF-1.7", "application/pdf")
+    sessao.commit()
+    assert armazenamento.ler(chave) == b"%PDF-1.7"  # confirmado: fica
+
+    sessao.connection()
+    armazenamento.agendar_remocao(sessao, chave)
+    sessao.rollback()
+    assert armazenamento.ler(chave) == b"%PDF-1.7"  # o commit falhou: nada some
+
+    sessao.connection()
+    armazenamento.agendar_remocao(sessao, chave)
+    sessao.commit()
+    with pytest.raises(armazenamento.ArquivoNaoEncontrado):
+        armazenamento.ler(chave)
+
+
+def test_material_vai_pro_armazenamento_e_nao_pro_banco(mock_db):
+    mock_db.query().filter().first.return_value = criar_aula_teste()
+    resposta = client.post("/api/admin/aulas/10/materiais", headers=ADMIN_HEADERS(), files={"arquivo": ("slides.pdf", b"%PDF-1.7 conteudo", "application/pdf")})
+    assert resposta.status_code == 201
+    material = mock_db.add.call_args.args[0]
+    assert material.conteudo is None and material.arquivo_chave.startswith("materiais/")
+    assert armazenamento.ler(material.arquivo_chave) == b"%PDF-1.7 conteudo"
+
+
+def test_foto_antiga_ainda_no_banco_continua_aparecendo(mock_db, mock_estudante_logado):
+    mock_estudante_logado.foto = FotoEstudante(estudante_id=1, arquivo_chave=None, conteudo=JPEG_MINIMO, tipo_mime="image/jpeg", enviada_por="aluno")
+    resposta = client.get("/api/estudante/me/foto")
+    assert resposta.status_code == 200 and resposta.content == JPEG_MINIMO
+
+
+def test_foto_cujo_arquivo_sumiu_da_404_e_nao_500(mock_db, mock_estudante_logado):
+    mock_estudante_logado.foto = FotoEstudante(estudante_id=1, arquivo_chave="fotos/1/" + "b" * 32 + ".jpg", tipo_mime="image/jpeg", enviada_por="aluno")
+    assert client.get("/api/estudante/me/foto").status_code == 404
+
+
+def test_linha_apagada_leva_o_arquivo_junto_depois_do_commit():
+    from sqlalchemy import Column, Integer, String, create_engine
+    from sqlalchemy.orm import Session, declarative_base
+    Base = declarative_base()
+
+    class Anexo(Base):
+        __tablename__ = "anexos_teste"
+        id = Column(Integer, primary_key=True)
+        arquivo_chave = Column(String(120))
+
+    armazenamento.registrar_exclusoes(Anexo)
+    motor = create_engine("sqlite://")
+    Base.metadata.create_all(motor)
+    with Session(motor) as sessao:
+        chave = armazenamento.gravar(sessao, "fotos", 1, JPEG_MINIMO, "image/jpeg")
+        sessao.add(Anexo(id=1, arquivo_chave=chave))
+        sessao.commit()
+        sessao.delete(sessao.get(Anexo, 1))
+        sessao.flush()
+        assert armazenamento.ler(chave) == JPEG_MINIMO  # ainda não confirmou
+        sessao.commit()
+    with pytest.raises(armazenamento.ArquivoNaoEncontrado):
+        armazenamento.ler(chave)

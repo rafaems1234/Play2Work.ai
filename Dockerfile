@@ -11,7 +11,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     DOCS_ABERTAS=false \
-    FORWARDED_ALLOW_IPS=127.0.0.1
+    FORWARDED_ALLOW_IPS=127.0.0.1 \
+    ARMAZENAMENTO_DIR=/srv/arquivos
 
 WORKDIR /srv/app
 
@@ -25,7 +26,9 @@ COPY app/alembic ./alembic
 COPY app/frontend/src/data ./frontend/src/data
 
 # Não roda como root, e o código fica só leitura pra esse usuário (é do root)
-RUN useradd --create-home --uid 10001 first2work
+# Fotos e materiais (ARMAZENAMENTO=disco): a única pasta em que a API escreve -- montar um volume aqui
+RUN useradd --create-home --uid 10001 first2work \
+    && mkdir -p /srv/arquivos && chown first2work /srv/arquivos
 USER first2work
 
 EXPOSE 8000

@@ -29,6 +29,7 @@ def ambiente():
     from database import SessionLocal
     import models
     from main import app
+    from auth import COOKIE_PAINEL
     from criar_escola import criar_escola
 
     db = SessionLocal()
@@ -39,14 +40,15 @@ def ambiente():
     db.commit()
     senha = criar_escola("Escola de teste de isolamento", "teste-isolamento", "Gestor Isolamento", "gestor.isolamento")
     cliente = TestClient(app)
-    token = cliente.post("/api/admin/login", json={"usuario": "gestor.isolamento", "senha": senha}).json()["token"]
+    # O painel recebe o token num cookie httpOnly; aqui ele é lido do cookie e mandado como Bearer
+    token = cliente.post("/api/admin/login", json={"usuario": "gestor.isolamento", "senha": senha}).cookies[COOKIE_PAINEL]
     token = cliente.post("/api/admin/gestao/minha-senha", json={"senha_atual": senha, "nova_senha": "Isolamento2026x"},
-                         headers={"Authorization": f"Bearer {token}"}).json()["token"]
+                         headers={"Authorization": f"Bearer {token}"}).cookies[COOKIE_PAINEL]
     # Verificação em duas etapas obrigatória: ativa como a pessoa faria, lendo o "QR Code"
     import pyotp
     gerado = cliente.post("/api/admin/gestao/2fa/iniciar", headers={"Authorization": f"Bearer {token}"}).json()
     token = cliente.post("/api/admin/gestao/2fa/ativar", json={"codigo": pyotp.TOTP(gerado["segredo"]).now()},
-                         headers={"Authorization": f"Bearer {token}"}).json()["token"]
+                         headers={"Authorization": f"Bearer {token}"}).cookies[COOKIE_PAINEL]
     yield cliente, {"Authorization": f"Bearer {token}"}
     escola = db.query(models.Escola).filter(models.Escola.slug == "teste-isolamento").first()
     if escola:

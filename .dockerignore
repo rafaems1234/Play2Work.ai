@@ -6,3 +6,5 @@
 app/.env
 app/frontend/node_modules
 app/frontend/dist
+# Arquivos de alunos (fotos/materiais) nunca entram na imagem
+app/arquivos

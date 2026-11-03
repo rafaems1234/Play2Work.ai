@@ -153,14 +153,16 @@ class FotoEstudante(Base):
     """
     Modelo que representa a tabela 'fotos_estudantes'.
     A foto do aluno (JPEG/PNG/WebP já reduzido no navegador, ~50 KB), numa
-    tabela à parte pra não pesar em toda consulta de 'estudantes'. Ficar no
-    Postgres (e não em disco) faz a foto entrar no mesmo backup, funcionar com
-    várias instâncias da API e sumir junto com o aluno (LGPD).
+    tabela à parte pra não pesar em toda consulta de 'estudantes'. O arquivo
+    fica fora do banco (armazenamento.py: disco dedicado ou Azure Blob) e aqui
+    só a chave; ao tirar a foto, o arquivo é apagado junto (LGPD).
+    'conteudo' só existe em linhas antigas ainda não migradas (arquivos.py migrar).
     """
     __tablename__ = 'fotos_estudantes'
 
     estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), primary_key=True)
-    conteudo = Column(LargeBinary, nullable=False)
+    arquivo_chave = Column(String(120), nullable=True)
+    conteudo = deferred(Column(LargeBinary, nullable=True))  # legado, antes do armazenamento externo
     tipo_mime = Column(String(20), nullable=False)
     enviada_por = Column(String(10), nullable=False)  # 'aluno' | 'escola'
     atualizada_em = Column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -176,7 +178,8 @@ class FotoCurriculo(Base):
     __tablename__ = 'fotos_curriculo'
 
     estudante_id = Column(Integer, ForeignKey('estudantes.id', ondelete="CASCADE"), primary_key=True)
-    conteudo = Column(LargeBinary, nullable=False)
+    arquivo_chave = Column(String(120), nullable=True)
+    conteudo = deferred(Column(LargeBinary, nullable=True))  # legado, antes do armazenamento externo
     tipo_mime = Column(String(20), nullable=False)
     atualizada_em = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -629,9 +632,9 @@ class PerguntaFixacao(EscopoEscola, Base):
 class MaterialAula(EscopoEscola, Base):
     """
     Modelo que representa a tabela 'materiais_aula'.
-    Áudio de apoio ou PDF/slides pra baixar (leve: até 10 MB). Fica no
-    Postgres no piloto (mesmo backup, mesmo controle de acesso); pra
-    escalar, o conteúdo vai pro Blob Storage e aqui fica só a referência.
+    Áudio de apoio ou PDF/slides pra baixar (leve: até 10 MB). O arquivo fica
+    fora do banco (armazenamento.py: disco dedicado no piloto ou Azure Blob)
+    e aqui só a chave; o download continua passando pela API (controle de acesso).
     """
     __tablename__ = 'materiais_aula'
 
@@ -641,7 +644,8 @@ class MaterialAula(EscopoEscola, Base):
     nome_arquivo = Column(String(150), nullable=False)
     tipo_mime = Column(String(60), nullable=False)
     tamanho_bytes = Column(Integer, nullable=False)
-    conteudo = deferred(Column(LargeBinary, nullable=False))  # só carrega no download
+    arquivo_chave = Column(String(120), nullable=True)
+    conteudo = deferred(Column(LargeBinary, nullable=True))  # legado, antes do armazenamento externo
     enviado_em = Column(DateTime, server_default=func.now())
 
     aula = relationship("Aula", back_populates="materiais")
@@ -817,3 +821,9 @@ class UsoIa(Base):
     tokens_saida = Column(BigInteger, nullable=False, default=0, server_default="0")   # inclui os de raciocínio, cobrados como saída
     custo_usd = Column(Float, nullable=False, default=0, server_default="0")         # estimado pelos preços do .env
     atualizado_em = Column(DateTime, nullable=True)
+
+
+# Foto trocada ou tirada, material, aula ou módulo excluído: o arquivo sai do armazenamento depois do commit
+import armazenamento  # noqa: E402
+
+armazenamento.registrar_exclusoes(FotoEstudante, FotoCurriculo, MaterialAula)

@@ -5,10 +5,11 @@ import bcrypt
 import jwt
 from dataclasses import dataclass
 from typing import Optional
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 import dois_fatores
+from config import COOKIE_DOMINIO, COOKIE_SAMESITE, COOKIE_SEGURO
 from database import get_db
 from models import Escola, Estudante, UsuarioGestao
 from tenancy import definir_escola  # importar já registra o filtro automático por escola
@@ -154,13 +155,58 @@ def criar_token_admin(gestor: Optional[UsuarioGestao] = None) -> str:
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
+def _decodificar(token: str) -> dict | None:
+    try:
+        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+
+
 def _payload_do_token(authorization: str | None) -> dict | None:
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
-    try:
-        return jwt.decode(authorization[7:], JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-    except jwt.PyJWTError:
+    return _decodificar(authorization[7:])
+
+
+# ---------------------------------------------------------------- sessão do painel em cookie
+# O navegador do painel guarda o token num cookie httpOnly (config.py explica
+# o porquê e as regras de domínio). Clientes que não são navegador (scripts,
+# testes) continuam podendo mandar "Authorization: Bearer".
+COOKIE_PAINEL = "f2w_painel"
+COOKIE_CAMINHO = "/api"
+# Proteção contra CSRF: com sessão em cookie, outro site poderia tentar
+# disparar um POST que o navegador completaria com o cookie. O SameSite já
+# barra isso entre sites diferentes; por garantia, quem altera dados pelo
+# cookie precisa mandar este cabeçalho -- e um cabeçalho próprio, vindo de
+# outra origem, exige a checagem do CORS, que só libera o front oficial.
+CABECALHO_CSRF = "X-Requested-With"
+VALOR_CSRF = "first2work"
+METODOS_SEGUROS = ("GET", "HEAD", "OPTIONS")
+
+
+def definir_cookie_painel(resposta: Response, token: str) -> None:
+    resposta.set_cookie(
+        COOKIE_PAINEL, token, max_age=JWT_EXPIRA_HORAS_ADMIN * 3600, path=COOKIE_CAMINHO, domain=COOKIE_DOMINIO,
+        httponly=True, secure=COOKIE_SEGURO, samesite=COOKIE_SAMESITE,
+    )
+
+
+def apagar_cookie_painel(resposta: Response) -> None:
+    resposta.delete_cookie(
+        COOKIE_PAINEL, path=COOKIE_CAMINHO, domain=COOKIE_DOMINIO, httponly=True, secure=COOKIE_SEGURO, samesite=COOKIE_SAMESITE,
+    )
+
+
+def _payload_do_painel(request: Request, authorization: str | None) -> dict | None:
+    """Token do painel: o cabeçalho Authorization, se veio; senão o cookie (com a checagem de CSRF)."""
+    if authorization:
+        return _payload_do_token(authorization)
+    token = request.cookies.get(COOKIE_PAINEL)
+    if not token:
         return None
+    if request.method not in METODOS_SEGUROS and request.headers.get(CABECALHO_CSRF) != VALOR_CSRF:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Requisição recusada: recarregue o painel e tente de novo.")
+    return _decodificar(token)
 
 
 def escola_de_instalacao(db: Session) -> Optional[Escola]:
@@ -203,7 +249,7 @@ def get_admin_atual(request: Request, authorization: str | None = Header(default
     O gestor fica em request.state pra auditoria saber quem fez.
     """
     erro = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Acesso restrito à escola. Faça login no painel.")
-    payload = _payload_do_token(authorization)
+    payload = _payload_do_painel(request, authorization)
     if not payload or payload.get("papel") != "admin":
         raise erro
     gestor = carregar_gestor(db, payload)

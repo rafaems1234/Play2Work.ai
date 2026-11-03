@@ -3,6 +3,7 @@ Contas da gestão e auditoria do Painel da Escola (perfis em auth.PERFIS_GESTAO)
 
   POST /admin/login                         usuário + senha (ou a senha de instalação, sem Administrador)
   POST /admin/login/2fa                     2º passo: código do app autenticador (contas com 2FA ativa)
+  POST /admin/logout                        encerra a sessão (apaga o cookie httpOnly do painel)
   POST /admin/gestao/2fa/iniciar            gera o segredo e o QR Code pra ativar a verificação em duas etapas
   POST /admin/gestao/2fa/ativar             confirma o 1º código e liga a verificação
   POST /admin/gestao/usuarios/{id}/resetar-2fa    zera a de alguém (celular perdido) [Administrador]
@@ -22,7 +23,7 @@ import secrets
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
@@ -31,8 +32,9 @@ from sqlalchemy.orm import Session
 import auditoria
 import dois_fatores
 from auth import (
-    ADMIN_SENHA, PERFIS_GESTAO, GestorAtual, criar_desafio_2fa, criar_token_admin, escola_de_instalacao, exigir_administrador,
-    exigir_auditor, existe_administrador, get_admin_atual, gestor_da_conta, hash_senha, ler_desafio_2fa, verificar_senha,
+    ADMIN_SENHA, PERFIS_GESTAO, GestorAtual, apagar_cookie_painel, criar_desafio_2fa, criar_token_admin, definir_cookie_painel,
+    escola_de_instalacao, exigir_administrador, exigir_auditor, existe_administrador, get_admin_atual, gestor_da_conta, hash_senha,
+    ler_desafio_2fa, verificar_senha,
 )
 from tenancy import todas_as_escolas
 from database import get_db
@@ -119,7 +121,7 @@ def _contar_falha(db: Session, conta: UsuarioGestao, agora) -> None:
 
 @router.post("/login")
 @limiter.limit("10/minute")
-def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
+def login(request: Request, response: Response, data: LoginRequest, db: Session = Depends(get_db)):
     agora = agora_utc()
     usuario = data.usuario.strip().lower()
     escola_inst = escola_de_instalacao(db)
@@ -132,7 +134,8 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
             gestor = GestorAtual(id=None, nome="Instalação", usuario="instalacao", papel="administrador", instalacao=True,
                                  escola_id=escola_inst.id, escola_nome=escola_inst.nome)
             request.state.gestor = gestor
-            return {"token": criar_token_admin(), "gestor": _gestor_para_dict(gestor)}
+            definir_cookie_painel(response, criar_token_admin())
+            return {"gestor": _gestor_para_dict(gestor)}
     conta = db.query(UsuarioGestao).filter(UsuarioGestao.usuario == usuario).first() if usuario else None
     if conta and conta.login_bloqueado_ate and conta.login_bloqueado_ate > agora:
         raise HTTPException(status_code=429, detail=f"Muitas tentativas erradas. Espere {LOGIN_BLOQUEIO_MINUTOS} minutos.")
@@ -146,22 +149,24 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
         # não zeram aqui, senão daria pra chutar o código acertando a senha de novo.
         request.state.login_parcial = True
         return {"precisa_2fa": True, "desafio": criar_desafio_2fa(conta)}
-    return _concluir_login(request, db, conta, escola, agora)
+    return _concluir_login(request, response, db, conta, escola, agora)
 
 
-def _concluir_login(request: Request, db: Session, conta: UsuarioGestao, escola, agora) -> dict:
+def _concluir_login(request: Request, response: Response, db: Session, conta: UsuarioGestao, escola, agora) -> dict:
     conta.login_falhas = 0
     conta.login_bloqueado_ate = None
     conta.ultimo_acesso_em = agora
     db.commit()
     gestor = gestor_da_conta(conta, escola)
     request.state.gestor = gestor  # a auditoria registra quem entrou
-    return {"token": criar_token_admin(conta), "gestor": _gestor_para_dict(gestor)}
+    # O token vai só no cookie httpOnly: o JavaScript do painel nunca o vê
+    definir_cookie_painel(response, criar_token_admin(conta))
+    return {"gestor": _gestor_para_dict(gestor)}
 
 
 @router.post("/login/2fa")
 @limiter.limit("10/minute")
-def login_2fa(request: Request, data: Login2faRequest, db: Session = Depends(get_db)):
+def login_2fa(request: Request, response: Response, data: Login2faRequest, db: Session = Depends(get_db)):
     agora = agora_utc()
     payload = ler_desafio_2fa(data.desafio)
     if not payload:
@@ -181,7 +186,14 @@ def login_2fa(request: Request, data: Login2faRequest, db: Session = Depends(get
         _contar_falha(db, conta, agora)
         raise HTTPException(status_code=401, detail="Código incorreto ou já usado. Confira o app autenticador e tente o próximo código.")
     conta.totp_ultimo_passo = passo
-    return _concluir_login(request, db, conta, escola, agora)
+    return _concluir_login(request, response, db, conta, escola, agora)
+
+
+@router.post("/logout")
+def logout(response: Response):
+    """Apaga o cookie da sessão (o JavaScript não consegue: ele é httpOnly)."""
+    apagar_cookie_painel(response)
+    return {"sucesso": True}
 
 
 @router.get("/gestao/eu")
@@ -190,7 +202,7 @@ def eu(gestor: GestorAtual = Depends(get_admin_atual)):
 
 
 @router.post("/gestao/minha-senha")
-def minha_senha(data: MinhaSenhaRequest, gestor: GestorAtual = Depends(get_admin_atual), db: Session = Depends(get_db)):
+def minha_senha(response: Response, data: MinhaSenhaRequest, gestor: GestorAtual = Depends(get_admin_atual), db: Session = Depends(get_db)):
     if gestor.instalacao:
         raise HTTPException(status_code=400, detail="A conta de instalação não tem senha própria: crie a sua conta de Administrador.")
     conta = db.query(UsuarioGestao).filter(UsuarioGestao.id == gestor.id).first()
@@ -205,7 +217,9 @@ def minha_senha(data: MinhaSenhaRequest, gestor: GestorAtual = Depends(get_admin
     conta.deve_trocar_senha = False
     conta.sessao_versao = (conta.sessao_versao or 0) + 1
     db.commit()
-    return {"token": criar_token_admin(conta)}
+    # A versão da sessão mudou (as outras sessões caem): esta ganha um cookie novo
+    definir_cookie_painel(response, criar_token_admin(conta))
+    return {"sucesso": True}
 
 
 # ------------------------------------------------------------------ verificação em duas etapas (a própria conta)
@@ -234,7 +248,7 @@ def iniciar_2fa(gestor: GestorAtual = Depends(get_admin_atual), db: Session = De
 
 @router.post("/gestao/2fa/ativar")
 @limiter.limit("10/minute")
-def ativar_2fa(request: Request, data: Ativar2faRequest, gestor: GestorAtual = Depends(get_admin_atual), db: Session = Depends(get_db)):
+def ativar_2fa(request: Request, response: Response, data: Ativar2faRequest, gestor: GestorAtual = Depends(get_admin_atual), db: Session = Depends(get_db)):
     """Confere o primeiro código e liga. As outras sessões abertas (sem 2FA) caem."""
     conta = _minha_conta(db, gestor)
     if conta.totp_ativado_em is not None:
@@ -248,7 +262,9 @@ def ativar_2fa(request: Request, data: Ativar2faRequest, gestor: GestorAtual = D
     conta.totp_ultimo_passo = passo
     conta.sessao_versao = (conta.sessao_versao or 0) + 1
     db.commit()
-    return {"token": criar_token_admin(conta)}
+    # A versão da sessão mudou (as outras sessões caem): esta ganha um cookie novo
+    definir_cookie_painel(response, criar_token_admin(conta))
+    return {"sucesso": True}
 
 
 # ------------------------------------------------------------------ contas da equipe (Administrador)

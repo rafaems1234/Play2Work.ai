@@ -35,10 +35,14 @@ O limite de tentativas de login e a auditoria usam o IP de quem chamou. Atrás d
 | `DOCS_ABERTAS` | vazia (fechada) | `/docs` mostra todas as rotas da API |
 | `GESTAO_2FA_OBRIGATORIA` | vazia (= true) | o painel mostra dados de menores |
 | `JWT_SECRET_KEY` | segredo forte, no cofre | assina os logins |
-| `CORS_ORIGINS` | só o endereço do front | o navegador só deixa esse front chamar a API |
+| `APP_ENV` | vazia (= produção) | `local` libera localhost no CORS e o cookie sem HTTPS |
+| `CORS_ORIGINS` | só o endereço do front (`https://first2work.com.br`) | o navegador só deixa esse front chamar a API; localhost é ignorado |
+| `REDIS_URL` | Redis gerenciado (ex.: Azure Cache for Redis, `rediss://` com senha) | limite de tentativas igual em todas as instâncias da API |
+| `ARMAZENAMENTO` | `azure` com várias instâncias; `disco` + volume com backup num servidor só | fotos e materiais fora do banco |
+| `AZURE_STORAGE_CONNECTION_STRING`, `AZURE_STORAGE_CONTAINER` | no cofre; contêiner **privado** | os arquivos só saem pela API, que confere quem pode ver |
 | `GEMINI_TETO_MENSAL_USD` + preços | definidos | corta a IA ao bater o teto |
 
-Segredos (senhas do banco, `JWT_SECRET_KEY`, `GEMINI_API_KEY`, `ADMIN_SENHA`) ficam no cofre de segredos da hospedagem (ex.: Azure Key Vault), não num `.env` dentro do servidor.
+Segredos (senhas do banco, `JWT_SECRET_KEY`, `GEMINI_API_KEY`, `ADMIN_SENHA`, a senha do Redis e a conexão do Blob) ficam no cofre de segredos da hospedagem (ex.: Azure Key Vault), não num `.env` dentro do servidor.
 
 ## 4. Verificação em duas etapas
 
@@ -47,3 +51,16 @@ Toda conta da gestão ativa no primeiro login (QR Code num app autenticador). Ce
 ## 5. Front publicado
 
 O build coloca uma Content-Security-Policy no `index.html`: só roda script do próprio site e do player do YouTube, e só conversa com a API de `VITE_API_URL`. Se a API mudar de endereço, gere o build de novo com o endereço novo.
+
+    VITE_DEMO_MODE=false VITE_API_URL=https://api.first2work.com.br VITE_BASE=/ npm run build
+
+A sessão do painel é um cookie `httpOnly` + `Secure` + `SameSite=Lax` emitido pela API. O navegador só o manda se o front e a API forem do **mesmo domínio** (`first2work.com.br` e `api.first2work.com.br`): front no GitHub Pages com API no Azure não funciona pro painel. Tudo em HTTPS.
+
+## 6. Arquivos (fotos e materiais)
+
+Ficam fora do Postgres, então o **backup tem duas partes**: o banco e o armazenamento (o volume `arquivos` do Docker, ou o contêiner do Blob com *soft delete* e versionamento ligados). Restaurar só um dos dois deixa fotos faltando ou sobrando.
+
+Ao atualizar um servidor que já tinha fotos dentro do banco, rode uma vez:
+
+    python arquivos.py migrar          # move pro armazenamento; pode repetir
+    python arquivos.py orfaos          # lista arquivos sem registro no banco (--apagar remove)
