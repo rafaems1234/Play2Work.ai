@@ -5,6 +5,16 @@
 #
 # Na subida, prepara o banco (cria as tabelas num banco vazio ou aplica as
 # migrações que faltam, e garante uma escola) e inicia o servidor.
+# Etapa 1 (opcional): build do front para servir no mesmo endereço da API.
+#   docker build --build-arg VITE_API_URL=https://<endereço-da-api> -t first2work-api .
+FROM node:20-slim AS front
+ARG VITE_API_URL=""
+WORKDIR /front
+COPY app/frontend/package*.json ./
+RUN npm ci
+COPY app/frontend ./
+RUN if [ -n "$VITE_API_URL" ]; then VITE_DEMO_MODE=false VITE_BASE=/ npm run build; else mkdir -p dist; fi
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -29,6 +39,8 @@ COPY app/frontend/src/data ./frontend/src/data
 # Fotos e materiais (ARMAZENAMENTO=disco): a única pasta em que a API escreve -- montar um volume aqui
 RUN useradd --create-home --uid 10001 first2work \
     && mkdir -p /srv/arquivos && chown first2work /srv/arquivos
+COPY --from=front /front/dist /srv/front
+ENV FRONT_DIR=/srv/front
 USER first2work
 
 EXPOSE 8000

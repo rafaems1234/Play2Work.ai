@@ -142,6 +142,24 @@ def read_root():
         "contexto": "Inclusão produtiva de jovens com IA e gamificação"
     }
 
+# Front no MESMO endereço da API (hospedagem sem domínio próprio): se o build do front estiver
+# em FRONT_DIR, a API entrega as telas também. O cookie do painel só funciona com front e API
+# no mesmo site; com domínio próprio (first2work.com.br + api.first2work.com.br) isto fica desligado.
+FRONT_DIR = os.environ.get("FRONT_DIR", "")
+if FRONT_DIR and os.path.isdir(FRONT_DIR):
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/assets", StaticFiles(directory=os.path.join(FRONT_DIR, "assets")), name="assets")
+
+    @app.get("/{caminho:path}", include_in_schema=False)
+    def front(caminho: str):
+        alvo = os.path.realpath(os.path.join(FRONT_DIR, caminho))
+        if caminho and alvo.startswith(os.path.realpath(FRONT_DIR)) and os.path.isfile(alvo):
+            return FileResponse(alvo)
+        return FileResponse(os.path.join(FRONT_DIR, "index.html"))   # rotas do React (#admin etc.)
+
+
 if __name__ == "__main__":
     import uvicorn
     # Mudamos de "main:app" para o próprio objeto app para evitar erros de importação pelo Uvicorn
