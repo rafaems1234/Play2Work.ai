@@ -2780,6 +2780,13 @@ def test_respostas_da_api_levam_cabecalhos_de_seguranca():
     assert "Strict-Transport-Security" not in r.headers  # só em HTTPS
 
 
+def test_telas_do_front_servidas_pela_api_nao_levam_a_csp_da_api(monkeypatch):
+    # Com FRONT_DIR, a CSP das telas vem no <meta> do index.html; a da API travaria o site inteiro
+    monkeypatch.setenv("FRONT_DIR", "/srv/front")
+    assert client.get("/qualquer-tela").headers["Content-Security-Policy"] == "frame-ancestors 'none'"
+    assert "default-src 'none'" in client.get("/api/status").headers["Content-Security-Policy"]
+
+
 def test_documentacao_da_api_fechada_por_padrao():
     if _main.DOCS_ABERTAS:
         pytest.skip("DOCS_ABERTAS=true neste .env (desenvolvimento)")

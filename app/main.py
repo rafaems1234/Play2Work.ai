@@ -60,8 +60,15 @@ async def cabecalhos_de_seguranca(request: Request, call_next):
     resposta = await call_next(request)
     for nome, valor in CABECALHOS_SEGURANCA.items():
         resposta.headers.setdefault(nome, valor)
-    if not request.url.path.startswith(ROTAS_DA_DOCUMENTACAO):
-        resposta.headers.setdefault("Content-Security-Policy", CSP_API)
+    caminho = request.url.path
+    if caminho.startswith("/api/") or not os.environ.get("FRONT_DIR"):
+        if not caminho.startswith(ROTAS_DA_DOCUMENTACAO):
+            resposta.headers.setdefault("Content-Security-Policy", CSP_API)
+    elif not caminho.startswith(ROTAS_DA_DOCUMENTACAO):
+        # Telas do front servidas pela API (FRONT_DIR): a política completa vem no <meta> do
+        # index.html (vite.config.js); a "default-src 'none'" da API bloquearia o próprio site.
+        # Por cabeçalho fica só o que o <meta> não consegue: proibir abrir o site dentro de iframe.
+        resposta.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
     if request.url.path.startswith("/api/"):
         resposta.headers.setdefault("Cache-Control", "no-store")  # dado de aluno não fica em cache de navegador nem de proxy
     if request.url.scheme == "https":
